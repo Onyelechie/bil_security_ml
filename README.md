@@ -48,6 +48,15 @@ The project follows a structured approach:
 - RTSP stream processing
 - On-device inference on constrained hardware
 
+### Technical Notes
+
+- "Motion events" (from the problem statement) can be sent from our existing software via TCP.
+- Ideally, supported security cameras should be compliant with ONVIF Profile S and T standards:
+  - [ONVIF Profile S](https://www.onvif.org/profiles/profile-s/)
+  - [ONVIF Profile T](https://www.onvif.org/profiles/profile-t/)
+- These standards define connection protocols for streaming video, including RTSP.
+- Any cameras used will always follow one of these two profiles.
+
 ### License
 
 This project is released as open source.

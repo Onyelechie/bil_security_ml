@@ -1,0 +1,4 @@
+opencv-python
+numpy
+PyYAML  # for configs
+# Add other dependencies as needed

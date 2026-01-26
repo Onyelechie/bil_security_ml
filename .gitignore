@@ -1,5 +1,26 @@
 support_files/Industrial_Project_Proposal.pdf
 
+# Event clips output
+event_clips/
+test_clips/
+
+# Test outputs
+test_frame.jpg
+
+# Video files (large, not for version control)
+data/videos/
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.wmv
+
+# Model files (large, downloaded on demand)
+models/*.caffemodel
+models/*.pt
+*.pt
+yolov8*.pt
+
 # Python
 __pycache__/
 *.pyc

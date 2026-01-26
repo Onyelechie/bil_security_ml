@@ -27,18 +27,22 @@ LOGS_DIR.mkdir(parents=True, exist_ok=True)
 # Model Selection
 # =============================================================================
 # Available models (user selectable via frontend):
-#   - 'mobilenet': Fast, lightweight (21 classes) - no extra install needed
-#   - 'yolov8n': YOLO Nano - fastest YOLO (80 classes) - needs: pip install ultralytics
-#   - 'yolov8s': YOLO Small - RECOMMENDED for accuracy (80 classes)
+#   - 'mobilenet': Legacy, lightweight (21 classes) - SLOW at HD resolution!
+#   - 'yolov8n': YOLO Nano - RECOMMENDED (80 classes) - needs: pip install ultralytics
+#   - 'yolov8s': YOLO Small - Best accuracy (80 classes)
 #   - 'yolov8m': YOLO Medium - better accuracy (80 classes)
 #   - 'yolov8l': YOLO Large - high accuracy (80 classes)
 #   - 'yolov8x': YOLO Extra Large - highest accuracy (80 classes) - needs GPU for 10 cameras
 #
-# RECOMMENDATION: YOLOv8s for best accuracy. Manual testing showed it detects
-# significantly better than MobileNet, especially for distant/small objects.
-# For 10 cameras with YOLOv8x, need RTX 3080+ GPU.
+# RECOMMENDATION: YOLOv8n for best balance of speed and accuracy at HD resolution.
+# 
+# NOTE - MobileNet Resolution Issue (January 2026 Testing):
+#   - At 640x480: MobileNet is 3x faster than YOLOv8n
+#   - At 1280x720: MobileNet is 31% SLOWER than YOLOv8n!
+#   - Surveillance cameras typically output 720p/1080p
+#   - MobileNet should only be used for legacy/low-power systems or pre-resized 480p streams
 
-DEFAULT_MODEL = 'yolov8s'
+DEFAULT_MODEL = 'yolov8n'  # Changed from yolov8s - faster at HD with good accuracy
 
 # Model paths (for MobileNet-SSD)
 MOBILENET_PROTOTXT = MODELS_DIR / "MobileNetSSD_deploy.prototxt"
@@ -154,69 +158,85 @@ JPEG_QUALITY = 95
 
 # =============================================================================
 # Model Performance Estimates (for UI display)
+# Updated January 2026 - Benchmarked at 1280x720 (native HD resolution)
 # =============================================================================
 MODEL_INFO = {
     'mobilenet': {
         'name': 'MobileNet-SSD',
-        'description': 'Fast, lightweight CNN',
+        'description': 'Legacy CNN - Slow at HD',
         'classes': 21,
-        'speed': 'Very Fast (~100+ FPS)',
-        'accuracy': 'Good',
+        'speed': '~16 FPS @ 720p',
+        'accuracy': 'Lower',
         'memory': 'Low (~50MB)',
         'recommended_cameras': 10,
         'requires': 'OpenCV (included)',
+        'use_case': 'Legacy only - use YOLOv8n instead',
     },
     'yolov8n': {
         'name': 'YOLOv8 Nano',
-        'description': 'Fastest YOLO variant',
+        'description': 'Best speed/accuracy at HD (RECOMMENDED)',
         'classes': 80,
-        'speed': 'Fast (~80-100 FPS)',
+        'speed': '~20 FPS @ 720p',
         'accuracy': 'Good',
         'memory': 'Low (~100MB)',
-        'recommended_cameras': 8,
+        'recommended_cameras': 10,
         'requires': 'pip install ultralytics',
+        'use_case': 'RECOMMENDED - Best for most cameras',
     },
     'yolov8s': {
         'name': 'YOLOv8 Small',
-        'description': 'Good speed/accuracy balance',
+        'description': 'Best accuracy',
         'classes': 80,
-        'speed': 'Medium (~50-60 FPS)',
+        'speed': '~14 FPS @ 720p',
         'accuracy': 'Better',
         'memory': 'Medium (~150MB)',
-        'recommended_cameras': 5,
+        'recommended_cameras': 8,
         'requires': 'pip install ultralytics',
+        'use_case': 'Maximum accuracy needed',
     },
     'yolov8m': {
         'name': 'YOLOv8 Medium',
-        'description': 'Better accuracy',
+        'description': 'Higher accuracy',
         'classes': 80,
-        'speed': 'Slower (~30-40 FPS)',
+        'speed': '~6 FPS @ 720p',
         'accuracy': 'High',
         'memory': 'Higher (~300MB)',
         'recommended_cameras': 3,
         'requires': 'pip install ultralytics',
+        'use_case': 'High-priority cameras, GPU helps',
     },
     'yolov8l': {
         'name': 'YOLOv8 Large',
         'description': 'High accuracy',
         'classes': 80,
-        'speed': 'Slow (~20-25 FPS)',
+        'speed': '~3 FPS @ 720p',
         'accuracy': 'Very High',
         'memory': 'High (~500MB)',
         'recommended_cameras': 2,
         'requires': 'pip install ultralytics',
+        'use_case': 'GPU recommended',
     },
     'yolov8x': {
         'name': 'YOLOv8 Extra Large',
         'description': 'Highest accuracy',
         'classes': 80,
-        'speed': 'Slowest (~10-15 FPS)',
+        'speed': '~2 FPS @ 720p',
         'accuracy': 'Highest',
         'memory': 'Very High (~700MB)',
         'recommended_cameras': 1,
         'requires': 'pip install ultralytics',
+        'use_case': 'GPU only, maximum accuracy',
     },
 }
+
+# List of models available for selection
+AVAILABLE_MODELS = list(MODEL_INFO.keys())
+
+# Default confidence threshold
+DEFAULT_CONFIDENCE = 0.5
+
+# Default motion threshold for false alarm filtering
+DEFAULT_MOTION_THRESHOLD = 0.01
 
 
 def get_model_info(model_name: str) -> dict:

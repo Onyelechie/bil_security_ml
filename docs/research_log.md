@@ -30,14 +30,14 @@
 
 #### What Worked
 
-- ✅ TCP listener successfully receives and parses JSON events
-- ✅ Ring buffer correctly stores and retrieves timestamped frames
-- ✅ Video clip saving with OpenCV VideoWriter (mp4v codec)
-- ✅ End-to-end pipeline: event → frame extraction → MP4 output
+- TCP listener successfully receives and parses JSON events
+- Ring buffer correctly stores and retrieves timestamped frames
+- Video clip saving with OpenCV VideoWriter (mp4v codec)
+- End-to-end pipeline: event -> frame extraction -> MP4 output
 
 #### What Failed / Challenges
 
-- ⚠️ Need to handle case where event arrives before buffer is full (< 2s of history)
+- Need to handle case where event arrives before buffer is full (< 2s of history)
 
 #### Decisions Made
 
@@ -63,12 +63,12 @@
 
 | Experiment | Hypothesis | Variables | Metrics | Status |
 |------------|------------|-----------|---------|--------|
-| RTSP decode CPU cost | Decoding RTSP will be a significant CPU bottleneck | Resolution, codec, FPS | CPU %, decode latency (ms) | 🔜 Waiting for RTSP URL |
-| FPS vs accuracy tradeoff | Lower FPS reduces CPU but may miss fast motion | 5, 10, 15, 30 FPS | CPU %, detection recall, false negatives | 🔜 Pending |
-| Frame window size impact | Larger window improves context but increases processing | ±2s, ±5s, ±10s | Detection accuracy, clip size, processing time | 🔜 Pending |
-| Lightweight model comparison | MobileNet/YOLO-Nano vs full models | Model architecture | mAP, inference time, RAM usage | ✅ Completed |
-| Multi-stream scaling | 10 simultaneous streams on i5/i7 | Number of streams | CPU %, memory, dropped frames | 🔜 Pending |
-| Motion filtering approaches | Pre-filtering reduces unnecessary inference | Background subtraction, frame diff | True positive rate, CPU savings | ✅ Implemented |
+| RTSP decode CPU cost | Decoding RTSP will be a significant CPU bottleneck | Resolution, codec, FPS | CPU %, decode latency (ms) | Waiting for RTSP URL |
+| FPS vs accuracy tradeoff | Lower FPS reduces CPU but may miss fast motion | 5, 10, 15, 30 FPS | CPU %, detection recall, false negatives | Pending |
+| Frame window size impact | Larger window improves context but increases processing | +/-2s, +/-5s, +/-10s | Detection accuracy, clip size, processing time | Pending |
+| Lightweight model comparison | MobileNet/YOLO-Nano vs full models | Model architecture | mAP, inference time, RAM usage | COMPLETED |
+| Multi-stream scaling | 10 simultaneous streams on i5/i7 | Number of streams | CPU %, memory, dropped frames | Pending |
+| Motion filtering approaches | Pre-filtering reduces unnecessary inference | Background subtraction, frame diff | True positive rate, CPU savings | IMPLEMENTED |
 
 ---
 
@@ -80,44 +80,67 @@
 
 **Test Setup:**
 - Test Video: VIRAT_S_010204_05_000856_000890.mp4 (1280x720, VIRAT surveillance dataset)
-- Test Frames: 100 frames resized to 640x480
 - System: Windows PC (CPU-only inference, no GPU)
 
-| Model | FPS | Avg (ms) | Min (ms) | Max (ms) | Classes | Event-Driven Status |
-|-------|-----|----------|----------|----------|---------|---------------------|
-| MobileNet-SSD | 79.0 | 12.7 | 10.0 | 28.9 | 21 | ✓ Fastest, lower accuracy |
-| **YOLOv8n** | **28.3** | 35.3 | 32.7 | 44.3 | 80 | ⭐ **Close-range cameras** |
-| **YOLOv8s** | **13.6** | 73.7 | 70.6 | 86.0 | 80 | ⭐ **Distant cameras** |
-| YOLOv8m | 5.9 | 170.1 | 164.3 | 227.1 | 80 | ✓ Slower, better accuracy |
-| YOLOv8l | 3.0 | 332.1 | 322.0 | 374.6 | 80 | ✓ Slow, high accuracy |
-| YOLOv8x | 2.1 | 486.8 | 477.7 | 553.0 | 80 | ✓ Slowest, best accuracy |
+##### Benchmark at Native Resolution (1280x720) - UPDATED
 
-*Note: All models viable for event-driven clip analysis. "Too slow" only applies to real-time streaming.*
+| Model | FPS | Avg (ms) | Detections | Status |
+|-------|-----|----------|------------|--------|
+| MobileNet-SSD | 15.5 | 64.7 | 5 per frame | Slower than expected at HD |
+| **YOLOv8n** | **20.4** | **48.9** | 7 per frame | **RECOMMENDED - Best speed/accuracy** |
+| YOLOv8s | 13.7 | 73.1 | 9 per frame | Best accuracy, acceptable speed |
 
-#### Key Findings
+##### Benchmark at Resized Resolution (640x480) - Previous Test
 
-1. **YOLOv8s recommended for distant/wide-angle cameras**
-   - Manual testing showed significantly better detection accuracy than MobileNet
-   - 13.6 FPS is sufficient for event-driven clip analysis (see architecture comparison below)
-   - 80 classes provides comprehensive object detection
-   - Better at detecting small/distant people and vehicles
-   - Best for: parking lots, perimeters, wide coverage areas
+| Model | FPS | Avg (ms) | Classes | Notes |
+|-------|-----|----------|---------|-------|
+| MobileNet-SSD | 90.4 | 11.1 | 21 | Fast only at low resolution |
+| YOLOv8n | 29.0 | 34.5 | 80 | Consistent performance |
+| YOLOv8s | 14.0 | 71.3 | 80 | Consistent performance |
 
-2. **YOLOv8n recommended for close-range/entry-point cameras**
-   - 28.3 FPS - faster analysis (~1.2 seconds per clip)
-   - Good accuracy for larger objects (people at doors, vehicles at gates)
-   - Best for: doorways, gates, close-range entry points
-   - Use when subjects are closer to camera and appear larger in frame
+#### IMPORTANT FINDING: MobileNet Resolution Scaling Issue
 
-3. **Event-Driven vs Real-Time Streaming: Why YOLO Works on CPU**
+**MobileNet-SSD does NOT scale well to HD resolution:**
+
+| Resolution | MobileNet FPS | YOLOv8n FPS | Winner |
+|------------|---------------|-------------|--------|
+| 640×480 | 90.4 | 29.0 | MobileNet (3x faster) |
+| **1280×720** | **15.5** | **20.4** | **YOLOv8n (31% faster)** |
+
+**Why this matters:**
+- Surveillance cameras typically output 720p or 1080p
+- MobileNet must resize frames internally, losing detail
+- YOLOv8 handles native resolution better
+- **MobileNet is NOT recommended for HD surveillance video**
+
+#### Updated Key Findings
+
+1. **YOLOv8n is now the PRIMARY recommendation**
+   - 20.4 FPS at native 720p resolution - faster than MobileNet!
+   - Better detection accuracy (7 detections vs 5 for MobileNet)
+   - 80 classes vs MobileNet's 21
+   - Best for: ALL camera types (close and distant)
+
+2. **YOLOv8s for maximum accuracy**
+   - 13.7 FPS at 720p - still acceptable for event-driven analysis
+   - 9 detections per frame (best accuracy)
+   - Best for: Wide areas where small/distant objects matter
+
+3. **MobileNet-SSD DEMOTED to fallback only**
+   - ~~79 FPS~~ → Only 15.5 FPS at real surveillance resolution
+   - Fewer detections (5 vs 7-9 for YOLO)
+   - Only 21 classes (missing many vehicle types)
+   - Use only for: Extremely low-powered hardware or pre-resized 480p streams
+
+4. **Event-Driven vs Real-Time Streaming: Why YOLO Works on CPU**
 
    Our architecture analyzes **short clips after motion events**, not continuous live streams.
    This fundamentally changes the hardware requirements:
 
    | Architecture | Description | FPS Requirement | YOLOv8s Viable? |
-   |--------------|-------------|-----------------|-----------------|
-   | **Real-Time Streaming** | Process every frame from all cameras continuously | 150 FPS (10 cams × 15fps) | ❌ No (only 13.6 FPS) |
-   | **Event-Driven Clips** ⭐ | Analyze 7-second clips when motion detected | ~35 frames per event | ✅ Yes! |
+   |--------------|-------------|-----------------|------------------|
+   | **Real-Time Streaming** | Process every frame from all cameras continuously | 150 FPS (10 cams x 15fps) | No (only 13.6 FPS) |
+   | **Event-Driven Clips** | Analyze 7-second clips when motion detected | ~35 frames per event | Yes |
 
    **Event-Driven Clip Analysis (Our Approach):**
    ```
@@ -154,9 +177,9 @@
 
 | Hardware | YOLOv8x FPS | Real-Time Cameras | Event-Driven Clips |
 |----------|-------------|-------------------|-------------------|
-| CPU only (i5/i7) | ~2 FPS | ❌ 0 cameras | ✅ Works fine |
-| NVIDIA RTX 3060 | ~80-120 FPS | 5-8 cameras | ✅ Overkill |
-| NVIDIA RTX 3080 | ~150-200 FPS | 10+ cameras | ✅ Overkill |
+| CPU only (i5/i7) | ~2 FPS | 0 cameras | Works fine |
+| NVIDIA RTX 3060 | ~80-120 FPS | 5-8 cameras | Overkill |
+| NVIDIA RTX 3080 | ~150-200 FPS | 10+ cameras | Overkill |
 
 #### Model Recommendations by Camera Count
 
@@ -164,13 +187,18 @@
 
 | Cameras | Recommended Model | Analysis Time/Clip | Events/Minute Capacity | Notes |
 |---------|-------------------|-------------------|------------------------|-------|
-| 1-10 (distant) | **YOLOv8s** ⭐ | ~2.6 sec | ~23 events | Best for wide/distant views |
-| 1-10 (close) | **YOLOv8n** ⭐ | ~1.2 sec | ~50 events | Best for entry points/close-range |
-| Mixed setup | YOLOv8s + YOLOv8n | ~1.2-2.6 sec | ~30 events | Configure per camera type |
-| High volume | YOLOv8n | ~1.3 sec | ~46 events | Faster, slightly less accurate |
-| Legacy HW | MobileNet | ~0.4 sec | ~150 events | Last resort, lower accuracy |
+| 1-10 | **YOLOv8n** | ~1.7 sec | ~35 events | Best speed + accuracy at 720p (RECOMMENDED) |
+| 1-10 (max accuracy) | YOLOv8s | ~2.6 sec | ~23 events | More detections, slower |
+| Legacy/Low-power | MobileNet | ~2.3 sec | ~26 events | Only if YOLO won't run |
 
-⭐ = Recommended for BIL Security project
+**Model Selection Guide:**
+
+| Scenario | Model | Why |
+|----------|-------|-----|
+| **Default choice** | YOLOv8n | Fastest at 720p, good accuracy |
+| Maximum accuracy needed | YOLOv8s | More detections, 30% slower |
+| Very old hardware | MobileNet | Lighter model, but worse at HD |
+| 480p cameras only | MobileNet | Fast at low resolution |
 
 **For Real-Time Streaming (NOT our architecture, but for reference):**
 
@@ -202,11 +230,11 @@ Intrusion Rate: 50% (half of motion events were actual intrusions)
 
 #### What Worked
 
-- ✅ MobileNet-SSD runs efficiently at 79 FPS on CPU
-- ✅ Motion detection successfully filters stationary objects
-- ✅ Pipeline correctly identifies moving people in surveillance video
-- ✅ Video clips saved for detected intrusions
-- ✅ False alarms filtered when no alert classes detected
+- MobileNet-SSD runs efficiently at 79 FPS on CPU (at 480p)
+- Motion detection successfully filters stationary objects
+- Pipeline correctly identifies moving people in surveillance video
+- Video clips saved for detected intrusions
+- False alarms filtered when no alert classes detected
 
 #### Architecture Decisions
 

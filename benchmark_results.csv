@@ -1,4 +1,4 @@
 Model,Video,Avg_FPS,Avg_Latency_ms,Peak_RAM_MB,Avg_CPU_Util,Person_Count,Vehicle_Count
-YOLOv8-Nano,cctv_footage.mp4,20.89,49.33,388.83,92.66,2254,0
-YOLOv8-Small,cctv_footage.mp4,7.41,138.37,452.62,93.73,2257,0
-EfficientDet-D0,cctv_footage.mp4,2.78,445.23,535.95,96.3,744,29
+YOLOv8-Nano,cctv_footage.mp4,35.0,28.69,392.39,6.39,2297,0
+YOLOv8-Small,cctv_footage.mp4,16.98,59.58,451.52,11.77,2256,0
+EfficientDet-D0,cctv_footage.mp4,3.66,274.48,619.33,32.62,748,28

@@ -25,7 +25,15 @@ jobs:
 
     - name: Run tests
       run: |
-        python -m pytest tests/ -v --tb=short
+        python -m pytest tests/ -v --tb=short --strict-markers
+      env:
+        DATABASE_URL: sqlite:///./test.db
+
+    - name: Check imports
+      run: |
+        python -c "import src.server.main; print('✓ Server imports successfully')"
+        python -c "import src.server.db; print('✓ Database imports successfully')"
+        python -c "import src.server.schemas; print('✓ Schemas import successfully')"
 
     - name: Check code formatting (optional)
       run: |

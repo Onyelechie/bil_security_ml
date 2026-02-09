@@ -1,6 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
-from datetime import datetime
+from datetime import datetime, timezone
 from server.main import app
 from server.db import init_db
 
@@ -13,7 +13,7 @@ def test_receive_alert():
     payload = {
         "site_id": "site_001",
         "camera_id": "cam_01",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "detections": [
             {"class": "person", "confidence": 0.95},
             {"class": "vehicle", "confidence": 0.88}

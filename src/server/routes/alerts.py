@@ -28,7 +28,7 @@ def receive_alert(alert: AlertCreate, db: Session = Depends(get_db)):
         site_id=alert.site_id,
         camera_id=alert.camera_id,
         timestamp=alert.timestamp,
-        detections=[d.dict(by_alias=True) for d in alert.detections],
+        detections=[d.model_dump(by_alias=True) for d in alert.detections],
         image_path=alert.image_path
     )
     db.add(db_alert)

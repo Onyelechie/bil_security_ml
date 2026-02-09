@@ -55,9 +55,12 @@ docs/self_assessment_ebere.tex
 *.model
 *.bin
 *.xml
-*.json
-*.yml
-*.yaml
+# Specific directories for data files
+data/
+storage/
+models/
+videos/
+camera*/
 *.sqlite3
 *.db
 *.mp4
@@ -72,5 +75,3 @@ docs/self_assessment_ebere.tex
 *.bmp
 *.tiff
 *.raw
-camera*
-video*

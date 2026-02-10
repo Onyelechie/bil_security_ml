@@ -48,6 +48,53 @@ The project follows a structured approach:
 - RTSP stream processing
 - On-device inference on constrained hardware
 
+### Development Setup
+
+#### Prerequisites
+- Python 3.9+
+- Virtual environment (recommended)
+
+#### Installation
+```bash
+# Clone the repository
+git clone https://github.com/Onyelechie/bil_security_ml.git
+cd bil_security_ml
+
+# Create and activate virtual environment
+python -m venv .venv
+# On Windows:
+.venv\Scripts\activate
+# On Unix/Mac:
+# source .venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+#### Running the Server
+```bash
+# Set Python path for src/ layout
+# On Windows PowerShell:
+$env:PYTHONPATH = "$PWD\src"
+# On Unix/Mac:
+# export PYTHONPATH="$PWD/src"
+
+# Run the server
+python -m uvicorn server.main:app --reload --port 8000
+```
+
+#### Running Tests
+```bash
+# Set Python path for src/ layout
+# On Windows PowerShell:
+$env:PYTHONPATH = "$PWD\src"
+# On Unix/Mac:
+# export PYTHONPATH="$PWD/src"
+
+# Run tests
+python -m pytest
+```
+
 ### Technical Notes
 
 - "Motion events" (from the problem statement) can be sent from our existing software via TCP.

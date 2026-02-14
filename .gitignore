@@ -42,3 +42,14 @@ venv.bak/
 # OS
 .DS_Store
 Thumbs.db
+
+# ML Models / Weights
+*.pt
+*.pth
+*.onnx
+*.weights
+*.tflite
+*.pb
+*.h5
+benchmark/*.pt
+benchmark/*.pth

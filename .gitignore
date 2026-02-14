@@ -1,3 +1,4 @@
+!src/server/models/
 support_files/Industrial_Project_Proposal.pdf
 
 # Python
@@ -24,14 +25,10 @@ coverage.xml
 .pytest_cache
 .hypothesis
 
-# Virtual environments
+# Environment variables
 .env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+.env.local
+.env.production
 
 # IDE
 .vscode/
@@ -53,3 +50,35 @@ Thumbs.db
 *.h5
 benchmark/*.pt
 benchmark/*.pth
+docs/self_assessment_ebere.tex
+*.pt
+*.h5
+*.pkl
+*.joblib
+*.onnx
+*.tflite
+*.weights
+*.cfg
+*.model
+*.bin
+*.xml
+# Specific directories for data files
+data/
+storage/
+models/
+videos/
+camera*/
+*.sqlite3
+*.db
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.flv
+*.webm
+*.jpg
+*.jpeg
+*.png
+*.bmp
+*.tiff
+*.raw

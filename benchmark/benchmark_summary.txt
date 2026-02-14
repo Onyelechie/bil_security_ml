@@ -1,0 +1,66 @@
+Multi-Model Benchmark Summary
+=============================
+
+1. HIGH RESOLUTION SUMMARY (Model-wise Averages)
+----------------------------------------------
+                   Avg_FPS  Avg_Latency_ms  Peak_RAM_MB  Avg_CPU_Util  Person_Count  Vehicle_Count
+Model                                                                                             
+EfficientDet-D0   3.700000      270.473333   805.526667     31.026667     40.000000      21.666667
+SSD-MobileNet     8.326667      120.796667   844.303333     20.653333     48.333333       0.333333
+YOLOv5-Nano      30.993333       32.680000   692.196667      8.330000     16.666667      99.666667
+YOLOv8-Nano      29.993333       33.986667   579.620000     11.326667     18.666667     108.666667
+YOLOv8-Small     17.083333       59.226667   677.803333     15.050000     20.666667     136.000000
+
+2. LOW RESOLUTION SUMMARY (Model-wise Averages)
+---------------------------------------------
+                   Avg_FPS  Avg_Latency_ms  Peak_RAM_MB  Avg_CPU_Util  Person_Count  Vehicle_Count
+Model                                                                                             
+EfficientDet-D0   3.740000      267.733333   777.913333     31.333333     34.333333       1.333333
+SSD-MobileNet     9.573333      104.583333   824.466667     20.213333     21.666667       6.000000
+YOLOv5-Nano      29.610000       34.366667   690.880000      7.120000     17.000000      96.000000
+YOLOv8-Nano      28.800000       35.453333   590.783333      9.833333     15.000000      57.000000
+YOLOv8-Small     15.723333       65.243333   676.840000     16.136667     16.666667     136.333333
+
+3. OVERALL SUMMARY (Model-wise Averages)
+--------------------------------------
+                   Avg_FPS  Avg_Latency_ms  Peak_RAM_MB  Avg_CPU_Util  Person_Count  Vehicle_Count
+Model                                                                                             
+EfficientDet-D0   3.720000      269.103333   791.720000     31.180000     37.166667      11.500000
+SSD-MobileNet     8.950000      112.690000   834.385000     20.433333     35.000000       3.166667
+YOLOv5-Nano      30.301667       33.523333   691.538333      7.725000     16.833333      97.833333
+YOLOv8-Nano      29.396667       34.720000   585.201667     10.580000     16.833333      82.833333
+YOLOv8-Small     16.403333       62.235000   677.321667     15.593333     18.666667     136.166667
+
+4. FULL RAW RESULTS
+------------------
+          Model                    Video  Avg_FPS  Avg_Latency_ms  Peak_RAM_MB  Avg_CPU_Util  Person_Count  Vehicle_Count Resolution
+    YOLOv8-Nano    C1HighRes - Human.mp4    30.63           33.34       566.30         13.74             0             32       High
+    YOLOv8-Nano C6HighResPTZ - Human.mp4    30.25           33.65       570.03          9.07             9              1       High
+    YOLOv8-Nano     C4LowRes - Human.mp4    33.07           30.49       570.56          7.97            42            126        Low
+    YOLOv8-Nano     C1LowRes - Human.mp4    24.03           41.62       598.52         10.05             0             23        Low
+    YOLOv8-Nano    C4HighRes - Human.mp4    29.10           34.97       602.53         11.17            47            293       High
+    YOLOv8-Nano  C6LowResPTZ - Human.mp4    29.30           34.25       603.27         11.48             3             22        Low
+   YOLOv8-Small    C1HighRes - Human.mp4    17.87           56.14       666.30         13.54             0             33       High
+   YOLOv8-Small C6HighResPTZ - Human.mp4    16.67           60.94       666.27         13.54            18             15       High
+   YOLOv8-Small     C4LowRes - Human.mp4    18.00           55.76       666.27         15.82            45            290        Low
+   YOLOv8-Small     C1LowRes - Human.mp4    12.81           78.73       700.84         20.77             0             46        Low
+   YOLOv8-Small    C4HighRes - Human.mp4    16.71           60.60       700.84         18.07            44            360       High
+   YOLOv8-Small  C6LowResPTZ - Human.mp4    16.36           61.24       663.41         11.82             5             73        Low
+    YOLOv5-Nano    C1HighRes - Human.mp4    31.45           32.12       693.53         10.22             0             18       High
+    YOLOv5-Nano C6HighResPTZ - Human.mp4    31.06           32.79       693.53          7.68             2              0       High
+    YOLOv5-Nano     C4LowRes - Human.mp4    34.02           29.49       693.53          7.08            44            246        Low
+    YOLOv5-Nano     C1LowRes - Human.mp4    25.73           39.13       689.53          8.00             0             22        Low
+    YOLOv5-Nano    C4HighRes - Human.mp4    30.47           33.13       689.53          7.09            48            281       High
+    YOLOv5-Nano  C6LowResPTZ - Human.mp4    29.08           34.48       689.58          6.28             7             20        Low
+EfficientDet-D0    C1HighRes - Human.mp4     3.71          269.99       812.72         29.94             0             12       High
+EfficientDet-D0 C6HighResPTZ - Human.mp4     3.69          270.94       789.17         31.83             0              0       High
+EfficientDet-D0     C4LowRes - Human.mp4     3.73          268.41       789.33         31.56           103              0        Low
+EfficientDet-D0     C1LowRes - Human.mp4     3.75          267.11       729.50         31.61             0              4        Low
+EfficientDet-D0    C4HighRes - Human.mp4     3.70          270.49       814.69         31.31           120             53       High
+EfficientDet-D0  C6LowResPTZ - Human.mp4     3.74          267.68       814.91         30.83             0              0        Low
+  SSD-MobileNet    C1HighRes - Human.mp4     8.40          119.21       876.17         20.80             0              0       High
+  SSD-MobileNet C6HighResPTZ - Human.mp4     8.13          124.51       832.77         19.62             0              0       High
+  SSD-MobileNet     C4LowRes - Human.mp4     9.62          104.24       820.06         22.96            65             18        Low
+  SSD-MobileNet     C1LowRes - Human.mp4     9.62          104.00       829.34         16.08             0              0        Low
+  SSD-MobileNet    C4HighRes - Human.mp4     8.45          118.67       823.97         21.54           145              1       High
+  SSD-MobileNet  C6LowResPTZ - Human.mp4     9.48          105.51       824.00         21.60             0              0        Low

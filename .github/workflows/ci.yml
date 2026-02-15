@@ -35,6 +35,10 @@ jobs:
         python -c "import src.server.db; print('✓ Database imports successfully')"
         python -c "import src.server.schemas; print('✓ Schemas import successfully')"
 
+        # For Edge Agent
+        python -c "import src.edge_agent.main; print('✓ Edge Agent imports successfully')"
+        python -c "import src.edge_agent.config; print('✓ Edge Agent config imports successfully')"
+
     - name: Check code formatting (optional)
       run: |
         # Uncomment when black and isort are added to requirements

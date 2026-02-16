@@ -71,7 +71,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-#### Running the Server
+#### Running the Central Server (Area C)
 ```bash
 # Set Python path for src/ layout
 # On Windows PowerShell:
@@ -83,7 +83,29 @@ $env:PYTHONPATH = "$PWD\src"
 python -m uvicorn server.main:app --reload --port 8000
 ```
 
-#### Running Tests
+## Edge Agent (Area B)
+
+The edge agent is the on-site Windows service that will:
+- listen for motion events over TCP
+- pull frames via RTSP
+- run detection/decision logic
+- send alerts + heartbeats to the central server
+
+### Running the Edge Agent (PR1 skeleton)
+
+```bash
+# Set Python path for src/ layout
+# On Windows PowerShell:
+$env:PYTHONPATH = "$PWD\src"
+# On Unix/Mac:
+# export PYTHONPATH="$PWD/src"
+
+python -m edge_agent.main --print-config
+```
+
+See `docs/area_b_edge_agent_context.md` for architecture + demo environment details.
+
+## Running Tests
 ```bash
 # Set Python path for src/ layout
 # On Windows PowerShell:

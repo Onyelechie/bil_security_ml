@@ -127,13 +127,15 @@ Used by edge PCs to report their status and last-seen time.
   "edge_pc_id": "edge-001",
   "site_name": "Warehouse 1",
   "status": "online",
-  "last_heartbeat": "2026-02-17T12:34:56Z"
+  "last_heartbeat": "2026-02-17T12:34:56Z",
+  "message": "Server received heartbeat"
 }
 ```
 
+
 **Model Conventions:**
 - `In` models (e.g., `HeartbeatIn`) are for data sent from the client to the server (requests).
-- `Out` models (e.g., `HeartbeatOut`) are for data sent from the server to the client (responses).
+- `Out` models (e.g., `HeartbeatOut`) are for data sent from the server to the client (responses). The heartbeat response now includes a `message` field confirming receipt.
 
 #### Alerts Endpoint
 - **POST /api/alerts**: Ingests alerts from edge PCs (see code for schema).

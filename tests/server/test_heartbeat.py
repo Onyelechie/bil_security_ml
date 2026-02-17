@@ -22,6 +22,7 @@ def test_heartbeat_create_and_update():
     assert data["site_name"] == payload["site_name"]
     assert data["status"] == payload["status"]
     assert "last_heartbeat" in data
+    assert data["message"] == "Server received heartbeat"
 
     # Update heartbeat (change status)
     payload["status"] = "idle"
@@ -31,6 +32,7 @@ def test_heartbeat_create_and_update():
     data2 = response.json()
     assert data2["status"] == "idle"
     assert data2["last_heartbeat"] > data["last_heartbeat"]
+    assert data2["message"] == "Server received heartbeat"
 
 def test_heartbeat_missing_fields():
     payload = {

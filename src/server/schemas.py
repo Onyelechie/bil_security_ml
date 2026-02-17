@@ -35,3 +35,4 @@ class HeartbeatOut(BaseModel):
     site_name: str
     status: str
     last_heartbeat: datetime
+    message: str

@@ -35,9 +35,10 @@ def heartbeat(payload: HeartbeatIn, db: Session = Depends(get_db)):
         db.add(edge_pc)
     db.commit()
     db.refresh(edge_pc)
-    return HeartbeatOut(
-        edge_pc_id=edge_pc.edge_pc_id,
-        site_name=edge_pc.site_name,
-        status=edge_pc.status,
-        last_heartbeat=edge_pc.last_heartbeat
-    )
+    return {
+        "edge_pc_id": edge_pc.edge_pc_id,
+        "site_name": edge_pc.site_name,
+        "status": edge_pc.status,
+        "last_heartbeat": edge_pc.last_heartbeat,
+        "message": "Server received heartbeat"
+    }

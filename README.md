@@ -71,6 +71,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
+
 #### Running the Central Server (Area C)
 ```bash
 # Set Python path for src/ layout
@@ -82,6 +83,69 @@ $env:PYTHONPATH = "$PWD\src"
 # Run the server
 python -m uvicorn server.main:app --reload --port 8000
 ```
+
+
+
+### Endpoint Purpose
+
+- **Heartbeat** (`POST /api/heartbeat`): Used by edge PCs to report their own status and last-seen time to the server. This lets the server track which devices are online and their current state.
+- **Healthcheck** (`GET /`): Used by anyone (user, monitoring system, load balancer) to check if the server itself is running and responsive. Returns a simple status message.
+
+---
+
+### API Documentation
+
+When the server is running, interactive API documentation is available:
+
+- **Swagger UI:** [http://localhost:8000/docs](http://localhost:8000/docs)
+- **ReDoc:** [http://localhost:8000/redoc](http://localhost:8000/redoc)
+
+These docs are auto-generated from the code and always up to date. You can try out endpoints, view request/response schemas, and see example payloads directly in your browser.
+
+---
+
+### API Endpoints
+
+#### Heartbeat Endpoint
+**POST /api/heartbeat**
+
+Used by edge PCs to report their status and last-seen time.
+
+**Request Body (HeartbeatIn):**
+```json
+{
+  "edge_pc_id": "edge-001",
+  "site_name": "Warehouse 1",
+  "status": "online",
+  "timestamp": "2026-02-17T12:34:56Z"
+}
+```
+
+**Response (HeartbeatOut):**
+```json
+{
+  "edge_pc_id": "edge-001",
+  "site_name": "Warehouse 1",
+  "status": "online",
+  "last_heartbeat": "2026-02-17T12:34:56Z"
+}
+```
+
+**Model Conventions:**
+- `In` models (e.g., `HeartbeatIn`) are for data sent from the client to the server (requests).
+- `Out` models (e.g., `HeartbeatOut`) are for data sent from the server to the client (responses).
+
+#### Alerts Endpoint
+- **POST /api/alerts**: Ingests alerts from edge PCs (see code for schema).
+- **GET /api/alerts**: Lists alerts (filtering to be implemented).
+
+---
+
+### Security & Production Notes
+- CORS is currently set to allow all origins for development. **Restrict this in production!**
+- No authentication is enabled by default. Add API keys or JWT for production deployments.
+- Alert listing filters are marked as TODO and will be implemented in future updates.
+
 
 ## Edge Agent (Area B)
 
@@ -105,6 +169,7 @@ python -m edge_agent.main --print-config
 
 See `docs/area_b_edge_agent_context.md` for architecture + demo environment details.
 
+
 ## Running Tests
 ```bash
 # Set Python path for src/ layout
@@ -113,8 +178,11 @@ $env:PYTHONPATH = "$PWD\src"
 # On Unix/Mac:
 # export PYTHONPATH="$PWD/src"
 
-# Run tests
+# Run all tests
 python -m pytest
+
+# Run only heartbeat tests
+python -m pytest tests/server/test_heartbeat.py -v
 ```
 
 ### Technical Notes

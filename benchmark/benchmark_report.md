@@ -1,104 +1,126 @@
-# Multi-Model Benchmark Report
+# Multi-Model Benchmark Report (CPU-Only Evaluation)
 
-## Overview
+## 1. Environment Details
 
-This report presents benchmarking results for five object detection models evaluated on High Resolution and Low Resolution video datasets.
-
-Models evaluated:
-
-- EfficientDet-D0
-- SSD-MobileNet
-- YOLOv5-Nano
-- YOLOv8-Nano
-- YOLOv8-Small
-
-Metrics collected:
-
-- Average FPS
-- Average Latency (ms)
-- Peak RAM Usage (MB)
-- Average CPU Utilization (%)
-- Person Count
-- Vehicle Count
+- **Operating System:** Windows 11  
+- **Python Version:** 3.13.12  
+- **CPU:** Intel64 Family 6 Model 140 Stepping 1 (GenuineIntel)  
+- **RAM:** 15.79 GB  
+- **Device:** CPU (CUDA Unavailable)  
+- **torch:** 2.10.0+cpu  
+- **torchvision:** 0.25.0+cpu  
+- **ultralytics:** 8.4.12  
+- **OpenCV (cv2):** 4.13.0  
 
 ---
 
-# 1. High Resolution Summary (Model-wise Averages)
+## 2. Benchmark Configuration
 
-| Model            | Avg FPS | Avg Latency (ms) | Peak RAM (MB) | Avg CPU Util (%) | Person Count | Vehicle Count |
-|------------------|---------|------------------|---------------|------------------|--------------|---------------|
-| EfficientDet-D0  | 3.70    | 270.47           | 805.53        | 31.03            | 40.00       | 21.67        |
-| SSD-MobileNet    | 8.33    | 120.80           | 844.30        | 20.65            | 48.33       | 0.33         |
-| YOLOv5-Nano      | 30.99   | 32.68            | 692.20        | 8.33             | 16.67       | 99.67        |
-| YOLOv8-Nano      | 29.99   | 33.99            | 579.62        | 11.33            | 18.67       | 108.67       |
-| YOLOv8-Small     | 17.08   | 59.23            | 677.80        | 15.05            | 20.67       | 136.00       |
-
----
-
-# 2. Low Resolution Summary (Model-wise Averages)
-
-| Model            | Avg FPS | Avg Latency (ms) | Peak RAM (MB) | Avg CPU Util (%) | Person Count | Vehicle Count |
-|------------------|---------|------------------|---------------|------------------|--------------|---------------|
-| EfficientDet-D0  | 3.74    | 267.73           | 777.91        | 31.33            | 34.33       | 1.33         |
-| SSD-MobileNet    | 9.57    | 104.58           | 824.47        | 20.21            | 21.67       | 6.00         |
-| YOLOv5-Nano      | 29.61   | 34.37            | 690.88        | 7.12             | 17.00       | 96.00        |
-| YOLOv8-Nano      | 28.80   | 35.45            | 590.78        | 9.83             | 15.00       | 57.00        |
-| YOLOv8-Small     | 15.72   | 65.24            | 676.84        | 16.14            | 16.67       | 136.33       |
+- **Warmup Frames:** 10  
+- **Max Frames Per Video:** 100  
+- **Confidence Threshold:** 0.25  
+- **Torch Threads:** 4  
+- **Input Sizes:**
+  - YOLO models → 640
+  - EfficientDet → 512
+  - SSD-MobileNet → 320  
 
 ---
 
-# 3. Overall Summary (Model-wise Averages)
+# 3. High Resolution Summary
 
-| Model            | Avg FPS | Avg Latency (ms) | Peak RAM (MB) | Avg CPU Util (%) | Person Count | Vehicle Count |
-|------------------|---------|------------------|---------------|------------------|--------------|---------------|
-| EfficientDet-D0  | 3.72    | 269.10           | 791.72        | 31.18            | 37.17       | 11.50        |
-| SSD-MobileNet    | 8.95    | 112.69           | 834.39        | 20.43            | 35.00       | 3.17         |
-| YOLOv5-Nano      | 30.30   | 33.52            | 691.54        | 7.73             | 16.83       | 97.83        |
-| YOLOv8-Nano      | 29.40   | 34.72            | 585.20        | 10.58            | 16.83       | 82.83        |
-| YOLOv8-Small     | 16.40   | 62.24            | 677.32        | 15.59            | 18.67       | 136.17       |
+| Model            | Avg FPS | Avg Latency (ms) | Peak RAM (MB) | Avg CPU (%) | Person Detections | Vehicle Detections |
+|------------------|---------|------------------|---------------|-------------|-------------------|--------------------|
+| EfficientDet-D0  | 3.07    | 350.13           | 666.20        | 81.18       | 41.50            | 13.00             |
+| SSD-MobileNet    | 4.83    | 226.20           | 805.01        | 83.79       | 31.17            | 20.00             |
+| YOLOv5-Nano      | 13.14   | 91.74            | 545.05        | 82.46       | 10.33            | 57.00             |
+| YOLOv8-Nano      | 16.02   | 67.67            | 517.59        | 84.91       | 9.17             | 89.50             |
+| YOLOv8-Small     | 7.20    | 140.53           | 592.10        | 84.09       | 11.00            | 138.17            |
 
 ---
 
-# 4. Performance Analysis
+# 4. Low Resolution Summary
 
-## 🚀 Fastest Model
-YOLOv5-Nano achieved the highest overall FPS (~30 FPS) with very low latency (~33 ms).
+| Model            | Avg FPS | Avg Latency (ms) | Peak RAM (MB) | Avg CPU (%) | Person Detections | Vehicle Detections |
+|------------------|---------|------------------|---------------|-------------|-------------------|--------------------|
+| EfficientDet-D0  | 3.45    | 307.86           | 554.39        | 82.02       | 31.83            | 2.00              |
+| SSD-MobileNet    | 8.41    | 133.97           | 680.34        | 82.74       | 11.50            | 21.00             |
+| YOLOv5-Nano      | 16.07   | 79.28            | 424.02        | 81.99       | 12.83            | 70.17             |
+| YOLOv8-Nano      | 16.77   | 69.51            | 400.47        | 81.88       | 12.00            | 64.50             |
+| YOLOv8-Small     | 6.82    | 152.99           | 472.91        | 82.98       | 15.17            | 116.50            |
+
+---
+
+# 5. Overall Summary
+
+| Model            | Avg FPS | Avg Latency (ms) | Peak RAM (MB) | Avg CPU (%) | Person Detections | Vehicle Detections |
+|------------------|---------|------------------|---------------|-------------|-------------------|--------------------|
+| EfficientDet-D0  | 3.26    | 328.99           | 610.29        | 81.60       | 36.67            | 7.50              |
+| SSD-MobileNet    | 6.62    | 180.09           | 742.67        | 83.26       | 21.33            | 20.50             |
+| YOLOv5-Nano      | 14.60   | 85.51            | 484.53        | 82.22       | 11.58            | 63.58             |
+| YOLOv8-Nano      | 16.40   | 68.59            | 459.03        | 83.40       | 10.58            | 77.00             |
+| YOLOv8-Small     | 7.01    | 146.76           | 532.50        | 83.53       | 13.08            | 127.33            |
+
+---
+
+# 6. Performance Analysis
+
+## 🔥 Fastest Model
+**YOLOv8-Nano** achieved the highest overall FPS (~16.4 FPS) with the lowest latency (~68.6 ms).
 
 ## ⚡ Lowest Latency
-YOLOv5-Nano and YOLOv8-Nano both maintained ~33–35 ms latency.
+YOLOv8-Nano delivered the lowest latency across resolutions.
 
-## 🧠 Lowest RAM Usage
-YOLOv8-Nano used the least RAM (~585 MB average).
-
-## 🔥 Highest CPU Usage
-EfficientDet-D0 consumed the most CPU (~31%).
-
-## 🎯 Highest Vehicle Detection
-YOLOv8-Small detected the highest number of vehicles overall (~136).
+## 💾 Most Memory Efficient
+YOLOv8-Nano consumed the least RAM overall (~459 MB average).
 
 ## 🐢 Slowest Model
-EfficientDet-D0 performed the slowest (~3.7 FPS) with very high latency (~269 ms).
+EfficientDet-D0 was the slowest model (~3.26 FPS) with very high latency (~329 ms).
+
+## 🎯 Highest Vehicle Detection
+YOLOv8-Small detected the highest number of vehicles (~127 average), indicating stronger detection capacity but at lower speed.
+
+## 👤 Person Detection Performance
+EfficientDet-D0 produced the highest person detection counts, though at significant performance cost.
 
 ---
 
-# 5. Key Observations
+# 7. Key Observations
 
-- YOLOv5-Nano offers the best speed-to-resource ratio.
-- YOLOv8-Nano provides slightly better memory efficiency.
-- YOLOv8-Small improves detection counts but sacrifices speed.
-- EfficientDet-D0 is not suitable for real-time CPU-based inference.
-- SSD-MobileNet provides moderate performance but weaker vehicle detection.
-
----
-
-# 6. Recommendation
-
-For real-time CPU-based on-premise deployment:
-
-**Best Overall Choice:** YOLOv5-Nano  
-**Best Memory Efficient Choice:** YOLOv8-Nano  
-**Best Detection Quality (Vehicles):** YOLOv8-Small  
+1. CPU utilization remained consistently high (~81–85%) across all models.
+2. Lower resolution significantly improves FPS for most models.
+3. YOLOv8-Nano provides the best trade-off between speed, latency, and memory.
+4. YOLOv8-Small improves detection quality but halves inference speed.
+5. EfficientDet-D0 is not suitable for real-time CPU inference.
+6. SSD-MobileNet offers moderate performance but is less efficient than YOLO models.
 
 ---
 
-# End of Report
+# 8. Deployment Recommendation (CPU-Based System)
+
+For CPU-only real-time deployment:
+
+### ✅ Best Overall Choice: YOLOv8-Nano
+- Highest FPS
+- Lowest latency
+- Lowest RAM usage
+- Balanced detection performance
+
+### ✅ Budget / Lightweight Option: YOLOv5-Nano
+- Slightly slower but still efficient
+
+### ❌ Not Recommended for Real-Time CPU:
+- EfficientDet-D0
+
+---
+
+# 9. Conclusion
+
+On a CPU-only Windows 11 system (no CUDA), YOLO-based architectures significantly outperform EfficientDet and SSD-MobileNet in both speed and efficiency.
+
+For real-time surveillance or edge inference deployment on CPU systems, YOLOv8-Nano provides the optimal balance between detection accuracy and performance.
+
+---
+
+**End of Report**
+

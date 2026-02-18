@@ -19,8 +19,9 @@ def heartbeat(payload: HeartbeatIn, db: Session = Depends(get_db)):
     """
     Upsert edge PC heartbeat info.
     """
+    from datetime import datetime, timezone
     edge_pc = db.query(EdgePC).filter_by(edge_pc_id=payload.edge_pc_id).first()
-    now = payload.timestamp
+    now = datetime.now(timezone.utc)
     if edge_pc:
         edge_pc.status = payload.status
         edge_pc.last_heartbeat = now

@@ -107,9 +107,10 @@ These docs are auto-generated from the code and always up to date. You can try o
 ### API Endpoints
 
 #### Heartbeat Endpoint
+
 **POST /api/heartbeat**
 
-Used by edge PCs to report their status and last-seen time.
+Used by edge PCs to report their status. The server records the time it receives the heartbeat as `last_heartbeat` (using its own UTC clock, not the client timestamp).
 
 **Request Body (HeartbeatIn):**
 ```json
@@ -135,7 +136,7 @@ Used by edge PCs to report their status and last-seen time.
 
 **Model Conventions:**
 - `In` models (e.g., `HeartbeatIn`) are for data sent from the client to the server (requests).
-- `Out` models (e.g., `HeartbeatOut`) are for data sent from the server to the client (responses). The heartbeat response now includes a `message` field confirming receipt.
+- `Out` models (e.g., `HeartbeatOut`) are for data sent from the server to the client (responses). The heartbeat response now includes a `message` field confirming receipt. The `last_heartbeat` field is always set by the server's current UTC time.
 
 #### Alerts Endpoint
 - **POST /api/alerts**: Ingests alerts from edge PCs (see code for schema).
@@ -144,7 +145,7 @@ Used by edge PCs to report their status and last-seen time.
 ---
 
 ### Security & Production Notes
-- CORS is currently set to allow all origins for development. **Restrict this in production!**
+- CORS is now restricted to `http://localhost:3000` and `http://localhost:8000` for development. **Update this for production deployments!**
 - No authentication is enabled by default. Add API keys or JWT for production deployments.
 - Alert listing filters are marked as TODO and will be implemented in future updates.
 

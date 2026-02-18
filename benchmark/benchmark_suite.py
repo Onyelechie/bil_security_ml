@@ -18,18 +18,44 @@ WARMUP_FRAMES = 10
 MAX_FRAMES_PER_VIDEO = 100
 
 
+# COCO Class Mapping (Standard IDs)
+COCO_CLASSES = {
+    1: "person",
+    2: "bicycle",
+    3: "car",
+    4: "motorcycle",
+    6: "bus",
+    8: "truck",
+    # Add more as needed, but these cover person + vehicles
+}
+
+
 class ModelWrapper(ABC):
+    """
+    Abstract Base Class for all object detection models.
+    Ensures a consistent interface for loading, inference, and cleanup.
+    """
+
     def __init__(self, name):
         self.name = name
         self.model = None
 
     @abstractmethod
     def load(self):
+        """Load model weights and move to device (CPU/GPU)."""
         pass
 
     @abstractmethod
     def predict(self, frame):
-        """Returns list of detections (class_name, confidence, box)"""
+        """
+        Run inference on a single frame.
+
+        Args:
+            frame: OpenCV BGR image
+
+        Returns:
+            List of tuples: [(label, confidence), ...]
+        """
         pass
 
     @abstractmethod
@@ -49,7 +75,23 @@ class YOLOWrapper(ModelWrapper):
         print(f"Loading {self.name} ({self.weights_path})...")
         from ultralytics import YOLO
 
-        self.model = YOLO(self.weights_path)
+        if not os.path.exists(self.weights_path):
+            weights_name = os.path.basename(self.weights_path)
+            print(f"Warning: {self.weights_path} not found.")
+            print(f"Attempting to download {weights_name} automatically...")
+            self.model = YOLO(weights_name)
+
+            # If it downloaded to current directory, move it to the benchmark directory for future runs
+            if os.path.exists(weights_name) and not os.path.exists(self.weights_path):
+                try:
+                    import shutil
+
+                    shutil.move(weights_name, self.weights_path)
+                    print(f"Moved downloaded weights to {self.weights_path}")
+                except Exception as e:
+                    print(f"Note: Could not move weights to {self.weights_path}: {e}")
+        else:
+            self.model = YOLO(self.weights_path)
 
     def predict(self, frame):
         results = self.model(frame, verbose=False)
@@ -111,8 +153,8 @@ class EfficientDetWrapper(ModelWrapper):
                 if score < 0.25:  # Confidence threshold
                     continue
                 cls_id = int(detection[5])
-                # COCO classes rough mapping could be added here preferably
-                detections.append((f"Class_{cls_id}", score))
+                label = COCO_CLASSES.get(cls_id, f"Class_{cls_id}")
+                detections.append((label, score))
         return detections
 
     def unload(self):
@@ -148,8 +190,10 @@ class TorchvisionSSDWrapper(ModelWrapper):
         detections = []
         for label, score in zip(prediction["labels"], prediction["scores"]):
             if score > 0.25:
-                # Basic mapping for COCO: torchvision labels are 1-based index
-                detections.append((f"class_{label.item()}", float(score)))
+                # torchvision labels are 1-based index
+                cls_id = label.item()
+                label_str = COCO_CLASSES.get(cls_id, f"class_{cls_id}")
+                detections.append((label_str, float(score)))
         return detections
 
     def unload(self):
@@ -175,6 +219,9 @@ def run_benchmark():
 
     if not videos:
         print(f"No videos found in {os.path.join(SCRIPT_DIR, 'cctv_samples')}!")
+        print(
+            f"TIP: Run 'python3 {os.path.join(SCRIPT_DIR, 'setup_samples.py')}' to get download links for real CCTV clips."
+        )
         # Fallback
         fallback_path = os.path.join(SCRIPT_DIR, "../sample_video.mp4")
         if os.path.exists(fallback_path):
@@ -191,6 +238,8 @@ def run_benchmark():
 
     all_results = []
     process = psutil.Process(os.getpid())
+    process.cpu_percent()  # Prime the CPU measurement
+    num_cpus = psutil.cpu_count() or 1
 
     # 3. Main Loop
     for model_wrapper in models:
@@ -211,6 +260,8 @@ def run_benchmark():
             fps_list = []
             cpu_usages = []
             ram_usages = []
+            # detection_counts stores cumulative detections across ALL frames.
+            # This is not a unique count of objects, but a measure of detection density.
             detection_counts = {"person": 0, "vehicle": 0, "other": 0}
 
             frame_count = 0
@@ -247,8 +298,11 @@ def run_benchmark():
                 )
 
                 # System Metrics
+                # RSS memory in MB
                 ram_mb = process.memory_info().rss / (1024 * 1024)
-                cpu_pct = psutil.cpu_percent()
+
+                # CPU usage normalized by CPU count (0-100% of total system capacity)
+                cpu_pct = process.cpu_percent() / num_cpus
 
                 # Log Data
                 latencies.append(latency_ms)
@@ -259,21 +313,11 @@ def run_benchmark():
                 # Count classes
                 for label, conf in detections:
                     label_lower = label.lower()
-                    if (
-                        "person" in label_lower or "class_1" == label_lower
-                    ):  # Class 1 is usually person in COCO
+                    if label_lower == "person":
                         detection_counts["person"] += 1
                     elif any(
-                        v in label_lower
-                        for v in [
-                            "car",
-                            "truck",
-                            "bus",
-                            "motorcycle",
-                            "class_3",
-                            "class_6",
-                            "class_8",
-                        ]
+                        v == label_lower
+                        for v in ["car", "truck", "bus", "motorcycle", "vehicle"]
                     ):
                         detection_counts["vehicle"] += 1
                     else:
@@ -302,8 +346,8 @@ def run_benchmark():
                         "Avg_Latency_ms": round(avg_lat, 2),
                         "Peak_RAM_MB": round(peak_ram, 2),
                         "Avg_CPU_Util": round(avg_cpu, 2),
-                        "Person_Count": detection_counts["person"],
-                        "Vehicle_Count": detection_counts["vehicle"],
+                        "Person_Detections": detection_counts["person"],
+                        "Vehicle_Detections": detection_counts["vehicle"],
                     }
                 )
 

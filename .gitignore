@@ -48,21 +48,16 @@ Thumbs.db
 *.tflite
 *.pb
 *.h5
-benchmark/*.pt
-benchmark/*.pth
-docs/self_assessment_ebere.tex
-*.pt
-*.h5
 *.pkl
 *.joblib
-*.onnx
-*.tflite
-*.weights
 *.cfg
 *.model
 *.bin
 *.xml
-# Specific directories for data files
+benchmark/*.pt
+benchmark/*.pth
+
+# Data and Media Files
 data/
 storage/
 models/
@@ -82,3 +77,9 @@ camera*/
 *.bmp
 *.tiff
 *.raw
+
+# Benchmark Specific exclusions (for clarity)
+benchmark/cctv_samples/*.mp4
+
+# Others
+docs/self_assessment_ebere.tex

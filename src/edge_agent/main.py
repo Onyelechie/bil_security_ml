@@ -63,6 +63,8 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
     except Exception:
         # Log unexpected exceptions so the edge service is diagnosable.
         logger.exception("Edge Agent crashed due to an unexpected error")
+        if cfg.debug or cfg.log_level.upper() == "DEBUG":
+            raise
         return 1
 
 

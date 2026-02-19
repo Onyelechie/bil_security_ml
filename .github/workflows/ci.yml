@@ -33,7 +33,6 @@ jobs:
 
   tests:
     runs-on: ubuntu-latest
-    needs: runtime-smoke
     steps:
       - uses: actions/checkout@v4
 

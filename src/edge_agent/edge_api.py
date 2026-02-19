@@ -73,6 +73,10 @@ def create_app(cfg: EdgeSettings) -> FastAPI:
         return HeartbeatOut(
             edge_pc_id=cfg.edge_pc_id,
             site_name=cfg.site_name,
+
+            # NOTE(PR2): status is hardcoded because PR2 only implements the Edge HTTP API.
+            # TODO(PR3/PR4): derive real status from health signals (TCP listener running,
+            # RTSP connectivity, last motion received, queue depth, etc.)
             status="online",
             time_utc=datetime.now(timezone.utc),
             uptime_seconds=uptime,

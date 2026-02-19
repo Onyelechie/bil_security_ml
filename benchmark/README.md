@@ -66,13 +66,36 @@ Execute the main suite:
 python3 benchmark/benchmark_suite.py
 ```
 
-### 4. Run Smoke Test (Fast Check)
-
-To verify the benchmark pipeline without downloading heavy models or video files:
-
 ```bash
 export PYTHONPATH="$PWD/src:$PWD" && .venv/bin/python3 -m pytest tests/test_benchmark_smoke.py
 ```
+
+## How to Reproduce Exactly
+
+To ensure your results match the baseline as closely as possible, use the following command which standardizes hardware-affecting parameters:
+
+```bash
+python3 benchmark/benchmark_suite.py \
+  --models YOLOv8-Nano,YOLOv8-Small,YOLOv5-Nano,EfficientDet-D0,SSD-MobileNet \
+  --threads 4 \
+  --input-size 640 \
+  --max-frames 100 \
+  --confidence 0.25
+```
+
+### Reproducibility Parameters
+
+- **`--threads 4`**: Limits PyTorch to 4 CPU threads. This prevents the benchmark from hogging the entire system and provides more consistent latency results across different multi-core CPUs.
+- **`--input-size 640`**: Sets the image resolution for the models. Higher values improve accuracy but decrease FPS.
+- **`--max-frames 100`**: Ensures every model evaluates the exact same number of frames.
+- **`--confidence 0.25`**: Standardizes the filtering threshold for detections.
+
+> [!NOTE]
+> Some models like **EfficientDet-D0** (512x512) and **SSD-MobileNet** (320x320) have strict architectural requirements or hardcoded weights. The benchmark suite will automatically override the `--input-size` for these models to ensure stability.
+
+### Can I reproduce exactly?
+
+Yes, but with caveats. While the **logical counts** (Detections) should be identical on any system, the **performance metrics** (FPS, Latency, CPU) will vary based on your specific CPU architecture, RAM speed, and thermal throttling. Always compare results within the same hardware tier.
 
 ## Output Files
 

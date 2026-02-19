@@ -5,7 +5,7 @@
 - **Run Count:** Single run per model/video combination.
 - **Frames Evaluated:** 100 frames per video (after 10 warmup frames).
 - **Averaging:** Results are averaged across all frames for that specific execution. No multiple-pass variance is included in this run.
-- **Reproduction Command:** See [README.md](README.md#how-to-reproduce-exactly) for the exact command block.
+- **Reproduction Command:** See the [How to Reproduce Exactly](README.md#how-to-reproduce-exactly) section in the README for the exact CLI command and parameter documentation.
 - **Dataset:** 12 CCTV clips (6 models x 2 resolutions). Download links available in [README.md](README.md#dataset-cctv-samples).
 
 ## 2. Environment Details

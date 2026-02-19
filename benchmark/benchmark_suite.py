@@ -6,17 +6,18 @@ import cv2
 import glob
 import torch
 import pandas as pd
-import numpy as np
+import argparse
 from abc import ABC, abstractmethod
 
-# Configuration
+# Constants (Defaults)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 VIDEO_EXTENSIONS = ["cctv_samples/*.mp4"]
 OUTPUT_CSV = os.path.join(SCRIPT_DIR, "benchmark_results.csv")
 OUTPUT_SUMMARY = os.path.join(SCRIPT_DIR, "benchmark_summary.txt")
-WARMUP_FRAMES = 10
-MAX_FRAMES_PER_VIDEO = 100
-
+DEFAULT_WARMUP = 10
+DEFAULT_MAX_FRAMES = 100
+DEFAULT_THREADS = 4
+DEFAULT_CONF = 0.25
 
 # COCO Class Mapping (Standard IDs)
 COCO_CLASSES = {
@@ -26,39 +27,27 @@ COCO_CLASSES = {
     4: "motorcycle",
     6: "bus",
     8: "truck",
-    # Add more as needed, but these cover person + vehicles
 }
 
 
 class ModelWrapper(ABC):
     """
     Abstract Base Class for all object detection models.
-    Ensures a consistent interface for loading, inference, and cleanup.
     """
 
-    def __init__(self, name):
+    def __init__(self, name, input_size=None):
         self.name = name
         self.model = None
+        self.input_size = input_size
 
     @abstractmethod
     def load(self):
-        """Load model weights and move to device (CPU/GPU)."""
         pass
 
     @abstractmethod
     def predict(self, frame):
-        """
-        Run inference on a single frame.
-
-        Args:
-            frame: OpenCV BGR image
-
-        Returns:
-            List of tuples: [(label, confidence), ...]
-        """
         pass
 
-    @abstractmethod
     def unload(self):
         if self.model:
             del self.model
@@ -67,8 +56,8 @@ class ModelWrapper(ABC):
 
 
 class YOLOWrapper(ModelWrapper):
-    def __init__(self, model_name, weights_path):
-        super().__init__(model_name)
+    def __init__(self, model_name, weights_path, input_size=640):
+        super().__init__(model_name, input_size)
         self.weights_path = weights_path
 
     def load(self):
@@ -80,8 +69,6 @@ class YOLOWrapper(ModelWrapper):
             print(f"Warning: {self.weights_path} not found.")
             print(f"Attempting to download {weights_name} automatically...")
             self.model = YOLO(weights_name)
-
-            # If it downloaded to current directory, move it to the benchmark directory for future runs
             if os.path.exists(weights_name) and not os.path.exists(self.weights_path):
                 try:
                     import shutil
@@ -94,7 +81,8 @@ class YOLOWrapper(ModelWrapper):
             self.model = YOLO(self.weights_path)
 
     def predict(self, frame):
-        results = self.model(frame, verbose=False)
+        # Ultralytics YOLO supports imgsz parameter directly
+        results = self.model(frame, verbose=False, imgsz=self.input_size)
         detections = []
         for r in results:
             for box in r.boxes:
@@ -104,71 +92,61 @@ class YOLOWrapper(ModelWrapper):
                 detections.append((label, conf))
         return detections
 
-    def unload(self):
-        super().unload()
-        # Ultralytics sometimes leaves things behind, force more cleanup if possible
-        gc.collect()
-
 
 class EfficientDetWrapper(ModelWrapper):
-    def __init__(self, model_name="efficientdet_d0"):
-        super().__init__("EfficientDet-D0")
+    def __init__(self, model_name="efficientdet_d0", input_size=512):
+        # EfficientDet-D0 has strict architecture constraints (512x512 recommended)
+        # We force 512 for D0 to avoid 'stack expects each tensor to be equal size' errors
+        if model_name == "efficientdet_d0" and input_size != 512:
+            print(
+                f"Note: EfficientDet-D0 requires 512x512. Ignoring --input-size {input_size}."
+            )
+            input_size = 512
+        super().__init__("EfficientDet-D0", input_size)
         self.model_name = model_name
-        self.config = None
 
     def load(self):
         print(f"Loading {self.name}...")
-        try:
-            from effdet import create_model  # type: ignore
+        from effdet import create_model
 
-            # Create model with pretrained weights and 'predict' bench_task for NMS output
-            self.model = create_model(
-                self.model_name, bench_task="predict", pretrained=True
-            )
-            self.model.eval()
-        except ImportError:
-            print(
-                "Error: 'effdet' library not found. Please install it with 'pip install effdet'"
-            )
-            raise
+        self.model = create_model(
+            self.model_name, bench_task="predict", pretrained=True
+        )
+        self.model.eval()
 
     def predict(self, frame):
-        # EfficientDet expects specific preprocessing - resize to 512x512
         img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        img = cv2.resize(img, (512, 512))  # EfficientDet-D0 expects 512x512
-        # Convert to tensor, [C, H, W], float32, batch dim [1, C, H, W]
+        img = cv2.resize(img, (self.input_size, self.input_size))
         img_tensor = (
             torch.from_numpy(img).to(dtype=torch.float32).permute(2, 0, 1).unsqueeze(0)
         )
         img_tensor = img_tensor / 255.0
-
         with torch.no_grad():
             output = self.model(img_tensor)
-
-        # Output format for DetBenchPredict is [1, N, 6] (x1, y1, x2, y2, score, class)
         detections = []
         if output is not None and len(output) > 0:
             for detection in output[0]:
                 score = float(detection[4])
-                if score < 0.25:  # Confidence threshold
-                    continue
+                # Note: confidence filter is applied in the main loop
                 cls_id = int(detection[5])
                 label = COCO_CLASSES.get(cls_id, f"Class_{cls_id}")
                 detections.append((label, score))
         return detections
 
-    def unload(self):
-        super().unload()
-        gc.collect()
-
 
 class TorchvisionSSDWrapper(ModelWrapper):
-    def __init__(self, name="SSD-MobileNet"):
-        super().__init__(name)
+    def __init__(self, name="SSD-MobileNet", input_size=320):
+        # ssdlite320_mobilenet_v3_large is hardcoded to 320 in torchvision's default weights
+        if input_size != 320:
+            print(
+                f"Note: SSD-MobileNet (SSDLite320) using native 320x320. Ignoring --input-size {input_size}."
+            )
+            input_size = 320
+        super().__init__(name, input_size)
 
     def load(self):
         print(f"Loading {self.name}...")
-        from torchvision.models.detection import (  # type: ignore
+        from torchvision.models.detection import (
             ssdlite320_mobilenet_v3_large,
             SSDLite320_MobileNet_V3_Large_Weights,
         )
@@ -183,66 +161,72 @@ class TorchvisionSSDWrapper(ModelWrapper):
 
         img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         batch = self.preprocess(img).unsqueeze(0)
-
         with torch.no_grad():
             prediction = self.model(batch)[0]
-
         detections = []
         for label, score in zip(prediction["labels"], prediction["scores"]):
-            if score > 0.25:
-                # torchvision labels are 1-based index
-                cls_id = label.item()
-                label_str = COCO_CLASSES.get(cls_id, f"class_{cls_id}")
-                detections.append((label_str, float(score)))
+            cls_id = label.item()
+            label_str = COCO_CLASSES.get(cls_id, f"class_{cls_id}")
+            detections.append((label_str, float(score)))
         return detections
 
-    def unload(self):
-        super().unload()
-        gc.collect()
 
+def run_benchmark(args):
+    """
+    Main benchmark execution.
+    """
+    # 0. Hardware / Reproduction consistency
+    print(f"Setting torch threads to {args.threads}")
+    torch.set_num_threads(args.threads)
 
-def run_benchmark():
     # 1. Setup Models
-    models = [
-        YOLOWrapper("YOLOv8-Nano", os.path.join(SCRIPT_DIR, "yolov8n.pt")),
-        YOLOWrapper("YOLOv8-Small", os.path.join(SCRIPT_DIR, "yolov8s.pt")),
-        YOLOWrapper("YOLOv5-Nano", os.path.join(SCRIPT_DIR, "yolov5n.pt")),
-        EfficientDetWrapper("efficientdet_d0"),
-        TorchvisionSSDWrapper("SSD-MobileNet"),
-    ]
+    available_models = {
+        "YOLOv8-Nano": YOLOWrapper(
+            "YOLOv8-Nano", os.path.join(SCRIPT_DIR, "yolov8n.pt"), args.input_size
+        ),
+        "YOLOv8-Small": YOLOWrapper(
+            "YOLOv8-Small", os.path.join(SCRIPT_DIR, "yolov8s.pt"), args.input_size
+        ),
+        "YOLOv5-Nano": YOLOWrapper(
+            "YOLOv5-Nano", os.path.join(SCRIPT_DIR, "yolov5n.pt"), args.input_size
+        ),
+        "EfficientDet-D0": EfficientDetWrapper("efficientdet_d0", args.input_size),
+        "SSD-MobileNet": TorchvisionSSDWrapper("SSD-MobileNet", args.input_size),
+    }
+
+    selected_model_names = (
+        args.models.split(",")
+        if args.models != "all"
+        else list(available_models.keys())
+    )
+    models_to_run = []
+    for m_name in selected_model_names:
+        if m_name in available_models:
+            models_to_run.append(available_models[m_name])
+        else:
+            print(f"Warning: Model '{m_name}' not recognized. Skipping.")
+
+    if not models_to_run:
+        print("Error: No valid models selected.")
+        return
 
     # 2. Find Videos
     videos = []
     for ext in VIDEO_EXTENSIONS:
-        search_path = os.path.join(SCRIPT_DIR, ext)
-        videos.extend(glob.glob(search_path))
+        videos.extend(glob.glob(os.path.join(SCRIPT_DIR, ext)))
 
     if not videos:
         print(f"No videos found in {os.path.join(SCRIPT_DIR, 'cctv_samples')}!")
-        print(
-            f"TIP: Run 'python3 {os.path.join(SCRIPT_DIR, 'setup_samples.py')}' to get download links for real CCTV clips."
-        )
-        # Fallback
-        fallback_path = os.path.join(SCRIPT_DIR, "../sample_video.mp4")
-        if os.path.exists(fallback_path):
-            videos.append(fallback_path)
-            print(f"Using fallback: {fallback_path}")
+        return
 
-    if not videos:
-        print("Creating dummy video for testing...")
-        dummy_name = os.path.join(SCRIPT_DIR, "test_video.mp4")
-        create_dummy_video(dummy_name)
-        videos.append(dummy_name)
-
-    print(f"Found {len(videos)} videos: {videos}")
+    print(f"Benchmarking {len(models_to_run)} models on {len(videos)} videos.")
 
     all_results = []
     process = psutil.Process(os.getpid())
-    process.cpu_percent()  # Prime the CPU measurement
     num_cpus = psutil.cpu_count() or 1
 
     # 3. Main Loop
-    for model_wrapper in models:
+    for model_wrapper in models_to_run:
         print(f"\n{'=' * 30}\nBenchmarking: {model_wrapper.name}\n{'=' * 30}")
 
         try:
@@ -255,40 +239,27 @@ def run_benchmark():
             print(f"Processing {video_path}...")
             cap = cv2.VideoCapture(video_path)
 
-            # Metrics Storage
-            latencies = []
-            fps_list = []
-            cpu_usages = []
-            ram_usages = []
-            # detection_counts stores cumulative detections across ALL frames.
-            # This is not a unique count of objects, but a measure of detection density.
+            latencies, fps_list, cpu_usages, ram_usages = [], [], [], []
             detection_counts = {"person": 0, "vehicle": 0, "other": 0}
-
             frame_count = 0
 
             # WARMUP
-            print("Warming up (10 frames)...")
-            for _ in range(WARMUP_FRAMES):
+            print(f"Warming up ({args.warmup} frames)...")
+            for _ in range(args.warmup):
                 ret, frame = cap.read()
                 if not ret:
                     break
                 model_wrapper.predict(frame)
 
-            # Reset video
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
-            while cap.isOpened():
-                if frame_count >= MAX_FRAMES_PER_VIDEO:
-                    break
-
+            while cap.isOpened() and frame_count < args.max_frames:
                 start_frame_time = time.time()
                 ret, frame = cap.read()
                 if not ret:
                     break
 
-                # Inference
                 detections = model_wrapper.predict(frame)
-
                 end_frame_time = time.time()
                 latency_ms = (end_frame_time - start_frame_time) * 1000
                 fps = (
@@ -297,26 +268,22 @@ def run_benchmark():
                     else 0
                 )
 
-                # System Metrics
-                # RSS memory in MB
                 ram_mb = process.memory_info().rss / (1024 * 1024)
-
-                # CPU usage normalized by CPU count (0-100% of total system capacity)
                 cpu_pct = process.cpu_percent() / num_cpus
 
-                # Log Data
                 latencies.append(latency_ms)
                 fps_list.append(fps)
                 ram_usages.append(ram_mb)
                 cpu_usages.append(cpu_pct)
 
-                # Count classes
                 for label, conf in detections:
+                    if conf < args.confidence:
+                        continue
                     label_lower = label.lower()
                     if label_lower == "person":
                         detection_counts["person"] += 1
                     elif any(
-                        v == label_lower
+                        v in label_lower
                         for v in ["car", "truck", "bus", "motorcycle", "vehicle"]
                     ):
                         detection_counts["vehicle"] += 1
@@ -324,105 +291,86 @@ def run_benchmark():
                         detection_counts["other"] += 1
 
                 frame_count += 1
-                if frame_count % 10 == 0:
-                    print(
-                        f"Frame {frame_count}: FPS={fps:.1f}, Lat={latency_ms:.1f}ms, RAM={ram_mb:.1f}MB"
-                    )
+                if frame_count % 20 == 0:
+                    print(f"Frame {frame_count}/{args.max_frames}...")
 
             cap.release()
 
-            # Aggregate Results for this Video/Model
             if latencies:
-                avg_fps = sum(fps_list) / len(fps_list)
-                avg_lat = sum(latencies) / len(latencies)
-                peak_ram = max(ram_usages)
-                avg_cpu = sum(cpu_usages) / len(cpu_usages)
-
                 all_results.append(
                     {
                         "Model": model_wrapper.name,
                         "Video": os.path.basename(video_path),
-                        "Avg_FPS": round(avg_fps, 2),
-                        "Avg_Latency_ms": round(avg_lat, 2),
-                        "Peak_RAM_MB": round(peak_ram, 2),
-                        "Avg_CPU_Util": round(avg_cpu, 2),
+                        "Avg_FPS": round(sum(fps_list) / len(fps_list), 2),
+                        "Avg_Latency_ms": round(sum(latencies) / len(latencies), 2),
+                        "Peak_RAM_MB": round(max(ram_usages), 2),
+                        "Avg_CPU_Util": round(sum(cpu_usages) / len(cpu_usages), 2),
                         "Person_Detections": detection_counts["person"],
                         "Vehicle_Detections": detection_counts["vehicle"],
+                        "Resolution": (
+                            "High"
+                            if "HighRes" in video_path
+                            else "Low"
+                            if "LowRes" in video_path
+                            else "Unknown"
+                        ),
                     }
                 )
 
-        # Explicitly unload
-        print(f"Unloading {model_wrapper.name}...")
         model_wrapper.unload()
-        torch.cuda.empty_cache()  # No-op on CPU but safety habit
         gc.collect()
-        time.sleep(2)
 
     # 4. Save Results
     if all_results:
         df = pd.DataFrame(all_results)
-
-        # Categorize by resolution
-        df["Resolution"] = df["Video"].apply(
-            lambda x: (
-                "High" if "HighRes" in x else "Low" if "LowRes" in x else "Unknown"
-            )
-        )
-
         df.to_csv(OUTPUT_CSV, index=False)
         print(f"\nResults saved to {OUTPUT_CSV}")
 
-        # Generate Summaries
         with open(OUTPUT_SUMMARY, "w") as f:
             f.write("Multi-Model Benchmark Summary\n")
-            f.write("=============================\n\n")
+            f.write("=============================\n")
+            f.write(
+                f"Threads: {args.threads} | Input Size: {args.input_size} | Conf: {args.confidence}\n\n"
+            )
 
-            f.write("1. HIGH RESOLUTION SUMMARY (Model-wise Averages)\n")
-            f.write("----------------------------------------------\n")
-            high_df = df[df["Resolution"] == "High"]
-            if not high_df.empty:
-                high_summary = high_df.groupby("Model").mean(numeric_only=True)
-                f.write(high_summary.to_string())
-            else:
-                f.write("No HighRes videos processed.")
-            f.write("\n\n")
+            for res in ["High", "Low"]:
+                f.write(f"{res.upper()} RESOLUTION SUMMARY\n")
+                f.write("-" * 25 + "\n")
+                res_df = df[df["Resolution"] == res]
+                if not res_df.empty:
+                    f.write(res_df.groupby("Model").mean(numeric_only=True).to_string())
+                else:
+                    f.write(f"No {res}Res videos processed.")
+                f.write("\n\n")
 
-            f.write("2. LOW RESOLUTION SUMMARY (Model-wise Averages)\n")
-            f.write("---------------------------------------------\n")
-            low_df = df[df["Resolution"] == "Low"]
-            if not low_df.empty:
-                low_summary = low_df.groupby("Model").mean(numeric_only=True)
-                f.write(low_summary.to_string())
-            else:
-                f.write("No LowRes videos processed.")
-            f.write("\n\n")
-
-            f.write("3. OVERALL SUMMARY (Model-wise Averages)\n")
-            f.write("--------------------------------------\n")
-            overall_summary = df.groupby("Model").mean(numeric_only=True)
-            f.write(overall_summary.to_string())
-            f.write("\n\n")
-
-            f.write("4. FULL RAW RESULTS\n")
-            f.write("------------------\n")
-            f.write(df.to_string(index=False))
+            f.write("OVERALL SUMMARY\n")
+            f.write("-" * 15 + "\n")
+            f.write(df.groupby("Model").mean(numeric_only=True).to_string())
 
         print(f"Summary saved to {OUTPUT_SUMMARY}")
-    else:
-        print("No results generated.")
-
-
-def create_dummy_video(filename, width=640, height=480, fps=30, duration=5):
-    print(f"Generating dummy video {filename}...")
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    out = cv2.VideoWriter(filename, fourcc, fps, (width, height))
-    for _ in range(fps * duration):
-        frame = np.zeros((height, width, 3), dtype=np.uint8)
-        out.write(frame)
-    out.release()
 
 
 if __name__ == "__main__":
-    import numpy as np  # Ensure numpy is available for dummy video
+    parser = argparse.ArgumentParser(description="Object Detection Benchmark Suite")
+    parser.add_argument(
+        "--models",
+        type=str,
+        default="all",
+        help="Comma-separated models (e.g. YOLOv8-Nano,YOLOv8-Small).",
+    )
+    parser.add_argument(
+        "--threads", type=int, default=DEFAULT_THREADS, help="Torch threads."
+    )
+    parser.add_argument(
+        "--input-size", type=int, default=640, help="Input resolution (imgsz)."
+    )
+    parser.add_argument("--warmup", type=int, default=DEFAULT_WARMUP, help="Warmup.")
+    parser.add_argument(
+        "--max-frames", type=int, default=DEFAULT_MAX_FRAMES, help="Max frames."
+    )
+    parser.add_argument(
+        "--confidence", type=float, default=DEFAULT_CONF, help="Conf threshold."
+    )
 
-    run_benchmark()
+    args = parser.parse_args()
+    run_benchmark(args)

@@ -350,6 +350,18 @@ def run_benchmark(args):
         print(f"Summary saved to {OUTPUT_SUMMARY}")
 
 
+def create_dummy_video(filename, width=640, height=480, fps=30, duration=5):
+    print(f"Generating dummy video {filename}...")
+    import numpy as np
+
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    out = cv2.VideoWriter(filename, fourcc, fps, (width, height))
+    for _ in range(fps * duration):
+        frame = np.zeros((height, width, 3), dtype=np.uint8)
+        out.write(frame)
+    out.release()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Object Detection Benchmark Suite")
     parser.add_argument(

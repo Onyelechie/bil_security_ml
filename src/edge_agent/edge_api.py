@@ -53,6 +53,11 @@ def create_app(cfg: EdgeSettings) -> FastAPI:
     description="Edge-side health endpoints for install/debug and office connectivity checks.",
     )
 
+    @app.get("/")
+    def root():
+        return {"status": "edge agent running"}
+
+
     # Store start time for uptime calculation
     started_monotonic = time.monotonic()
 

@@ -90,6 +90,12 @@ Edge periodically:
 - POST heartbeat (health + versions)
 - GET update checks (model/config)
 
+### 5.5 Input: Edge health/heartbeat (server/office -> edge)
+Edge exposes a small HTTP API for install/debug and office validation:
+- GET /health: confirms the edge agent process is running
+- GET /heartbeat: returns edge identity + basic status snapshot + uptime
+This is separate from the central server heartbeat endpoint (edge -> server).
+
 ---
 
 ## 6. Project Structure (Area B)
@@ -107,19 +113,24 @@ Edge Agent lives in `src/edge_agent/` (src-layout like the server).
 
 ---
 
-## 7. How to run (PR1)
+## 7. How to run (PR1/PR2)
 ```bash
 # Ensure PYTHONPATH includes src/
 # PowerShell:
 $env:PYTHONPATH = "$PWD\src"
 
+# PR1
 python -m edge_agent.main --print-config
+
+# PR2 (Edge HTTP API)
+python -m edge_agent.main --http-serve
 ````
 
 ---
 
 ## 8. PR Roadmap (next)
 
-* PR2: TCP listener + XML parsing + tests
-* PR3: RTSP reader interface + ring buffer skeleton
-* PR4+: scheduler/backpressure + decision rules + alert sending + offline mode
+* PR2: Edge HTTP API (/health, /heartbeat) + tests
+* PR3: TCP listener + XML parsing + tests
+* PR4: RTSP reader interface + ring buffer skeleton
+* PR5+: scheduler/backpressure + decision rules + alert sending + offline mode

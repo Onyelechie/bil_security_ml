@@ -80,6 +80,8 @@ camera*/
 
 # Benchmark Specific exclusions (for clarity)
 benchmark/cctv_samples/*.mp4
+benchmark/benchmark_results.csv
+benchmark/benchmark_summary.txt
 
 # Others
 docs/self_assessment_ebere.tex

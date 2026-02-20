@@ -43,8 +43,9 @@ def test_benchmark_smoke(tmp_path, monkeypatch):
     monkeypatch.setattr("glob.glob", mock_glob)
     monkeypatch.setattr("benchmark.benchmark_suite.VIDEO_EXTENSIONS", ["*.mp4"])
 
+    # Use args[0] to capture the actual model name (e.g., YOLOv8-Nano)
     monkeypatch.setattr(
-        "benchmark.benchmark_suite.YOLOWrapper", lambda *args: MockWrapper("MockYOLO")
+        "benchmark.benchmark_suite.YOLOWrapper", lambda *args: MockWrapper(args[0])
     )
     monkeypatch.setattr(
         "benchmark.benchmark_suite.EfficientDetWrapper",
@@ -63,7 +64,44 @@ def test_benchmark_smoke(tmp_path, monkeypatch):
     assert os.path.exists(output_sum), "Summary text file was not created"
 
     df = pd.read_csv(output_csv)
-    assert not df.empty
-    assert "Person_Detections" in df.columns
-    assert "Vehicle_Detections" in df.columns
-    assert df.iloc[0]["Person_Detections"] > 0
+    assert not df.empty, "CSV output is empty"
+
+    # Check specific columns and data integrity
+    expected_cols = ["Model", "Avg_FPS", "Avg_Latency_ms","Peak_RAM_MB", "Avg_CPU_Util",  "Person_Detections", "Vehicle_Detections"]
+    for col in expected_cols:
+        assert col in df.columns, f"Missing column: {col}"
+
+    # We expect 5 rows (3 YOLO variants + EffDet + SSD)
+    assert len(df) == 5, f"Expected 5 rows, got {len(df)}"
+    assert (df["Person_Detections"] > 0).all(), "Expected person detections in all rows"
+
+    # Check summary file content
+    with open(output_sum, "r") as f:
+        content = f.read()
+        # Verify specific YOLO versions are present
+        assert "YOLOv8-Nano" in content
+        assert "YOLOv8-Small" in content
+        assert "YOLOv5-Nano" in content
+        assert "MockEffDet" in content
+        assert "MockSSD" in content
+
+
+def test_benchmark_no_videos(monkeypatch, capsys):
+    """
+    Ensure the benchmark handles the case where no videos are found gracefully.
+    """
+    class MockArgs:
+        models = "all"
+        threads = 1
+        input_size = 640
+        warmup = 0
+        max_frames = 0
+        confidence = 0.25
+
+    # Mock glob to return empty list (no videos found)
+    monkeypatch.setattr("glob.glob", lambda p: [])
+
+    run_benchmark(MockArgs())
+
+    captured = capsys.readouterr()
+    assert "No videos found" in captured.out

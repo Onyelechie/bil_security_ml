@@ -1,12 +1,15 @@
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Optional
 from datetime import datetime
+from typing import List, Optional
+
+from pydantic import BaseModel, Field, ConfigDict
+
 
 class Detection(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     class_: str = Field(..., alias="class")
     confidence: float
+
 
 class AlertCreate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -16,6 +19,7 @@ class AlertCreate(BaseModel):
     timestamp: datetime
     detections: List[Detection]
     image_path: Optional[str] = None
+
 
 class AlertOut(AlertCreate):
     model_config = ConfigDict(from_attributes=True)
@@ -29,6 +33,7 @@ class HeartbeatIn(BaseModel):
     site_name: str
     status: str
     timestamp: datetime
+
 
 class HeartbeatOut(BaseModel):
     edge_pc_id: str

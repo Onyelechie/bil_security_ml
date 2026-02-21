@@ -1,6 +1,6 @@
-import pytest
 from fastapi.testclient import TestClient
 from datetime import datetime, timezone
+
 from server.main import app
 from server.db import init_db
 
@@ -9,6 +9,7 @@ init_db()
 
 client = TestClient(app)
 
+
 def test_receive_alert():
     payload = {
         "site_id": "site_001",
@@ -16,9 +17,9 @@ def test_receive_alert():
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "detections": [
             {"class": "person", "confidence": 0.95},
-            {"class": "vehicle", "confidence": 0.88}
+            {"class": "vehicle", "confidence": 0.88},
         ],
-        "image_path": None
+        "image_path": None,
     }
     response = client.post("/api/alerts", json=payload)
     assert response.status_code == 201
@@ -29,6 +30,7 @@ def test_receive_alert():
     assert data["detections"][1]["class"] == "vehicle"
     assert "id" in data  # Check that ID was generated
 
+
 def test_list_alerts():
     # First create an alert
     payload = {
@@ -36,7 +38,7 @@ def test_list_alerts():
         "camera_id": "cam_02",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "detections": [{"class": "person", "confidence": 0.9}],
-        "image_path": "/path/to/image.jpg"
+        "image_path": "/path/to/image.jpg",
     }
     client.post("/api/alerts", json=payload)
 
@@ -46,6 +48,7 @@ def test_list_alerts():
     data = response.json()
     assert "alerts" in data
     assert len(data["alerts"]) >= 1  # At least one alert should exist
+
 
 def test_health_check():
     response = client.get("/")

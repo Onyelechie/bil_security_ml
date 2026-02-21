@@ -1,5 +1,7 @@
 from sqlalchemy import Column, String, DateTime
+
 from .base import Base
+
 
 class ModelVersion(Base):
     __tablename__ = "model_versions"

@@ -1,5 +1,7 @@
 from sqlalchemy import Column, String, DateTime
+
 from .base import Base
+
 
 class EdgePC(Base):
     __tablename__ = "edge_pcs"

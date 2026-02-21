@@ -39,19 +39,25 @@ coverage.xml
 # OS
 .DS_Store
 Thumbs.db
-docs/self_assessment_ebere.tex
+
+# ML Models / Weights
 *.pt
+*.pth
+*.onnx
+*.weights
+*.tflite
+*.pb
 *.h5
 *.pkl
 *.joblib
-*.onnx
-*.tflite
-*.weights
 *.cfg
 *.model
 *.bin
 *.xml
-# Specific directories for data files
+benchmark/*.pt
+benchmark/*.pth
+
+# Data and Media Files
 data/
 storage/
 models/
@@ -71,3 +77,11 @@ camera*/
 *.bmp
 *.tiff
 *.raw
+
+# Benchmark Specific exclusions (for clarity)
+benchmark/cctv_samples/*.mp4
+benchmark/benchmark_results.csv
+benchmark/benchmark_summary.txt
+
+# Others
+docs/self_assessment_ebere.tex

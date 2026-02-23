@@ -50,6 +50,34 @@ The project follows a structured approach:
 
 ### Development Setup
 
+### Configuration (.env)
+
+Before running the server or migrations, copy the example environment file and update values for your environment:
+
+```powershell
+copy .env.example .env
+# On Unix/macOS: cp .env.example .env
+```
+
+Important variables (see `.env.example`): `DATABASE_URL`, `HOST`, `PORT`, `DEBUG`, `CORS_ORIGINS` (comma-separated), `SECRET_KEY`.
+
+
+### Database Migrations
+
+This project uses Alembic for database schema migrations. If you change any models, you must generate and apply a migration:
+
+1. **Generate migration script:**
+  ```bash
+  .venv\Scripts\activate  # On Windows
+  python -m alembic revision --autogenerate -m "Describe your change"
+  ```
+2. **Apply migration:**
+  ```bash
+  python -m alembic upgrade head
+  ```
+
+This ensures your database schema matches your models. See the `alembic/` folder for migration scripts.
+
 #### Prerequisites
 - Python 3.9+
 - Virtual environment (recommended)

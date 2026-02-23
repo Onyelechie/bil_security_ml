@@ -311,8 +311,12 @@ pip install fastapi uvicorn sqlalchemy pydantic python-multipart aiofiles
 pip freeze > requirements.txt
 
 # Run the server
-uvicorn app.main:app --reload --port 8000
-
+# You can set `HOST` and `PORT` via environment variables. On Windows PowerShell:
+# ```powershell
+# $env:HOST = '127.0.0.1'
+# $env:PORT = '8000'
+# python -m uvicorn app.main:app --reload --host $env:HOST --port $env:PORT
+# ```
 # API docs automatically available at:
 # http://localhost:8000/docs
 ```
@@ -363,10 +367,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./bil_security.db"
+import os
+
+# Read database URL from `DATABASE_URL` env var with a sensible default for local dev
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./bil_security.db")
 
 engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
+    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

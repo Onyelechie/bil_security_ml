@@ -1,0 +1,20 @@
+## Alembic Migrations Directory
+
+This folder contains database migration scripts managed by [Alembic](https://alembic.sqlalchemy.org/).
+
+### Purpose
+Alembic is used to track and apply changes to the database schema over time. Each migration script in `versions/` represents a change (or set of changes) to the schema.
+
+### Common Commands
+- **Create a new migration:**
+	```bash
+	python -m alembic revision --autogenerate -m "<description>"
+	```
+- **Apply migrations:**
+	```bash
+	python -m alembic upgrade head
+	```
+
+### Notes
+- Migration scripts are auto-generated but should be reviewed and edited for accuracy.
+- See the project `README.md` for full setup and workflow details.

@@ -26,9 +26,7 @@ if db_url:
 
 # --- Alembic autogenerate model import ---
 # Ensure `src/` is on the import path so Alembic can import models for autogenerate
-sys.path.append(
-    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
-)
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 from server.models.base import Base  # noqa: E402
 from server.models import alert, edge_pc  # noqa: E402,F401
 

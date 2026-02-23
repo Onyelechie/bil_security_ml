@@ -27,8 +27,8 @@ import sqlalchemy as sa
 
 # Ensure `src` is importable (we modify path before importing app modules)
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
 
+sys.path.insert(0, str(ROOT / "src"))
 
 
 def read_mapping_csv(path: Path) -> Dict[Tuple[str, str], str]:
@@ -51,9 +51,7 @@ def read_mapping_csv(path: Path) -> Dict[Tuple[str, str], str]:
 
 
 def dry_run_report(conn: sa.engine.Connection) -> int:
-    res = conn.execute(
-        sa.text("SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = 'unknown'")
-    )
+    res = conn.execute(sa.text("SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = 'unknown'"))
     row = res.mappings().first()
     count = row["c"] if row else 0
     print(f"Alerts with edge_pc_id='unknown': {count}")
@@ -68,60 +66,44 @@ def apply_mappings(
     updated = 0
     for (site, camera), edge in mapping.items():
         # Count to report
-        res = conn.execute(
-            sa.text(
-                "SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = 'unknown' AND site_id = :site AND camera_id = :camera"
-            ),
-            {"site": site, "camera": camera},
+        select_sql = (
+            "SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = 'unknown' "
+            "AND site_id = :site AND camera_id = :camera"
         )
+        res = conn.execute(sa.text(select_sql), {"site": site, "camera": camera})
         cnt = res.mappings().first()["c"]
         if cnt == 0:
             print(f"No matching unknown alerts for site={site} camera={camera}")
             continue
-        print(
-            f"Mapping {cnt} alerts for site={site} camera={camera} -> edge_pc_id={edge}"
-        )
+        print(f"Mapping {cnt} alerts for site={site} camera={camera} -> edge_pc_id={edge}")
         if not dry_run:
-            conn.execute(
-                sa.text(
-                    "UPDATE alerts SET edge_pc_id = :edge WHERE edge_pc_id = 'unknown' AND site_id = :site AND camera_id = :camera"
-                ),
-                {"edge": edge, "site": site, "camera": camera},
+            update_sql = (
+                "UPDATE alerts SET edge_pc_id = :edge WHERE edge_pc_id = 'unknown' "
+                "AND site_id = :site AND camera_id = :camera"
             )
+            conn.execute(sa.text(update_sql), {"edge": edge, "site": site, "camera": camera})
         updated += cnt
     return updated
 
 
-def assign_default(
-    conn: sa.engine.Connection, default_edge: str, dry_run: bool = True
-) -> int:
-    res = conn.execute(
-        sa.text("SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = 'unknown'")
-    )
+def assign_default(conn: sa.engine.Connection, default_edge: str, dry_run: bool = True) -> int:
+    res = conn.execute(sa.text("SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = 'unknown'"))
     cnt = res.mappings().first()["c"]
     print(f"Assigning default edge_pc_id={default_edge} to {cnt} alerts")
     if cnt and not dry_run:
-        conn.execute(
-            sa.text(
-                "UPDATE alerts SET edge_pc_id = :edge WHERE edge_pc_id = 'unknown'"
-            ),
-            {"edge": default_edge},
-        )
+        update_sql = "UPDATE alerts SET edge_pc_id = :edge " "WHERE edge_pc_id = 'unknown'"
+        conn.execute(sa.text(update_sql), {"edge": default_edge})
     return cnt
 
 
 def cleanup_sentinel(conn: sa.engine.Connection, dry_run: bool = True) -> bool:
     # Delete sentinel if not referenced
-    res = conn.execute(
-        sa.text("SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = 'unknown'")
-    )
+    res = conn.execute(sa.text("SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = 'unknown'"))
     cnt = res.mappings().first()["c"]
     if cnt:
         print(f"Cannot remove sentinel: {cnt} alerts still reference 'unknown'")
         return False
-    print(
-        "No alerts reference 'unknown'. Removing sentinel row from edge_pcs (if present)"
-    )
+    print("No alerts reference 'unknown'. Removing sentinel row from edge_pcs (if present)")
     if not dry_run:
         conn.execute(sa.text("DELETE FROM edge_pcs WHERE edge_pc_id = 'unknown'"))
     return True
@@ -129,9 +111,7 @@ def cleanup_sentinel(conn: sa.engine.Connection, dry_run: bool = True) -> bool:
 
 def main() -> None:
     p = argparse.ArgumentParser()
-    p.add_argument(
-        "--mapping", type=Path, help="CSV file mapping (site_id,camera_id,edge_pc_id)"
-    )
+    p.add_argument("--mapping", type=Path, help="CSV file mapping (site_id,camera_id,edge_pc_id)")
     p.add_argument(
         "--assign-default",
         type=str,

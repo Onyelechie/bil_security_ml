@@ -22,9 +22,12 @@ async def lifespan(app: FastAPI):
     # Security guard: warn if running in non-debug with default secret
     try:
         from .config import settings
-        if not settings.debug and settings.secret_key == "development-secret-key-change-in-production":
+
+        default_secret = "development-secret-key-change-in-production"
+        if not settings.debug and settings.secret_key == default_secret:
             logger.warning(
-                "Default SECRET_KEY is in use while DEBUG is False. This is insecure — set SECRET_KEY in .env before production."
+                "Default SECRET_KEY is in use while DEBUG is False. This is insecure - "
+                "set SECRET_KEY in .env before production."
             )
     except Exception:
         # If config can't be imported for some reason, continue and let other errors surface

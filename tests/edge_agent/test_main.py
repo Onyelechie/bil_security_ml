@@ -14,16 +14,14 @@ def test_run_print_config_does_not_crash(capfd):
     assert code == 0
 
     out, _ = capfd.readouterr()
-    assert "site_id" in out
+    assert "edge_pc_id" in out
 
 
 def test_run_http_serve_calls_uvicorn(monkeypatch):
     called = {}
 
-    def fake_run(app, host, port, log_level):
-        called["host"] = host
-        called["port"] = port
-        called["log_level"] = log_level
+    def fake_run(app, **kwargs):
+        called.update(kwargs)
         return None
 
     monkeypatch.setattr(uvicorn, "run", fake_run)
@@ -40,7 +38,10 @@ def test_run_http_serve_calls_uvicorn(monkeypatch):
 def test_run_returns_1_on_unexpected_exception(monkeypatch):
     import edge_agent.main as m
 
-    monkeypatch.setattr(m, "build_parser", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+    def mock_build_parser():
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(m, "build_parser", mock_build_parser)
     code = m.run(argv=[])
     assert code == 1
 
@@ -60,4 +61,3 @@ def test_module_entrypoint_exits_cleanly(monkeypatch):
         runpy.run_module("edge_agent.main", run_name="__main__")
 
     assert exc.value.code == 0
-

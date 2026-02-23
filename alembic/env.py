@@ -1,4 +1,6 @@
 from logging.config import fileConfig
+import os
+import sys
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
@@ -9,8 +11,7 @@ from alembic import context
 # access to the values within the .ini file in use.
 config = context.config
 
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
+# Interpret the config file for Python logging. This line sets up loggers.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
@@ -18,18 +19,19 @@ if config.config_file_name is not None:
 # If `DATABASE_URL` is set in the environment, use that instead of the value
 # written in `alembic.ini` (useful so migrations run against the same DB as
 # the application when DATABASE_URL is configured via .env or env vars).
-import os
 db_url = os.getenv("DATABASE_URL")
 if db_url:
     config.set_main_option("sqlalchemy.url", db_url)
 
 
 # --- Alembic autogenerate model import ---
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
-from server.models.base import Base
-from server.models import alert, edge_pc
+# Ensure `src/` is on the import path so Alembic can import models for autogenerate
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
+)
+from server.models.base import Base  # noqa: E402
+from server.models import alert, edge_pc  # noqa: E402,F401
+
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
@@ -76,9 +78,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()

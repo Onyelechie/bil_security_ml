@@ -1,4 +1,4 @@
-"""Backfill and cleanup script for alerts with `edge_pc_id='unknown'`.
+"""Backfill and cleanup script for alerts with `edge_pc_id='001'`.
 
 Usage examples:
 
@@ -51,10 +51,10 @@ def read_mapping_csv(path: Path) -> Dict[Tuple[str, str], str]:
 
 
 def dry_run_report(conn: sa.engine.Connection) -> int:
-    res = conn.execute(sa.text("SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = 'unknown'"))
+    res = conn.execute(sa.text("SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = '001'"))
     row = res.mappings().first()
     count = row["c"] if row else 0
-    print(f"Alerts with edge_pc_id='unknown': {count}")
+    print(f"Alerts with edge_pc_id='001': {count}")
     return count
 
 
@@ -67,7 +67,7 @@ def apply_mappings(
     for (site, camera), edge in mapping.items():
         # Count to report
         select_sql = (
-            "SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = 'unknown' "
+            "SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = '001' "
             "AND site_id = :site AND camera_id = :camera"
         )
         res = conn.execute(sa.text(select_sql), {"site": site, "camera": camera})
@@ -78,7 +78,7 @@ def apply_mappings(
         print(f"Mapping {cnt} alerts for site={site} camera={camera} -> edge_pc_id={edge}")
         if not dry_run:
             update_sql = (
-                "UPDATE alerts SET edge_pc_id = :edge WHERE edge_pc_id = 'unknown' "
+                "UPDATE alerts SET edge_pc_id = :edge WHERE edge_pc_id = '001' "
                 "AND site_id = :site AND camera_id = :camera"
             )
             conn.execute(sa.text(update_sql), {"edge": edge, "site": site, "camera": camera})
@@ -87,25 +87,25 @@ def apply_mappings(
 
 
 def assign_default(conn: sa.engine.Connection, default_edge: str, dry_run: bool = True) -> int:
-    res = conn.execute(sa.text("SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = 'unknown'"))
+    res = conn.execute(sa.text("SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = '001'"))
     cnt = res.mappings().first()["c"]
     print(f"Assigning default edge_pc_id={default_edge} to {cnt} alerts")
     if cnt and not dry_run:
-        update_sql = "UPDATE alerts SET edge_pc_id = :edge " "WHERE edge_pc_id = 'unknown'"
+        update_sql = "UPDATE alerts SET edge_pc_id = :edge " "WHERE edge_pc_id = '001'"
         conn.execute(sa.text(update_sql), {"edge": default_edge})
     return cnt
 
 
 def cleanup_sentinel(conn: sa.engine.Connection, dry_run: bool = True) -> bool:
     # Delete sentinel if not referenced
-    res = conn.execute(sa.text("SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = 'unknown'"))
+    res = conn.execute(sa.text("SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = '001'"))
     cnt = res.mappings().first()["c"]
     if cnt:
-        print(f"Cannot remove sentinel: {cnt} alerts still reference 'unknown'")
+        print(f"Cannot remove sentinel: {cnt} alerts still reference '001'")
         return False
-    print("No alerts reference 'unknown'. Removing sentinel row from edge_pcs (if present)")
+    print("No alerts reference '001'. Removing sentinel row from edge_pcs (if present)")
     if not dry_run:
-        conn.execute(sa.text("DELETE FROM edge_pcs WHERE edge_pc_id = 'unknown'"))
+        conn.execute(sa.text("DELETE FROM edge_pcs WHERE edge_pc_id = '001'"))
     return True
 
 
@@ -120,7 +120,7 @@ def main() -> None:
     p.add_argument(
         "--cleanup-sentinel",
         action="store_true",
-        help="Remove sentinel 'unknown' from edge_pcs if unreferenced",
+        help="Remove sentinel '001' from edge_pcs if unreferenced",
     )
     p.add_argument(
         "--dry-run",

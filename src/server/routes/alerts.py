@@ -31,8 +31,8 @@ def receive_alert(alert: AlertCreate, db: Session = Depends(get_db)):
     """
     # Accept missing `edge_pc_id` from older agents and fall back to sentinel.
     # This keeps the API backward-compatible while the DB enforces NOT NULL
-    # (alerts are backfilled to 'unknown' by migrations when necessary).
-    edge_id = getattr(alert, "edge_pc_id", None) or "unknown"
+    # (alerts are backfilled to '001' by migrations when necessary).
+    edge_id = getattr(alert, "edge_pc_id", None) or "001"
     try:
         db_alert = Alert(
             site_id=alert.site_id,

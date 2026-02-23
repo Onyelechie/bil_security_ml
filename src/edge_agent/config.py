@@ -34,6 +34,16 @@ class EdgeSettings(BaseSettings):
     # --- Logging ---
     log_level: str = "INFO"
 
+    # --- Edge HTTP API (Office/Central -> Edge) ---
+    # Small local API so someone can confirm the edge agent is alive.
+    edge_http_host: str = "127.0.0.1"
+    edge_http_port: int = 8128
+
+    # Identity fields that match what Area C uses
+    edge_pc_id: str = "edge_demo"
+    site_name: str = "Demo Site"
+
+
 
 # Convenience global settings object.
 # This lets other modules do: from edge_agent.config import settings

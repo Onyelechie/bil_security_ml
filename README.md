@@ -66,9 +66,16 @@ python -m venv .venv
 .venv\Scripts\activate
 # On Unix/Mac:
 # source .venv/bin/activate
-
+```
 # Install dependencies
+**Runtime (to run the system):**
+```bash
 pip install -r requirements.txt
+```
+
+**Dev/Test (to run tests + lint/type checks):**
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
 ```
 
 
@@ -172,6 +179,31 @@ python -m edge_agent.main --print-config
 
 See `docs/area_b_edge_agent_context.md` for architecture + demo environment details.
 
+### Edge Agent HTTP API (PR2)
+
+The edge agent can optionally run a small HTTP API so office staff (or the central server later) can confirm the edge PC is alive.
+
+#### Run the Edge HTTP API
+```bash
+# Set Python path for src/ layout
+# On Windows PowerShell:
+$env:PYTHONPATH = "$PWD\src"
+# On Unix/Mac:
+# export PYTHONPATH="$PWD/src"
+
+python -m edge_agent.main --http-serve
+````
+
+#### Endpoints
+
+* **GET** `http://localhost:8128/health`
+  Returns a simple “ok” response if the edge agent is running.
+* **GET** `http://localhost:8128/heartbeat`
+  Returns edge identity (`edge_pc_id`, `site_name`), a basic status snapshot, and uptime.
+
+> Note: This is the Edge-side heartbeat (server/office → edge).
+> The Central Server heartbeat endpoint is separate (`POST /api/heartbeat`, edge → server).
+
 
 ## Running Tests
 ```bash
@@ -186,6 +218,9 @@ python -m pytest
 
 # Run only heartbeat tests
 python -m pytest tests/server/test_heartbeat.py -v
+
+# Run only edge API tests
+python -m pytest tests/edge_agent/test_edge_api.py -v
 ```
 
 ### Technical Notes

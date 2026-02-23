@@ -1,31 +1,30 @@
 name: Lint
 
 on:
-    pull_request:
-        branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
-    lint:
-        name: Lint (flake8)
-        runs-on: ubuntu-latest
+  lint:
+    name: Lint (flake8)
+    runs-on: ubuntu-latest
 
-        steps:
-            - uses: actions/checkout@v4
+    steps:
+      - uses: actions/checkout@v4
 
-            - name: Set up Python
-              uses: actions/setup-python@v4
-              with:
-                  python-version: "3.11"
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: "pip"
 
-            - name: Install lint dependencies
-              run: |
-                  python -m pip install --upgrade pip
-                  pip install flake8
+      - name: Install lint dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
 
-            - name: Run flake8
-              run: |
-                  flake8 src/ tests/ \
-                    --max-line-length=120 \
-                    --exclude=__pycache__,.venv,.git \
-                    --statistics \
-                    --count
+      - name: Run flake8
+        run: |
+          flake8 src/ tests/ \
+            --statistics \
+            --count

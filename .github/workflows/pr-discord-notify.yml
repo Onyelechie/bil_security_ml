@@ -1,4 +1,4 @@
-name: PR Discord Notifications
+﻿name: PR Discord Notifications
 
 on:
   pull_request:
@@ -38,7 +38,7 @@ PY
 
           # --- PR CREATED notifications (go to created channel) ---
           if [ "$ACTION" = "opened" ] || [ "$ACTION" = "reopened" ] || [ "$ACTION" = "ready_for_review" ]; then
-            MSG="🚀 **PR Created** (#${PR_NUMBER})\n**${PR_TITLE}**\n👤 ${PR_AUTHOR}\n🌿 ${PR_BRANCH} → ${PR_BASE}\n🔗 ${PR_URL}"
+            MSG=" **PR Created** (#${PR_NUMBER})\n**${PR_TITLE}**\n ${PR_AUTHOR}\n ${PR_BRANCH}  ${PR_BASE}\n ${PR_URL}"
             PAYLOAD=$(printf '%s' "$MSG" | build_payload)
             curl -H "Content-Type: application/json" -X POST --data "$PAYLOAD" "$DISCORD_WEBHOOK_PR_CREATED"
             exit 0
@@ -46,7 +46,7 @@ PY
 
           # --- PR MERGED notifications (go to merged channel) ---
           if [ "$ACTION" = "closed" ] && [ "$IS_MERGED" = "true" ]; then
-            MSG="✅ **PR Merged** (#${PR_NUMBER})\n**${PR_TITLE}**\n👤 Author: ${PR_AUTHOR}\n🧑‍💻 Merged by: ${PR_MERGER}\n🌿 ${PR_BRANCH} → ${PR_BASE}\n🔗 ${PR_URL}"
+            MSG=" **PR Merged** (#${PR_NUMBER})\n**${PR_TITLE}**\n Author: ${PR_AUTHOR}\n Merged by: ${PR_MERGER}\n ${PR_BRANCH}  ${PR_BASE}\n ${PR_URL}"
             PAYLOAD=$(printf '%s' "$MSG" | build_payload)
             curl -H "Content-Type: application/json" -X POST --data "$PAYLOAD" "$DISCORD_WEBHOOK_PR_MERGED"
             exit 0

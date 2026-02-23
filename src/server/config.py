@@ -20,7 +20,9 @@ class Settings(BaseSettings):
     cors_origins: List[str] = []
 
     # Security
-    secret_key: str = os.getenv("SECRET_KEY", "development-secret-key-change-in-production")
+    # Read SECRET_KEY from environment; do not hardcode a production secret here.
+    # For development, leave empty and populate `.env` or CI secrets as appropriate.
+    secret_key: str = os.getenv("SECRET_KEY", "")
 
     def __init__(self, **values):
         super().__init__(**values)

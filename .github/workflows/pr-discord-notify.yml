@@ -13,6 +13,7 @@ jobs:
           DISCORD_WEBHOOK_PR_CREATED: ${{ secrets.DISCORD_WEBHOOK_PR_CREATED }}
           DISCORD_WEBHOOK_PR_MERGED: ${{ secrets.DISCORD_WEBHOOK_PR_MERGED }}
         run: |
+          set -euo pipefail
           ACTION="${{ github.event.action }}"
           IS_MERGED="${{ github.event.pull_request.merged }}"
 
@@ -24,21 +25,30 @@ jobs:
           PR_BRANCH="${{ github.event.pull_request.head.ref }}"
           PR_BASE="${{ github.event.pull_request.base.ref }}"
 
+          echo "PR event: ACTION=$ACTION PR=$PR_NUMBER branch=$PR_BRANCH"
+
+          # Helper: build JSON payload safely via Python to avoid quoting pitfalls
+          build_payload() {
+            python - <<'PY'
+import json,sys
+content = sys.stdin.read()
+print(json.dumps({"content": content}))
+PY
+          }
+
           # --- PR CREATED notifications (go to created channel) ---
           if [ "$ACTION" = "opened" ] || [ "$ACTION" = "reopened" ] || [ "$ACTION" = "ready_for_review" ]; then
             MSG="🚀 **PR Created** (#${PR_NUMBER})\n**${PR_TITLE}**\n👤 ${PR_AUTHOR}\n🌿 ${PR_BRANCH} → ${PR_BASE}\n🔗 ${PR_URL}"
-            curl -H "Content-Type: application/json" -X POST \
-              -d "{\"content\":\"$MSG\"}" \
-              "$DISCORD_WEBHOOK_PR_CREATED"
+            PAYLOAD=$(printf '%s' "$MSG" | build_payload)
+            curl -H "Content-Type: application/json" -X POST --data "$PAYLOAD" "$DISCORD_WEBHOOK_PR_CREATED"
             exit 0
           fi
 
           # --- PR MERGED notifications (go to merged channel) ---
           if [ "$ACTION" = "closed" ] && [ "$IS_MERGED" = "true" ]; then
             MSG="✅ **PR Merged** (#${PR_NUMBER})\n**${PR_TITLE}**\n👤 Author: ${PR_AUTHOR}\n🧑‍💻 Merged by: ${PR_MERGER}\n🌿 ${PR_BRANCH} → ${PR_BASE}\n🔗 ${PR_URL}"
-            curl -H "Content-Type: application/json" -X POST \
-              -d "{\"content\":\"$MSG\"}" \
-              "$DISCORD_WEBHOOK_PR_MERGED"
+            PAYLOAD=$(printf '%s' "$MSG" | build_payload)
+            curl -H "Content-Type: application/json" -X POST --data "$PAYLOAD" "$DISCORD_WEBHOOK_PR_MERGED"
             exit 0
           fi
 

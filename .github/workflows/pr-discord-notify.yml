@@ -35,7 +35,10 @@ jobs:
           if [ "$ACTION" = "opened" ] || [ "$ACTION" = "reopened" ] || [ "$ACTION" = "ready_for_review" ]; then
             MSG=" **PR Created** (#${PR_NUMBER})\n**${PR_TITLE}**\n ${PR_AUTHOR}\n ${PR_BRANCH}  ${PR_BASE}\n ${PR_URL}"
             PAYLOAD=$(printf '%s' "$MSG" | python scripts/build_payload.py)
-            curl -H "Content-Type: application/json" -X POST --data "$PAYLOAD" "$DISCORD_WEBHOOK_PR_CREATED"
+            echo "Payload: $PAYLOAD"
+            # Send and capture response and HTTP status
+            RESPONSE=$(curl -sS -H "Content-Type: application/json" -X POST --data "$PAYLOAD" "$DISCORD_WEBHOOK_PR_CREATED" -w "\nHTTP_STATUS:%{http_code}\n") || true
+            echo "Curl response:\n$RESPONSE"
             exit 0
           fi
 
@@ -43,7 +46,9 @@ jobs:
           if [ "$ACTION" = "closed" ] && [ "$IS_MERGED" = "true" ]; then
             MSG=" **PR Merged** (#${PR_NUMBER})\n**${PR_TITLE}**\n Author: ${PR_AUTHOR}\n Merged by: ${PR_MERGER}\n ${PR_BRANCH}  ${PR_BASE}\n ${PR_URL}"
             PAYLOAD=$(printf '%s' "$MSG" | python scripts/build_payload.py)
-            curl -H "Content-Type: application/json" -X POST --data "$PAYLOAD" "$DISCORD_WEBHOOK_PR_MERGED"
+            echo "Payload: $PAYLOAD"
+            RESPONSE=$(curl -sS -H "Content-Type: application/json" -X POST --data "$PAYLOAD" "$DISCORD_WEBHOOK_PR_MERGED" -w "\nHTTP_STATUS:%{http_code}\n") || true
+            echo "Curl response:\n$RESPONSE"
             exit 0
           fi
 

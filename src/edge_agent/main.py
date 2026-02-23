@@ -11,8 +11,16 @@ logger = logging.getLogger(__name__)
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="BIL Security ML - Edge Agent (Area B)")
-    parser.add_argument("--print-config", action="store_true", help="Print resolved configuration and exit.")
-    parser.add_argument("--http-serve", action="store_true", help="Start Edge HTTP API server (/health, /heartbeat).")
+    parser.add_argument(
+        "--print-config",
+        action="store_true",
+        help="Print resolved configuration and exit.",
+    )
+    parser.add_argument(
+        "--http-serve",
+        action="store_true",
+        help="Start Edge HTTP API server (/health, /heartbeat).",
+    )
     return parser
 
 
@@ -35,7 +43,10 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
         logger.info("Edge Agent starting")
         logger.info(
             "Resolved config: site_id=%s tcp=%s:%s server=%s",
-            cfg.site_id, cfg.tcp_host, cfg.tcp_port, cfg.server_base_url
+            cfg.site_id,
+            cfg.tcp_host,
+            cfg.tcp_port,
+            cfg.server_base_url,
         )
 
         if args.print_config:
@@ -48,7 +59,11 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
 
             app = create_app(cfg)
 
-            logger.info("Starting Edge HTTP API at http://%s:%s", cfg.edge_http_host, cfg.edge_http_port)
+            logger.info(
+                "Starting Edge HTTP API at http://%s:%s",
+                cfg.edge_http_host,
+                cfg.edge_http_port,
+            )
             uvicorn.run(
                 app,
                 host=cfg.edge_http_host,
@@ -64,9 +79,7 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
         # Log unexpected exceptions so the edge service is diagnosable.
         logger.exception("Edge Agent crashed due to an unexpected error")
 
-        debug_mode = bool(getattr(cfg, "debug", False)) or (
-            getattr(cfg, "log_level", "").upper() == "DEBUG"
-        )
+        debug_mode = bool(getattr(cfg, "debug", False)) or (getattr(cfg, "log_level", "").upper() == "DEBUG")
         if debug_mode:
             raise
 

@@ -44,7 +44,6 @@ class EdgeSettings(BaseSettings):
     site_name: str = "Demo Site"
 
 
-
 # Convenience global settings object.
 # This lets other modules do: from edge_agent.config import settings
 settings = EdgeSettings()

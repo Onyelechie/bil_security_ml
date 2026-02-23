@@ -61,6 +61,12 @@ copy .env.example .env
 
 Important variables (see `.env.example`): `DATABASE_URL`, `HOST`, `PORT`, `DEBUG`, `CORS_ORIGINS` (comma-separated), `SECRET_KEY`.
 
+Note: Edge agents SHOULD provide `edge_pc_id` when sending alerts. The server accepts
+alerts that omit `edge_pc_id` for backward compatibility: when missing the server will
+store a sentinel value `'unknown'` for provenance. If you prefer strict provenance,
+use the `scripts/backfill_unknown_edge_pc.py` helper to map historical alerts and the
+`remove_unknown_sentinel_20260223` migration to clean up the sentinel when safe.
+
 
 ### Database Migrations
 
@@ -77,6 +83,10 @@ This project uses Alembic for database schema migrations. If you change any mode
   ```
 
 This ensures your database schema matches your models. See the `alembic/` folder for migration scripts.
+
+CI note: The repository's CI workflow runs database migrations before running tests so
+the test environment mirrors migration state used locally. Ensure migrations are
+committed before opening a PR.
 
 ### Notes about databases and migrations
 

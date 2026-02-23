@@ -29,18 +29,17 @@ def receive_alert(alert: AlertCreate, db: Session = Depends(get_db)):
     Expected: JSON body with alert details (site_id, camera_id, timestamp, detections, etc.)
     Action: Stores the alert in the database.
     """
-        # Enforce presence of `edge_pc_id` at the API layer. Return 400 if missing.
-        if not getattr(alert, "edge_pc_id", None):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="edge_pc_id is required",
-            )
-
+    # Enforce presence of `edge_pc_id` at the API layer. Return 400 if missing.
+    if not getattr(alert, "edge_pc_id", None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="edge_pc_id is required",
+        )
     try:
         db_alert = Alert(
             site_id=alert.site_id,
             camera_id=alert.camera_id,
-                edge_pc_id=alert.edge_pc_id,
+            edge_pc_id=alert.edge_pc_id,
             timestamp=alert.timestamp,
             detections=[d.model_dump(by_alias=True) for d in alert.detections],
             image_path=alert.image_path,

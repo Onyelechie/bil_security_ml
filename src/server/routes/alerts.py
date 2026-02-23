@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
@@ -6,7 +5,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from ..db import SessionLocal
 from ..models.alert import Alert
 from ..schemas import AlertCreate, AlertOut
-
 
 # This router handles all endpoints related to alerts sent from edge PCs.
 # Prefix: /api/alerts
@@ -37,7 +35,7 @@ def receive_alert(alert: AlertCreate, db: Session = Depends(get_db)):
             camera_id=alert.camera_id,
             timestamp=alert.timestamp,
             detections=[d.model_dump(by_alias=True) for d in alert.detections],
-            image_path=alert.image_path
+            image_path=alert.image_path,
         )
         db.add(db_alert)
         db.commit()
@@ -47,7 +45,7 @@ def receive_alert(alert: AlertCreate, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to save alert to database"
+            detail="Failed to save alert to database",
         ) from e
 
 
@@ -65,5 +63,5 @@ def list_alerts(db: Session = Depends(get_db)):
     except SQLAlchemyError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve alerts from database"
+            detail="Failed to retrieve alerts from database",
         ) from e

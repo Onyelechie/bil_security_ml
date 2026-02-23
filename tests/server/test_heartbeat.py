@@ -1,18 +1,19 @@
-import pytest
 from fastapi.testclient import TestClient
 from datetime import datetime, timezone, timedelta
+
 from server.main import app
 from server.db import init_db
 
 init_db()
 client = TestClient(app)
 
+
 def test_heartbeat_create_and_update():
     payload = {
         "edge_pc_id": "edge-001",
         "site_name": "Site A",
         "status": "online",
-        "timestamp": datetime.now(timezone.utc).isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     # First heartbeat (create)
     response = client.post("/api/heartbeat", json=payload)
@@ -26,7 +27,9 @@ def test_heartbeat_create_and_update():
 
     # Update heartbeat (change status)
     payload["status"] = "idle"
-    payload["timestamp"] = (datetime.now(timezone.utc) + timedelta(seconds=10)).isoformat()
+    payload["timestamp"] = (
+        datetime.now(timezone.utc) + timedelta(seconds=10)
+    ).isoformat()
     response = client.post("/api/heartbeat", json=payload)
     assert response.status_code == 201
     data2 = response.json()
@@ -34,12 +37,13 @@ def test_heartbeat_create_and_update():
     assert data2["last_heartbeat"] > data["last_heartbeat"]
     assert data2["message"] == "Server received heartbeat"
 
+
 def test_heartbeat_missing_fields():
     payload = {
         "edge_pc_id": "edge-002",
         # Missing site_name
         "status": "online",
-        "timestamp": datetime.now(timezone.utc).isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     response = client.post("/api/heartbeat", json=payload)
     assert response.status_code == 422

@@ -27,19 +27,14 @@ jobs:
 
           echo "PR event: ACTION=$ACTION PR=$PR_NUMBER branch=$PR_BRANCH"
 
-          # Helper: build JSON payload safely via Python to avoid quoting pitfalls
-          build_payload() {
-            python - <<'PY'
-import json,sys
-content = sys.stdin.read()
-print(json.dumps({"content": content}))
-PY
-          }
+          # Helper: build JSON payload using a small script to avoid YAML heredoc issues
+          # We pipe the message into `python scripts/build_payload.py` which emits
+          # a JSON string safe for curl --data.
 
           # --- PR CREATED notifications (go to created channel) ---
           if [ "$ACTION" = "opened" ] || [ "$ACTION" = "reopened" ] || [ "$ACTION" = "ready_for_review" ]; then
             MSG=" **PR Created** (#${PR_NUMBER})\n**${PR_TITLE}**\n ${PR_AUTHOR}\n ${PR_BRANCH}  ${PR_BASE}\n ${PR_URL}"
-            PAYLOAD=$(printf '%s' "$MSG" | build_payload)
+            PAYLOAD=$(printf '%s' "$MSG" | python scripts/build_payload.py)
             curl -H "Content-Type: application/json" -X POST --data "$PAYLOAD" "$DISCORD_WEBHOOK_PR_CREATED"
             exit 0
           fi
@@ -47,7 +42,7 @@ PY
           # --- PR MERGED notifications (go to merged channel) ---
           if [ "$ACTION" = "closed" ] && [ "$IS_MERGED" = "true" ]; then
             MSG=" **PR Merged** (#${PR_NUMBER})\n**${PR_TITLE}**\n Author: ${PR_AUTHOR}\n Merged by: ${PR_MERGER}\n ${PR_BRANCH}  ${PR_BASE}\n ${PR_URL}"
-            PAYLOAD=$(printf '%s' "$MSG" | build_payload)
+            PAYLOAD=$(printf '%s' "$MSG" | python scripts/build_payload.py)
             curl -H "Content-Type: application/json" -X POST --data "$PAYLOAD" "$DISCORD_WEBHOOK_PR_MERGED"
             exit 0
           fi

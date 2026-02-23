@@ -63,8 +63,8 @@ Important variables (see `.env.example`): `DATABASE_URL`, `HOST`, `PORT`, `DEBUG
 
 Note: Edge agents SHOULD provide `edge_pc_id` when sending alerts. The server accepts
 alerts that omit `edge_pc_id` for backward compatibility: when missing the server will
-store a sentinel value `'001'` for provenance. If you prefer strict provenance,
-use the `scripts/backfill_unknown_edge_pc.py` helper to map historical alerts and the
+store a sentinel value `'edge-001'` for provenance. If you prefer strict provenance,
+use the `scripts/backfill_edge_001.py` helper to map historical alerts and the
 `remove_unknown_sentinel_20260223` migration to clean up the sentinel when safe.
 
 
@@ -207,7 +207,7 @@ Used by edge PCs to report their status. The server records the time it receives
 - **GET /api/alerts**: Lists alerts (filtering to be implemented).
 
 Note: `alerts.edge_pc_id` is now a required foreign key referencing `edge_pcs.edge_pc_id`.
-When upgrading older databases, a migration will insert a sentinel `edge_pcs` row with `edge_pc_id='001'`
+When upgrading older databases, a migration will insert a sentinel `edge_pcs` row with `edge_pc_id='edge-001'`
 and backfill existing alerts to reference this sentinel. If you prefer strict provenance, ensure
 edge agents include `EDGE_PC_ID` with alerts so the server can store the actual edge PC id.
 
@@ -218,13 +218,13 @@ Postgres UUID defaults:
   `uuid-ossp` extension or adapt the migration to your environment.
 
 Sentinel lifecycle recommendation:
-- The `001` sentinel is intended as a compatibility measure during upgrade. After rolling out updated
+- The `edge-001` sentinel is intended as a compatibility measure during upgrade. After rolling out updated
   edge agents, consider running a cleanup/backfill job to assign correct `edge_pc_id` values where possible
   and to remove or reclassify sentinel-marked alerts for analytics purposes.
 
 Backfill / cleanup helper
-- A helper script `scripts/backfill_unknown_edge_pc.py` is included to help migrate
-  `alerts` rows that were backfilled with `edge_pc_id='001'`.
+- A helper script `scripts/backfill_edge_001.py` is included to help migrate
+  `alerts` rows that were backfilled with `edge_pc_id='edge-001'`.
 
 Usage examples (from repo root):
 
@@ -235,8 +235,8 @@ python scripts/backfill_unknown_edge_pc.py --dry-run
 # Apply mappings from CSV (columns: site_id,camera_id,edge_pc_id)
 python scripts/backfill_unknown_edge_pc.py --mapping mappings.csv
 
-# Assign a default edge PC for all sentinel ('001') alerts
-python scripts/backfill_unknown_edge_pc.py --assign-default edge-1234
+# Assign a default edge PC for all sentinel ('edge-001') alerts
+python scripts/backfill_edge_001.py --assign-default edge-1234
 
 # Remove sentinel if no alerts reference it
 python scripts/backfill_unknown_edge_pc.py --cleanup-sentinel

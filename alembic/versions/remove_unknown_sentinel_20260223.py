@@ -29,21 +29,21 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     conn = op.get_bind()
     # Check whether any alerts still reference the sentinel
-    res = conn.execute(sa.text("SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = '001'"))
+    res = conn.execute(sa.text("SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = 'edge-001'"))
     row = res.mappings().first()
     cnt = row["c"] if row else 0
     if cnt:
         # Write a harmless log-friendly message; avoid raising so running
         # the migration in CI won't fail deployments accidentally.
-        print(f"Found {cnt} alerts still referencing '001'; skipping sentinel removal")
+        print(f"Found {cnt} alerts still referencing 'edge-001'; skipping sentinel removal")
         return
 
     # No references remain; remove sentinel row if present
-    conn.execute(sa.text("DELETE FROM edge_pcs WHERE edge_pc_id = '001'"))
+    conn.execute(sa.text("DELETE FROM edge_pcs WHERE edge_pc_id = 'edge-001'"))
 
 
 def downgrade() -> None:
     # Re-create the sentinel row if someone downgrades; this mirrors the
     # original compatibility approach used during backfill.
     conn = op.get_bind()
-    conn.execute(sa.text("INSERT OR IGNORE INTO edge_pcs (edge_pc_id, site_name, last_heartbeat, status) VALUES ('001', 'unknown', NULL, 'offline')"))
+    conn.execute(sa.text("INSERT OR IGNORE INTO edge_pcs (edge_pc_id, site_name, last_heartbeat, status) VALUES ('edge-001', 'unknown', NULL, 'offline')"))

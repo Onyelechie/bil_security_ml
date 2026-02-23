@@ -28,7 +28,7 @@ def upgrade() -> None:
     conn = op.get_bind()
 
     # NOTE FOR MAINTAINERS:
-    # We create a sentinel `edge_pcs` row with `edge_pc_id='001'` and
+    # We create a sentinel `edge_pcs` row with `edge_pc_id='edge-001'` and
     # backfill alerts that lack an `edge_pc_id` to that sentinel. This is a
     # pragmatic migration strategy to preserve historical alerts and avoid
     # blocking upgrades for deployed installations where edge agents have
@@ -40,12 +40,12 @@ def upgrade() -> None:
     # if appropriate for your analytics expectations.
     insert_sql = (
         "INSERT OR IGNORE INTO edge_pcs (edge_pc_id, site_name, last_heartbeat, status) "
-        "VALUES ('001', 'unknown', NULL, 'offline')"
+        "VALUES ('edge-001', 'unknown', NULL, 'offline')"
     )
     conn.execute(sa.text(insert_sql))
 
     # Backfill alerts where edge_pc_id is null
-    update_sql = "UPDATE alerts SET edge_pc_id = '001' " "WHERE edge_pc_id IS NULL"
+    update_sql = "UPDATE alerts SET edge_pc_id = 'edge-001' " "WHERE edge_pc_id IS NULL"
     conn.execute(sa.text(update_sql))
 
     # Alter column to NOT NULL using batch_alter_table for SQLite
@@ -71,7 +71,7 @@ def downgrade() -> None:
     # to run a dedicated cleanup job once agents are updated.
     conn = op.get_bind()
     delete_sql = (
-        "DELETE FROM edge_pcs WHERE edge_pc_id = '001' AND NOT EXISTS ("
-        "SELECT 1 FROM alerts WHERE edge_pc_id = '001')"
+        "DELETE FROM edge_pcs WHERE edge_pc_id = 'edge-001' AND NOT EXISTS ("
+        "SELECT 1 FROM alerts WHERE edge_pc_id = 'edge-001')"
     )
     conn.execute(sa.text(delete_sql))

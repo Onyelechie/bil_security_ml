@@ -21,7 +21,7 @@ Alembic is used to track and apply changes to the database schema over time. Eac
 
 ### Recent migration notes
 - `add_edge_pc_id_fk_to_alerts_20260223.py` added `edge_pc_id` column and FK to `edge_pcs`.
- - `enforce_edge_pc_id_not_null_20260223.py` backfills existing alerts to a sentinel `edge_pc_id='001'`
+ - `enforce_edge_pc_id_not_null_20260223.py` backfills existing alerts to a sentinel `edge_pc_id='edge-001'`
 	and enforces `NOT NULL` using SQLite-safe batch operations.
 
 If you maintain a Postgres production DB, prefer testing these migrations on a staging database

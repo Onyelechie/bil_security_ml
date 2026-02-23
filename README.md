@@ -66,12 +66,20 @@ python -m venv .venv
 .venv\Scripts\activate
 # On Unix/Mac:
 # source .venv/bin/activate
-
+```
 # Install dependencies
+**Runtime (to run the system):**
+```bash
 pip install -r requirements.txt
 ```
 
-#### Running the Server
+**Dev/Test (to run tests + lint/type checks):**
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+```
+
+
+#### Running the Central Server (Area C)
 ```bash
 # Set Python path for src/ layout
 # On Windows PowerShell:
@@ -83,7 +91,82 @@ $env:PYTHONPATH = "$PWD\src"
 python -m uvicorn server.main:app --reload --port 8000
 ```
 
-#### Running Tests
+
+
+### Endpoint Purpose
+
+- **Heartbeat** (`POST /api/heartbeat`): Used by edge PCs to report their own status and last-seen time to the server. This lets the server track which devices are online and their current state.
+- **Healthcheck** (`GET /`): Used by anyone (user, monitoring system, load balancer) to check if the server itself is running and responsive. Returns a simple status message.
+
+---
+
+### API Documentation
+
+When the server is running, interactive API documentation is available:
+
+- **Swagger UI:** [http://localhost:8000/docs](http://localhost:8000/docs)
+- **ReDoc:** [http://localhost:8000/redoc](http://localhost:8000/redoc)
+
+These docs are auto-generated from the code and always up to date. You can try out endpoints, view request/response schemas, and see example payloads directly in your browser.
+
+---
+
+### API Endpoints
+
+#### Heartbeat Endpoint
+
+**POST /api/heartbeat**
+
+Used by edge PCs to report their status. The server records the time it receives the heartbeat as `last_heartbeat` (using its own UTC clock, not the client timestamp).
+
+**Request Body (HeartbeatIn):**
+```json
+{
+  "edge_pc_id": "edge-001",
+  "site_name": "Warehouse 1",
+  "status": "online",
+  "timestamp": "2026-02-17T12:34:56Z"
+}
+```
+
+**Response (HeartbeatOut):**
+```json
+{
+  "edge_pc_id": "edge-001",
+  "site_name": "Warehouse 1",
+  "status": "online",
+  "last_heartbeat": "2026-02-17T12:34:56Z",
+  "message": "Server received heartbeat"
+}
+```
+
+
+**Model Conventions:**
+- `In` models (e.g., `HeartbeatIn`) are for data sent from the client to the server (requests).
+- `Out` models (e.g., `HeartbeatOut`) are for data sent from the server to the client (responses). The heartbeat response now includes a `message` field confirming receipt. The `last_heartbeat` field is always set by the server's current UTC time.
+
+#### Alerts Endpoint
+- **POST /api/alerts**: Ingests alerts from edge PCs (see code for schema).
+- **GET /api/alerts**: Lists alerts (filtering to be implemented).
+
+---
+
+### Security & Production Notes
+- CORS is now restricted to `http://localhost:3000` and `http://localhost:8000` for development. **Update this for production deployments!**
+- No authentication is enabled by default. Add API keys or JWT for production deployments.
+- Alert listing filters are marked as TODO and will be implemented in future updates.
+
+
+## Edge Agent (Area B)
+
+The edge agent is the on-site Windows service that will:
+- listen for motion events over TCP
+- pull frames via RTSP
+- run detection/decision logic
+- send alerts + heartbeats to the central server
+
+### Running the Edge Agent (PR1 skeleton)
+
 ```bash
 # Set Python path for src/ layout
 # On Windows PowerShell:
@@ -91,8 +174,53 @@ $env:PYTHONPATH = "$PWD\src"
 # On Unix/Mac:
 # export PYTHONPATH="$PWD/src"
 
-# Run tests
+python -m edge_agent.main --print-config
+```
+
+See `docs/area_b_edge_agent_context.md` for architecture + demo environment details.
+
+### Edge Agent HTTP API (PR2)
+
+The edge agent can optionally run a small HTTP API so office staff (or the central server later) can confirm the edge PC is alive.
+
+#### Run the Edge HTTP API
+```bash
+# Set Python path for src/ layout
+# On Windows PowerShell:
+$env:PYTHONPATH = "$PWD\src"
+# On Unix/Mac:
+# export PYTHONPATH="$PWD/src"
+
+python -m edge_agent.main --http-serve
+````
+
+#### Endpoints
+
+* **GET** `http://localhost:8128/health`
+  Returns a simple “ok” response if the edge agent is running.
+* **GET** `http://localhost:8128/heartbeat`
+  Returns edge identity (`edge_pc_id`, `site_name`), a basic status snapshot, and uptime.
+
+> Note: This is the Edge-side heartbeat (server/office → edge).
+> The Central Server heartbeat endpoint is separate (`POST /api/heartbeat`, edge → server).
+
+
+## Running Tests
+```bash
+# Set Python path for src/ layout
+# On Windows PowerShell:
+$env:PYTHONPATH = "$PWD\src"
+# On Unix/Mac:
+# export PYTHONPATH="$PWD/src"
+
+# Run all tests
 python -m pytest
+
+# Run only heartbeat tests
+python -m pytest tests/server/test_heartbeat.py -v
+
+# Run only edge API tests
+python -m pytest tests/edge_agent/test_edge_api.py -v
 ```
 
 ### Technical Notes

@@ -21,3 +21,18 @@ class AlertOut(AlertCreate):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+
+
+# Heartbeat schemas
+class HeartbeatIn(BaseModel):
+    edge_pc_id: str
+    site_name: str
+    status: str
+    timestamp: datetime
+
+class HeartbeatOut(BaseModel):
+    edge_pc_id: str
+    site_name: str
+    status: str
+    last_heartbeat: datetime
+    message: str

@@ -16,7 +16,10 @@ class Settings(BaseSettings):
     debug: bool = False
 
     # CORS
-    cors_origins: list[str] = ["*"]  # TODO: Configure properly for production
+    cors_origins: list[str] = [
+        "http://localhost:3000",
+        "http://localhost:8000"
+    ]  # Restrict to known local development origins
 
     # Security
     secret_key: str = "development-secret-key-change-in-production"

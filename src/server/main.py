@@ -1,4 +1,3 @@
-
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,7 +7,6 @@ from .config import settings
 from .db import init_db
 from .routes.alerts import router as alerts_router
 from .routes.heartbeat import router as heartbeat_router
-
 
 # Configure logging
 logging.basicConfig(

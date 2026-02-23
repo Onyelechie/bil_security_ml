@@ -13,13 +13,8 @@ class HealthOut(BaseModel):
     status: str
     time_utc: datetime
 
-    model_config = {
-        "json_schema_extra": {
-            "examples": [
-                {"status": "ok", "time_utc": "2026-02-18T12:00:00Z"}
-            ]
-        }
-    }
+    model_config = {"json_schema_extra": {"examples": [{"status": "ok", "time_utc": "2026-02-18T12:00:00Z"}]}}
+
 
 class HeartbeatOut(BaseModel):
     edge_pc_id: str
@@ -48,15 +43,14 @@ def create_app(cfg: EdgeSettings) -> FastAPI:
     Create the Edge Agent HTTP API app.
     """
     app = FastAPI(
-    title="BIL Security ML - Edge Agent API",
-    version="0.2.0",
-    description="Edge-side health endpoints for install/debug and office connectivity checks.",
+        title="BIL Security ML - Edge Agent API",
+        version="0.2.0",
+        description="Edge-side health endpoints for install/debug and office connectivity checks.",
     )
 
     @app.get("/")
     def root():
         return {"status": "edge agent running"}
-
 
     # Store start time for uptime calculation
     started_monotonic = time.monotonic()
@@ -78,7 +72,6 @@ def create_app(cfg: EdgeSettings) -> FastAPI:
         return HeartbeatOut(
             edge_pc_id=cfg.edge_pc_id,
             site_name=cfg.site_name,
-
             # NOTE(PR2): status is hardcoded because PR2 only implements the Edge HTTP API.
             # TODO(PR3/PR4): derive real status from health signals (TCP listener running,
             # RTSP connectivity, last motion received, queue depth, etc.)

@@ -1,7 +1,7 @@
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Optional, List
+from typing import List
 import os
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
@@ -32,7 +32,8 @@ class Settings(BaseSettings):
             # fallback to default dev origins if not set
             self.cors_origins = [
                 "http://localhost:3000",
-                "http://localhost:8000"
+                "http://localhost:8000",
             ]
+
 
 settings = Settings()

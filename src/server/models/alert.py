@@ -1,7 +1,8 @@
 from sqlalchemy import Column, String, DateTime, JSON
-from sqlalchemy.dialects.postgresql import UUID
 import uuid
+
 from .base import Base
+
 
 class Alert(Base):
     __tablename__ = "alerts"

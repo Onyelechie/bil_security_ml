@@ -56,4 +56,10 @@ def downgrade() -> None:
     # Re-create the sentinel row if someone downgrades; this mirrors the
     # original compatibility approach used during backfill.
     conn = op.get_bind()
-    conn.execute(sa.text("INSERT OR IGNORE INTO edge_pcs (edge_pc_id, site_name, last_heartbeat, status) VALUES ('edge-001', 'unknown', NULL, 'offline')"))
+    conn.execute(
+        sa.text(
+            "INSERT INTO edge_pcs (edge_pc_id, site_name, last_heartbeat, status) "
+            "SELECT 'edge-001', 'unknown', NULL, 'offline' "
+            "WHERE NOT EXISTS (SELECT 1 FROM edge_pcs WHERE edge_pc_id = 'edge-001')"
+        )
+    )

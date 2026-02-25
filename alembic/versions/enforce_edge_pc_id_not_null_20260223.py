@@ -38,9 +38,11 @@ def upgrade() -> None:
     # agents are updated, consider adding a follow-up job to re-assign
     # better provenance values or to remove/aggregate sentinel-marked alerts
     # if appropriate for your analytics expectations.
+    # Use SQL that works across SQLite and PostgreSQL.
     insert_sql = (
-        "INSERT OR IGNORE INTO edge_pcs (edge_pc_id, site_name, last_heartbeat, status) "
-        "VALUES ('edge-001', 'unknown', NULL, 'offline')"
+        "INSERT INTO edge_pcs (edge_pc_id, site_name, last_heartbeat, status) "
+        "SELECT 'edge-001', 'unknown', NULL, 'offline' "
+        "WHERE NOT EXISTS (SELECT 1 FROM edge_pcs WHERE edge_pc_id = 'edge-001')"
     )
     conn.execute(sa.text(insert_sql))
 

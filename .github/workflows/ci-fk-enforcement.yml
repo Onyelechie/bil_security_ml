@@ -6,6 +6,14 @@ on:
   pull_request:
     branches: [ main ]
 
+name: CI - FK Enforcement
+
+on:
+  push:
+    branches: [ main, Server ]
+  pull_request:
+    branches: [ main ]
+
 jobs:
   fk-enforcement:
     runs-on: ubuntu-latest

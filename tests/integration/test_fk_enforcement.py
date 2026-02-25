@@ -26,7 +26,10 @@ def test_fk_enforcement_with_migrations(tmp_path):
 
     # Insert an alert referencing the sentinel; should succeed with FK enforcement
     cur.execute(
-        "INSERT INTO alerts(id, site_id, camera_id, timestamp, detections, image_path, edge_pc_id) VALUES(?, ?, ?, ?, ?, ?, ?)",
+        (
+            "INSERT INTO alerts(id, site_id, camera_id, timestamp, detections, "
+            "image_path, edge_pc_id) VALUES(?, ?, ?, ?, ?, ?, ?)"
+        ),
         ("ci-test", "s", "c", "2026-02-24 00:00:00", "[]", None, "edge-001"),
     )
     conn.commit()

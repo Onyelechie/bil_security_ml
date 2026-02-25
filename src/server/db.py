@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+import logging
 
 from .config import settings
 from .models.base import Base
@@ -18,9 +19,13 @@ if settings.database_url.startswith("sqlite"):
             cursor = dbapi_con.cursor()
             cursor.execute("PRAGMA foreign_keys=ON")
             cursor.close()
-        except Exception:
-            # Do not fail DB init if the PRAGMA cannot be set; surface will occur at runtime/tests.
-            pass
+        except Exception as exc:
+            # Log a warning rather than silently swallowing the exception so
+            # static analysis tools (Bandit) do not flag a bare pass and
+            # operators have visibility into the failure.
+            logging.getLogger(__name__).warning(
+                "Could not enable SQLite foreign_keys PRAGMA on connect: %s", exc
+            )
 
     event.listen(engine, "connect", _enable_sqlite_foreign_keys)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

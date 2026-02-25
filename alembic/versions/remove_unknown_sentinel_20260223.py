@@ -16,6 +16,7 @@ message and be a no-op.
 
 from typing import Sequence, Union
 
+import os
 from alembic import op
 import sqlalchemy as sa
 
@@ -28,13 +29,22 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     conn = op.get_bind()
+    # This migration is intentionally guarded. Removing the sentinel automatically
+    # as part of the normal `upgrade head` chain is unsafe for fresh installs
+    # (there are zero alerts, causing the sentinel to be removed and breaking
+    # FK-backed inserts). To perform removal, the operator must explicitly set
+    # the environment variable `ALLOW_REMOVE_EDGE_SENTINEL=1` before running
+    # the migration. This keeps the default upgrade path safe.
+
+    if os.environ.get("ALLOW_REMOVE_EDGE_SENTINEL") != "1":
+        print("Skipping sentinel removal: set ALLOW_REMOVE_EDGE_SENTINEL=1 to enable manual sentinel cleanup")
+        return
+
     # Check whether any alerts still reference the sentinel
     res = conn.execute(sa.text("SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = 'edge-001'"))
     row = res.mappings().first()
     cnt = row["c"] if row else 0
     if cnt:
-        # Write a harmless log-friendly message; avoid raising so running
-        # the migration in CI won't fail deployments accidentally.
         print(f"Found {cnt} alerts still referencing 'edge-001'; skipping sentinel removal")
         return
 

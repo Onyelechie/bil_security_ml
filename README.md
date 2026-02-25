@@ -230,16 +230,18 @@ Usage examples (from repo root):
 
 ```
 # Dry run (report only)
-python scripts/backfill_unknown_edge_pc.py --dry-run
+python scripts/backfill_edge_001.py --dry-run
 
 # Apply mappings from CSV (columns: site_id,camera_id,edge_pc_id)
-python scripts/backfill_unknown_edge_pc.py --mapping mappings.csv
+python scripts/backfill_edge_001.py --mapping mappings.csv
 
 # Assign a default edge PC for all sentinel ('edge-001') alerts
 python scripts/backfill_edge_001.py --assign-default edge-1234
 
-# Remove sentinel if no alerts reference it
-python scripts/backfill_unknown_edge_pc.py --cleanup-sentinel
+# Remove sentinel if no alerts reference it (manual operation)
+# Use the maintenance helper which will delete the sentinel only when confirmed:
+python scripts/remove_sentinel_if_safe.py --dry-run
+python scripts/remove_sentinel_if_safe.py --yes
 ```
 
 The script connects using the repository's configured DB (via `src/server/db.py`).

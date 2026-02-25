@@ -31,7 +31,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Run migrations and FK enforcement test
+        - name: Run migrations and FK enforcement test
         env:
           DATABASE_URL: sqlite:///./ci_fk_test.db
         run: |
@@ -39,32 +39,32 @@ jobs:
           # Ensure a fresh DB
           rm -f ci_fk_test.db
 
-          # Run alembic migrations
-          python -m alembic upgrade head
+          # Run alembic migrations (explicit config path)
+          python -m alembic -c alembic.ini upgrade head
 
           # Run a small Python snippet that enables FK PRAGMA and tests insert
-          python - <<'PY'
-import sqlite3
-conn = sqlite3.connect('ci_fk_test.db')
-# Ensure FK enforcement is enabled
-conn.execute('PRAGMA foreign_keys=ON')
-cur = conn.cursor()
-# Verify sentinel exists
-cur.execute("SELECT COUNT(*) FROM edge_pcs WHERE edge_pc_id='edge-001'")
-count = cur.fetchone()[0]
-print('sentinel_count=', count)
-if count == 0:
-    raise SystemExit('Sentinel edge-001 missing after migrations')
-# Attempt to insert an alert referencing the sentinel
-try:
-    cur.execute(
+          python - <<EOF
+    import sqlite3
+    conn = sqlite3.connect('ci_fk_test.db')
+    # Ensure FK enforcement is enabled
+    conn.execute('PRAGMA foreign_keys=ON')
+    cur = conn.cursor()
+    # Verify sentinel exists
+    cur.execute("SELECT COUNT(*) FROM edge_pcs WHERE edge_pc_id='edge-001'")
+    count = cur.fetchone()[0]
+    print('sentinel_count=', count)
+    if count == 0:
+      raise SystemExit('Sentinel edge-001 missing after migrations')
+    # Attempt to insert an alert referencing the sentinel
+    try:
+      cur.execute(
         "INSERT INTO alerts(id, site_id, camera_id, timestamp, detections, image_path, edge_pc_id) VALUES(?, ?, ?, ?, ?, ?, ?)",
         ('ci-test', 's', 'c', '2026-02-24 00:00:00', '[]', None, 'edge-001')
-    )
-    conn.commit()
-    print('Insert succeeded')
-except Exception as e:
-    raise SystemExit('FK enforcement failed: ' + str(e))
-finally:
-    conn.close()
-PY
+      )
+      conn.commit()
+      print('Insert succeeded')
+    except Exception as e:
+      raise SystemExit('FK enforcement failed: ' + str(e))
+    finally:
+      conn.close()
+    EOF

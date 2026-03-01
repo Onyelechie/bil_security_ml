@@ -59,7 +59,7 @@ copy .env.example .env
 # On Unix/macOS: cp .env.example .env
 ```
 
-Important variables (see `.env.example`): `DATABASE_URL`, `HOST`, `PORT`, `DEBUG`, `CORS_ORIGINS` (comma-separated), `SECRET_KEY`.
+Important variables (see `.env.example`): `DATABASE_URL`, `HOST`, `PORT`, `DEBUG`, `SECRET_KEY`, `CORS_ORIGINS` (comma-separated), `WS_MAX_CONNECTIONS`, `WS_ALERT_QUEUE_SIZE`, `WS_ALERT_WORKER_COUNT`.
 
 Note: Edge agents SHOULD provide `edge_pc_id` when sending alerts. The server accepts
 alerts that omit `edge_pc_id` for backward compatibility: when missing the server will
@@ -105,7 +105,7 @@ committed before opening a PR.
 
 Security note
 
-- The repository contains a development `SECRET_KEY` default. Do not run the server in production with the default key. The server will warn at startup if `DEBUG` is False and the `SECRET_KEY` is left as the default.
+- Do not run the server in production with an empty or placeholder `SECRET_KEY` (for example, `your-secret-key-here`). The server warns at startup if `DEBUG` is `False` and `SECRET_KEY` is empty or still set to the placeholder value.
 
 #### Prerequisites
 - Python 3.9+
@@ -141,12 +141,104 @@ pip install -r requirements.txt -r requirements-dev.txt
 # Set Python path for src/ layout
 # On Windows PowerShell:
 $env:PYTHONPATH = "$PWD\src"
+# Optional host/port (defaults shown):
+$env:HOST = "127.0.0.1"
+$env:PORT = "8000"
 # On Unix/Mac:
 # export PYTHONPATH="$PWD/src"
+# Optional host/port:
+# export HOST="127.0.0.1"
+# export PORT="8000"
 
-# Run the server
-python -m uvicorn server.main:app --reload --port 8000
+# Run the server (uses HOST/PORT values from env)
+# On Windows PowerShell:
+$bindHost = if ($env:HOST) { $env:HOST } else { "127.0.0.1" }
+$bindPort = if ($env:PORT) { $env:PORT } else { "8000" }
+python -m uvicorn server.main:app --reload --host $bindHost --port $bindPort
+# On Unix/Mac:
+# python -m uvicorn server.main:app --reload --host "${HOST:-127.0.0.1}" --port "${PORT:-8000}"
 ```
+
+Quick copy-paste command (PowerShell, fixed host/port):
+```powershell
+$env:PYTHONPATH="$PWD\src"; python -m uvicorn server.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Apply migrations before first run:
+```bash
+python -m alembic -c alembic.ini upgrade head
+```
+
+#### Quick Test (HTTP + WebSocket)
+
+HTTP health check:
+```powershell
+curl.exe http://127.0.0.1:8000/
+```
+
+HTTP alert ingestion from PowerShell (recommended):
+```powershell
+$payload = @{
+  site_id    = "site_001"
+  camera_id  = "cam_001"
+  edge_pc_id = "edge-live-1"
+  timestamp  = "2026-03-01T12:00:00Z"
+  detections = @(
+    @{ "class" = "person"; confidence = 0.98 }
+  )
+  image_path = $null
+}
+
+$json = $payload | ConvertTo-Json -Depth 5
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/alerts" -Method Post -ContentType "application/json" -Body $json
+```
+
+Optional `curl.exe` fallback (send JSON from file):
+```powershell
+$json | Set-Content -Path .\alert.json -Encoding utf8NoBOM
+curl.exe -X POST "http://127.0.0.1:8000/api/alerts" -H "Content-Type: application/json" --data-binary "@alert.json"
+```
+
+Real-time WebSocket ingestion test (`/ws/alerts`):
+```powershell
+@'
+import asyncio, json
+from datetime import datetime, timezone
+import websockets
+
+async def main():
+    async with websockets.connect("ws://127.0.0.1:8000/ws/alerts") as ws:
+        print("connected:", await ws.recv())
+        payload = {
+            "site_id": "site_ws",
+            "camera_id": "cam_ws",
+            "edge_pc_id": "edge-ws-1",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "detections": [{"class": "person", "confidence": 0.95}],
+            "image_path": None,
+        }
+        await ws.send(json.dumps(payload))
+        print("ack:", await ws.recv())
+
+asyncio.run(main())
+'@ | python -
+```
+
+If needed:
+```bash
+pip install websockets
+```
+
+WebSocket load test script:
+```powershell
+# Example: 200 clients, 10 messages each
+python scripts/ws_load_test.py --clients 200 --messages-per-client 10
+
+# Smoother ramp-up (20 ms between client starts)
+python scripts/ws_load_test.py --clients 200 --messages-per-client 10 --stagger-ms 20
+```
+
+The script exits with code `1` if all expected messages are not ACKed.
 
 
 
@@ -154,6 +246,7 @@ python -m uvicorn server.main:app --reload --port 8000
 
 - **Heartbeat** (`POST /api/heartbeat`): Used by edge PCs to report their own status and last-seen time to the server. This lets the server track which devices are online and their current state.
 - **Healthcheck** (`GET /`): Used by anyone (user, monitoring system, load balancer) to check if the server itself is running and responsive. Returns a simple status message.
+- **WebSocket Alert Ingestion** (`WS /ws/alerts`): Used by edge clients or UI clients to stream alert payloads in real time and receive immediate ACK or error responses.
 
 ---
 
@@ -205,6 +298,7 @@ Used by edge PCs to report their status. The server records the time it receives
 #### Alerts Endpoint
 - **POST /api/alerts**: Ingests alerts from edge PCs (see code for schema).
 - **GET /api/alerts**: Lists alerts (filtering to be implemented).
+- **WS /ws/alerts**: Accepts alert JSON messages and returns `connected`, `ack`, or `error` frames.
 
 Note: `alerts.edge_pc_id` is now a required foreign key referencing `edge_pcs.edge_pc_id`.
 When upgrading older databases, a migration will insert a sentinel `edge_pcs` row with `edge_pc_id='edge-001'`

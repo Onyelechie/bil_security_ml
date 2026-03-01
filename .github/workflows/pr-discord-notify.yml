@@ -1,8 +1,9 @@
-name: PR Discord Notifications
+﻿name: PR Discord Notifications
 
 on:
   pull_request:
     types: [opened, reopened, ready_for_review, closed]
+    branches: [main, Server, '**']
 
 jobs:
   notify:
@@ -13,32 +14,30 @@ jobs:
           DISCORD_WEBHOOK_PR_CREATED: ${{ secrets.DISCORD_WEBHOOK_PR_CREATED }}
           DISCORD_WEBHOOK_PR_MERGED: ${{ secrets.DISCORD_WEBHOOK_PR_MERGED }}
         run: |
-          ACTION="${{ github.event.action }}"
-          IS_MERGED="${{ github.event.pull_request.merged }}"
+          set -euo pipefail
 
-          PR_TITLE="${{ github.event.pull_request.title }}"
-          PR_URL="${{ github.event.pull_request.html_url }}"
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-          PR_AUTHOR="${{ github.event.pull_request.user.login }}"
-          PR_MERGER="${{ github.actor }}"
-          PR_BRANCH="${{ github.event.pull_request.head.ref }}"
-          PR_BASE="${{ github.event.pull_request.base.ref }}"
+          ACTION='${{ github.event.action }}'
+          IS_MERGED='${{ github.event.pull_request.merged }}'
 
-          # --- PR CREATED notifications (go to created channel) ---
+          PR_TITLE='${{ github.event.pull_request.title }}'
+          PR_URL='${{ github.event.pull_request.html_url }}'
+          PR_NUMBER='${{ github.event.pull_request.number }}'
+          PR_AUTHOR='${{ github.event.pull_request.user.login }}'
+          PR_MERGER='${{ github.actor }}'
+          PR_BRANCH='${{ github.event.pull_request.head.ref }}'
+          PR_BASE='${{ github.event.pull_request.base.ref }}'
+
           if [ "$ACTION" = "opened" ] || [ "$ACTION" = "reopened" ] || [ "$ACTION" = "ready_for_review" ]; then
-            MSG="🚀 **PR Created** (#${PR_NUMBER})\n**${PR_TITLE}**\n👤 ${PR_AUTHOR}\n🌿 ${PR_BRANCH} → ${PR_BASE}\n🔗 ${PR_URL}"
-            curl -H "Content-Type: application/json" -X POST \
-              -d "{\"content\":\"$MSG\"}" \
-              "$DISCORD_WEBHOOK_PR_CREATED"
+            MSG=$'🚀 **PR Created** (#'"${PR_NUMBER}"$')\n**'"${PR_TITLE}"$'**\n👤 '"${PR_AUTHOR}"$'\n🌿 '"${PR_BRANCH}"$' → '"${PR_BASE}"$'\n🔗 '"${PR_URL}"
+            PAYLOAD="$(jq -n --arg content "$MSG" '{content: $content}')"
+            curl -sS -H "Content-Type: application/json" -X POST -d "$PAYLOAD" "$DISCORD_WEBHOOK_PR_CREATED"
             exit 0
           fi
 
-          # --- PR MERGED notifications (go to merged channel) ---
           if [ "$ACTION" = "closed" ] && [ "$IS_MERGED" = "true" ]; then
-            MSG="✅ **PR Merged** (#${PR_NUMBER})\n**${PR_TITLE}**\n👤 Author: ${PR_AUTHOR}\n🧑‍💻 Merged by: ${PR_MERGER}\n🌿 ${PR_BRANCH} → ${PR_BASE}\n🔗 ${PR_URL}"
-            curl -H "Content-Type: application/json" -X POST \
-              -d "{\"content\":\"$MSG\"}" \
-              "$DISCORD_WEBHOOK_PR_MERGED"
+            MSG=$'✅ **PR Merged** (#'"${PR_NUMBER}"$')\n**'"${PR_TITLE}"$'**\n👤 Author: '"${PR_AUTHOR}"$'\n🧑‍💻 Merged by: '"${PR_MERGER}"$'\n🌿 '"${PR_BRANCH}"$' → '"${PR_BASE}"$'\n🔗 '"${PR_URL}"
+            PAYLOAD="$(jq -n --arg content "$MSG" '{content: $content}')"
+            curl -sS -H "Content-Type: application/json" -X POST -d "$PAYLOAD" "$DISCORD_WEBHOOK_PR_MERGED"
             exit 0
           fi
 

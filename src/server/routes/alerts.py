@@ -4,6 +4,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from ..db import SessionLocal
 from ..models.alert import Alert
+from ..models.edge_pc import EdgePC
 from ..schemas import AlertCreate, AlertOut
 
 # This router handles all endpoints related to alerts sent from edge PCs.
@@ -29,10 +30,22 @@ def receive_alert(alert: AlertCreate, db: Session = Depends(get_db)):
     Expected: JSON body with alert details (site_id, camera_id, timestamp, detections, etc.)
     Action: Stores the alert in the database.
     """
+    # Accept missing `edge_pc_id` from older agents and fall back to sentinel.
+    # This keeps the API backward-compatible while the DB enforces NOT NULL
+    # (alerts are backfilled to 'edge-001' by migrations when necessary).
+    edge_id = getattr(alert, "edge_pc_id", None) or "edge-001"
     try:
+        # Ensure an EdgePC row exists for the provided edge_id so FK
+        # constraints do not fail. If the edge PC is unknown, create a
+        # minimal record with site_name='unknown'. This is idempotent.
+        if not db.get(EdgePC, edge_id):
+            db.add(EdgePC(edge_pc_id=edge_id, site_name="unknown", status="offline"))
+            db.flush()
+
         db_alert = Alert(
             site_id=alert.site_id,
             camera_id=alert.camera_id,
+            edge_pc_id=edge_id,
             timestamp=alert.timestamp,
             detections=[d.model_dump(by_alias=True) for d in alert.detections],
             image_path=alert.image_path,

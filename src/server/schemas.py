@@ -16,6 +16,7 @@ class AlertCreate(BaseModel):
 
     site_id: str
     camera_id: str
+    edge_pc_id: Optional[str] = None
     timestamp: datetime
     detections: List[Detection]
     image_path: Optional[str] = None

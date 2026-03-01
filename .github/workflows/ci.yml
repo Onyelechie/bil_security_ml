@@ -47,9 +47,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
+      - name: Run DB migrations
+        env:
+          DATABASE_URL: sqlite:///./test.db
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: |
+          # Run Alembic migrations so tests run against the latest schema
+          alembic upgrade head
+
       - name: Run tests (with coverage)
         env:
           DATABASE_URL: sqlite:///./test.db
           PYTHONPATH: ${{ github.workspace }}/src
         run: |
           python -m pytest tests/ -v --tb=short --strict-markers --cov=src --cov-report=term-missing
+

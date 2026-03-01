@@ -27,9 +27,7 @@ def test_heartbeat_create_and_update():
 
     # Update heartbeat (change status)
     payload["status"] = "idle"
-    payload["timestamp"] = (
-        datetime.now(timezone.utc) + timedelta(seconds=10)
-    ).isoformat()
+    payload["timestamp"] = (datetime.now(timezone.utc) + timedelta(seconds=10)).isoformat()
     response = client.post("/api/heartbeat", json=payload)
     assert response.status_code == 201
     data2 = response.json()

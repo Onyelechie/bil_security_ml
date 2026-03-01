@@ -14,6 +14,7 @@ def test_receive_alert():
     payload = {
         "site_id": "site_001",
         "camera_id": "cam_01",
+        "edge_pc_id": "edge-test-1",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "detections": [
             {"class": "person", "confidence": 0.95},
@@ -36,6 +37,7 @@ def test_list_alerts():
     payload = {
         "site_id": "site_002",
         "camera_id": "cam_02",
+        "edge_pc_id": "edge-test-2",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "detections": [{"class": "person", "confidence": 0.9}],
         "image_path": "/path/to/image.jpg",

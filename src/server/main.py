@@ -19,6 +19,21 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize database on startup."""
+    # Security guard: warn if running in non-debug with default secret
+    try:
+        from .config import settings
+
+        # Avoid embedding a literal default secret in source (Bandit B105).
+        # Instead, warn if running in non-debug mode and no secret key has been set.
+        if not settings.debug and not settings.secret_key:
+            logger.warning(
+                "SECRET_KEY is not set while DEBUG is False. This is insecure - "
+                "set SECRET_KEY in environment or .env before production."
+            )
+    except Exception:
+        # If config can't be imported for some reason, continue and let other errors surface
+        logger.debug("Could not verify SECRET_KEY at startup")
+
     logger.info("Initializing database...")
     init_db()
     logger.info("Database initialized successfully")

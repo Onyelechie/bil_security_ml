@@ -64,8 +64,8 @@ Important variables (see `.env.example`): `DATABASE_URL`, `HOST`, `PORT`, `DEBUG
 Note: Edge agents SHOULD provide `edge_pc_id` when sending alerts. The server accepts
 alerts that omit `edge_pc_id` for backward compatibility: when missing the server will
 store a sentinel value `'edge-001'` for provenance. If you prefer strict provenance,
-use the `scripts/backfill_edge_001.py` helper to map historical alerts and the
-`remove_unknown_sentinel_20260223` migration to clean up the sentinel when safe.
+use the `scripts/backfill_edge_001.py` helper to map historical alerts and
+`scripts/remove_sentinel_if_safe.py` for manual sentinel cleanup when safe.
 
 
 ### Database Migrations

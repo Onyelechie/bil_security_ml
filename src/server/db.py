@@ -3,8 +3,7 @@ from sqlalchemy.orm import sessionmaker
 import logging
 
 from .config import settings
-from .models.base import Base
-from sqlalchemy import event
+from sqlalchemy import event, inspect, text
 
 engine = create_engine(
     settings.database_url,
@@ -32,43 +31,30 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def init_db():
-    """Initialize database tables."""
-    # Ensure all model modules are imported so their tables are registered
-    # with the declarative metadata before creating tables. This guards against
-    # different import orders in tests or when the app is embedded.
-    try:
-        # Import models to ensure they register with Base.metadata
-        # (these imports are idempotent)
-        from .models import alert as _alert  # noqa: F401
-        from .models import edge_pc as _edge_pc  # noqa: F401
-    except Exception:
-        # If model imports fail, proceed to create tables; errors will surface
-        # during create_all or at runtime.
-        logging.getLogger(__name__).debug("Could not import model modules before create_all")
+    """Perform runtime DB checks without managing schema.
 
-    Base.metadata.create_all(bind=engine)
+    Schema creation/mutations are owned by Alembic migrations. This runtime
+    initializer only performs lightweight safety setup that should be
+    idempotent when schema already exists.
+    """
 
     # Ensure sentinel row exists so runtime fallback to 'edge-001' will not
     # violate FK constraints. This is idempotent.
     try:
-        from sqlalchemy import text
-
         with engine.begin() as conn:
-            if engine.dialect.name == "sqlite":
-                conn.execute(
-                    text(
-                        "INSERT OR IGNORE INTO edge_pcs (edge_pc_id, site_name, last_heartbeat, status) "
-                        "VALUES ('edge-001', 'unknown', NULL, 'offline')"
-                    )
+            if not inspect(conn).has_table("edge_pcs"):
+                logging.getLogger(__name__).warning(
+                    "edge_pcs table not found; schema is not initialized. "
+                    "Run `alembic upgrade head` before starting the server."
                 )
-            else:
-                # PostgreSQL and others: use ON CONFLICT DO NOTHING
-                conn.execute(
-                    text(
-                        "INSERT INTO edge_pcs (edge_pc_id, site_name, last_heartbeat, status) "
-                        "VALUES ('edge-001', 'unknown', NULL, 'offline') "
-                        "ON CONFLICT (edge_pc_id) DO NOTHING"
-                    )
+                return
+
+            conn.execute(
+                text(
+                    "INSERT INTO edge_pcs (edge_pc_id, site_name, last_heartbeat, status) "
+                    "SELECT 'edge-001', 'unknown', NULL, 'offline' "
+                    "WHERE NOT EXISTS (SELECT 1 FROM edge_pcs WHERE edge_pc_id = 'edge-001')"
                 )
+            )
     except Exception:
         logging.getLogger(__name__).exception("Failed to ensure sentinel 'edge-001' exists in database")

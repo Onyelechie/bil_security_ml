@@ -18,8 +18,7 @@ import argparse
 import sys
 
 import sqlalchemy as sa
-from src.server.config import settings
-from src.server.db import engine
+from server.db import engine
 
 
 def main() -> int:

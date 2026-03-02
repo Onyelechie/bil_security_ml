@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timezone
 from typing import Any
@@ -111,12 +112,14 @@ async def alerts_websocket(websocket: WebSocket) -> None:
                 pending_alert_payload = None
                 site_id = str(alert_payload.get("site_id", "unknown"))
                 camera_id = str(alert_payload.get("camera_id", "unknown"))
+                received_at = datetime.now(timezone.utc)
                 try:
-                    image_path = image_storage.save_alert_image(
+                    image_path = await asyncio.to_thread(
+                        image_storage.save_alert_image,
                         site_id=site_id,
                         camera_id=camera_id,
                         image_bytes=binary_payload,
-                        received_at=datetime.now(timezone.utc),
+                        received_at=received_at,
                     )
                 except ImageStorageError as exc:
                     await manager.send_json(

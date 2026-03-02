@@ -39,3 +39,19 @@ def test_ws_image_storage_dir_must_not_be_empty():
         assert False, "Expected ValueError for empty ws_image_storage_dir"
     except ValueError as exc:
         assert "WS_IMAGE_STORAGE_DIR" in str(exc)
+
+
+def test_ws_image_retention_hours_must_be_positive():
+    try:
+        Settings(ws_image_retention_hours=0)
+        assert False, "Expected ValueError for ws_image_retention_hours=0"
+    except ValueError as exc:
+        assert "WS_IMAGE_RETENTION_HOURS" in str(exc)
+
+
+def test_ws_image_cleanup_interval_hours_must_be_positive():
+    try:
+        Settings(ws_image_cleanup_interval_hours=0)
+        assert False, "Expected ValueError for ws_image_cleanup_interval_hours=0"
+    except ValueError as exc:
+        assert "WS_IMAGE_CLEANUP_INTERVAL_HOURS" in str(exc)

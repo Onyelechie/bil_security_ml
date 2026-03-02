@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     ws_alert_worker_count: int = int(os.getenv("WS_ALERT_WORKER_COUNT", 4))
     ws_max_image_bytes: int = int(os.getenv("WS_MAX_IMAGE_BYTES", 5_000_000))
     ws_image_storage_dir: str = os.getenv("WS_IMAGE_STORAGE_DIR", "storage/ws_alert_images")
+    ws_image_retention_hours: int = int(os.getenv("WS_IMAGE_RETENTION_HOURS", 24))
+    ws_image_cleanup_interval_hours: int = int(os.getenv("WS_IMAGE_CLEANUP_INTERVAL_HOURS", 24))
 
     def __init__(self, **values):
         super().__init__(**values)
@@ -47,6 +49,10 @@ class Settings(BaseSettings):
             raise ValueError("WS_MAX_IMAGE_BYTES must be >= 1")
         if not self.ws_image_storage_dir.strip():
             raise ValueError("WS_IMAGE_STORAGE_DIR must not be empty")
+        if self.ws_image_retention_hours < 1:
+            raise ValueError("WS_IMAGE_RETENTION_HOURS must be >= 1")
+        if self.ws_image_cleanup_interval_hours < 1:
+            raise ValueError("WS_IMAGE_CLEANUP_INTERVAL_HOURS must be >= 1")
 
     def parsed_cors_origins(self) -> List[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]

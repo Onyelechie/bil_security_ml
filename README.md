@@ -59,7 +59,7 @@ copy .env.example .env
 # On Unix/macOS: cp .env.example .env
 ```
 
-Important variables (see `.env.example`): `DATABASE_URL`, `HOST`, `PORT`, `DEBUG`, `SECRET_KEY`, `CORS_ORIGINS` (comma-separated), `WS_MAX_CONNECTIONS`, `WS_ALERT_QUEUE_SIZE`, `WS_ALERT_WORKER_COUNT`, `WS_MAX_IMAGE_BYTES`, `WS_IMAGE_STORAGE_DIR`.
+Important variables (see `.env.example`): `DATABASE_URL`, `HOST`, `PORT`, `DEBUG`, `SECRET_KEY`, `CORS_ORIGINS` (comma-separated), `WS_MAX_CONNECTIONS`, `WS_ALERT_QUEUE_SIZE`, `WS_ALERT_WORKER_COUNT`, `WS_MAX_IMAGE_BYTES`, `WS_IMAGE_STORAGE_DIR`, `WS_IMAGE_RETENTION_HOURS`, `WS_IMAGE_CLEANUP_INTERVAL_HOURS`.
 
 Note: Edge agents SHOULD provide `edge_pc_id` when sending alerts. The server accepts
 alerts that omit `edge_pc_id` for backward compatibility: when missing the server will
@@ -263,6 +263,8 @@ Image storage behavior:
 - Filename format: `<site_id>_<camera_id>_<received_utc_timestamp>.<ext>`.
 - `received_utc_timestamp` is server receive time.
 - Stored path is written to `alerts.image_path`.
+- Storage directory is created automatically if it does not exist.
+- Images older than `WS_IMAGE_RETENTION_HOURS` are deleted by a background cleanup task every `WS_IMAGE_CLEANUP_INTERVAL_HOURS` (defaults are both `24`).
 
 If needed:
 ```bash

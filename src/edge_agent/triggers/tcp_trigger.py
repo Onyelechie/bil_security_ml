@@ -94,8 +94,8 @@ class TcpMotionTrigger:
         except Exception:
             logger.exception("Error handling TCP motion packet from %s", peer)
         finally:
-            try:
+            from contextlib import suppress
+
+            with suppress(Exception):
                 writer.close()
                 await writer.wait_closed()
-            except Exception:
-                pass

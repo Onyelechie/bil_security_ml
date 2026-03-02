@@ -5,6 +5,7 @@ ultralytics==8.4.12
 opencv-python==4.13.0.92
 effdet==0.4.1
 timm==1.0.24
+defusedxml==0.7.1
 
 # --- Data & Utilities ---
 numpy==2.4.2

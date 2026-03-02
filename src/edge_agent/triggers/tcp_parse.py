@@ -1,16 +1,20 @@
 from __future__ import annotations
 
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as ET
 from typing import Any
 
 
 def parse_motion_xml(xml_text: str) -> dict[str, Any]:
     """
     Parse Colton's TCP XML payload into fields.
+
     Expected example:
-      <Action><Camera Id="1" Name="Demo Cam" /><Policy Id="21" Name="Alarm Demo" /><UserString>Alarm</UserString></Action>
-    Returns dict with camera_id, camera_name, policy_id, policy_name, user_string.
-    Raises ValueError on non-XML input.
+      <Action>
+        <Camera Id="1" Name="Demo Cam" />
+        <Policy Id="21" Name="Alarm Demo" />
+        <UserString>Alarm</UserString>
+      </Action>
+    ...
     """
     xml_text = xml_text.strip()
     if not xml_text:

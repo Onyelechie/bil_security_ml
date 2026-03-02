@@ -171,8 +171,6 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
 
             from .triggers.local_motion_trigger import LocalMotionTrigger
             from .triggers.trigger_manager import TriggerManager
-            from .video.ring_buffer import RingBuffer
-            from .video.rtsp_reader import RtspReader
 
             async def _motion_main() -> None:
                 ring = RingBuffer(seconds=cfg.ring_buffer_seconds)

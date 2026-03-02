@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import subprocess
+import subprocess  # nosec B404
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
@@ -55,7 +55,8 @@ class RtspReader:
 
             try:
                 self._start_ffmpeg(w=w, h=h, fps=fps)
-                assert self._proc is not None and self._proc.stdout is not None
+                if self._proc is None or self._proc.stdout is None:
+                    raise RuntimeError("ffmpeg process failed to start (stdout missing)")
 
                 logger.info("RTSP connect attempt=%d stream=%s", attempt, stream)
 
@@ -135,15 +136,15 @@ class RtspReader:
             "pipe:1",
         ]
         logger.debug("Starting ffmpeg: %s", " ".join(cmd))
-        self._proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self._proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)  # nosec B603
 
     def _kill_proc(self) -> None:
         if self._proc is None:
             return
-        try:
+        from contextlib import suppress
+
+        with suppress(Exception):
             self._proc.kill()
-        except Exception:
-            pass
         self._proc = None
 
     @staticmethod

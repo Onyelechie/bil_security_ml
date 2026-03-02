@@ -21,6 +21,18 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Start Edge HTTP API server (/health, /heartbeat).",
     )
+    parser.add_argument(
+        "--tcp-listen",
+        action="store_true",
+        help="Start TCP motion listener and print parsed motion events.",
+    )
+
+    parser.add_argument(
+        "--run",
+        action="store_true",
+        help="Run the full edge pipeline (placeholder for now).",
+    )
+
     return parser
 
 
@@ -72,7 +84,35 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
             )
             return 0
 
-        logger.info("Nothing to do. Use --print-config or --http-serve.")
+        if args.tcp_listen:
+            import asyncio
+            from .triggers.tcp_trigger import TcpMotionTrigger
+
+            async def _main() -> None:
+                trigger = TcpMotionTrigger(cfg)
+                await trigger.start()
+                try:
+                    while True:
+                        evt = await trigger.queue.get()
+                        logger.info(
+                            "MOTION: source=%s camera_id=%s camera_name=%s policy=%s user=%s",
+                            evt.source,
+                            evt.camera_id,
+                            evt.camera_name,
+                            evt.policy_name,
+                            evt.user_string,
+                        )
+                finally:
+                    await trigger.stop()
+
+            asyncio.run(_main())
+            return 0
+
+        if args.run:
+            logger.info("Full edge pipeline not implemented yet. (Step 1 placeholder)")
+            return 0
+
+        logger.info("Nothing to do. Use --print-config, --http-serve, --tcp-listen, or --run.")
         return 0
 
     except Exception:

@@ -59,7 +59,7 @@ copy .env.example .env
 # On Unix/macOS: cp .env.example .env
 ```
 
-Important variables (see `.env.example`): `DATABASE_URL`, `HOST`, `PORT`, `DEBUG`, `SECRET_KEY`, `CORS_ORIGINS` (comma-separated), `WS_MAX_CONNECTIONS`, `WS_ALERT_QUEUE_SIZE`, `WS_ALERT_WORKER_COUNT`, `WS_MAX_IMAGE_BYTES`.
+Important variables (see `.env.example`): `DATABASE_URL`, `HOST`, `PORT`, `DEBUG`, `SECRET_KEY`, `CORS_ORIGINS` (comma-separated), `WS_MAX_CONNECTIONS`, `WS_ALERT_QUEUE_SIZE`, `WS_ALERT_WORKER_COUNT`, `WS_MAX_IMAGE_BYTES`, `WS_IMAGE_STORAGE_DIR`.
 
 Note: Edge agents SHOULD provide `edge_pc_id` when sending alerts. The server accepts
 alerts that omit `edge_pc_id` for backward compatibility: when missing the server will
@@ -233,7 +233,7 @@ async def main():
         print("meta ack:", await ws.recv())
 
         # Send JPEG/PNG bytes in binary frame
-        await ws.send(b"\x89PNG\x00demo-image-bytes")
+        await ws.send(b"\x89PNG\r\n\x1a\n\x00demo-image-bytes")
         print("ack:", await ws.recv())
 
 asyncio.run(main())
@@ -241,6 +241,28 @@ asyncio.run(main())
 ```
 
 Note: JSON-only alert messages are still accepted for backward compatibility, but binary image transport uses the `alert_meta` + binary frame sequence.
+
+WebSocket protocol summary (`WS /ws/alerts`):
+- Server sends `connected` immediately after handshake.
+- Client can send either:
+  - a complete JSON alert payload (backward-compatible path), or
+  - metadata-first binary flow:
+    1. JSON frame: `{"type":"alert_meta","alert":{...}}`
+    2. binary frame: image bytes (JPEG/PNG/GIF/WEBP or raw bytes)
+- Server sends `meta_received` after valid metadata.
+- Server sends `ack` when alert persistence succeeds.
+- Server sends `error` for invalid frames, validation failures, queue pressure, or storage/persistence failures.
+
+Backpressure behavior:
+- If internal ingestion queue is full, server returns `{"type":"error","code":"queue_full",...}`.
+- The overloaded message is dropped (not queued); connection stays open.
+- Client should retry with backoff/jitter.
+
+Image storage behavior:
+- Binary image frames are saved under `WS_IMAGE_STORAGE_DIR`.
+- Filename format: `<site_id>_<camera_id>_<received_utc_timestamp>.<ext>`.
+- `received_utc_timestamp` is server receive time.
+- Stored path is written to `alerts.image_path`.
 
 If needed:
 ```bash

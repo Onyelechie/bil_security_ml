@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     ws_alert_queue_size: int = int(os.getenv("WS_ALERT_QUEUE_SIZE", 5000))
     ws_alert_worker_count: int = int(os.getenv("WS_ALERT_WORKER_COUNT", 4))
     ws_max_image_bytes: int = int(os.getenv("WS_MAX_IMAGE_BYTES", 5_000_000))
+    ws_image_storage_dir: str = os.getenv("WS_IMAGE_STORAGE_DIR", "storage/ws_alert_images")
 
     def __init__(self, **values):
         super().__init__(**values)
@@ -44,6 +45,8 @@ class Settings(BaseSettings):
             raise ValueError("WS_ALERT_WORKER_COUNT must be >= 1")
         if self.ws_max_image_bytes < 1:
             raise ValueError("WS_MAX_IMAGE_BYTES must be >= 1")
+        if not self.ws_image_storage_dir.strip():
+            raise ValueError("WS_IMAGE_STORAGE_DIR must not be empty")
 
     def parsed_cors_origins(self) -> List[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]

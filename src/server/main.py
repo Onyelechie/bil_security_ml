@@ -8,6 +8,7 @@ from .db import init_db
 from .routes.alerts import router as alerts_router
 from .routes.heartbeat import router as heartbeat_router
 from .routes.ws_alerts import router as ws_alerts_router
+from .services.image_storage import ImageStorageService
 from .services.ws_alert_dispatcher import WebSocketAlertDispatcher
 from .services.ws_connection_manager import WebSocketConnectionManager
 
@@ -47,13 +48,16 @@ async def lifespan(app: FastAPI):
         worker_count=settings.ws_alert_worker_count,
         queue_size=settings.ws_alert_queue_size,
     )
+    app.state.ws_image_storage = ImageStorageService(settings.ws_image_storage_dir)
+    app.state.ws_image_storage.ensure_ready()
     app.state.ws_max_image_bytes = settings.ws_max_image_bytes
     await app.state.ws_alert_dispatcher.start()
     logger.info(
-        "WebSocket alert dispatcher started (workers=%s, queue_size=%s, max_image_bytes=%s)",
+        "WebSocket alert dispatcher started (workers=%s, queue_size=%s, max_image_bytes=%s, image_dir=%s)",
         settings.ws_alert_worker_count,
         settings.ws_alert_queue_size,
         settings.ws_max_image_bytes,
+        settings.ws_image_storage_dir,
     )
     try:
         yield

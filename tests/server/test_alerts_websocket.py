@@ -1,10 +1,12 @@
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from server.main import app
+from server.services.image_storage import ImageStorageService
 from server.services.ws_alert_dispatcher import AlertQueueFullError
 from server.services.ws_connection_manager import WebSocketConnectionManager
 
@@ -83,22 +85,34 @@ def test_websocket_invalid_json_message_returns_error():
             assert err["code"] == "invalid_message"
 
 
-def test_websocket_alert_meta_then_binary_ingestion_ack():
+def test_websocket_alert_meta_then_binary_ingestion_ack(tmp_path):
     with TestClient(app) as client:
-        with client.websocket_connect("/ws/alerts") as websocket:
-            websocket.receive_json()
-            websocket.send_json(_alert_meta_frame("edge-ws-bin-1", "site_ws_bin_1", "cam_ws_bin_1"))
-            meta_ack = websocket.receive_json()
-            assert meta_ack["type"] == "meta_received"
-            assert meta_ack["status"] == "ok"
+        original_storage = app.state.ws_image_storage
+        image_storage = ImageStorageService(str(tmp_path))
+        image_storage.ensure_ready()
+        app.state.ws_image_storage = image_storage
+        try:
+            with client.websocket_connect("/ws/alerts") as websocket:
+                websocket.receive_json()
+                websocket.send_json(_alert_meta_frame("edge-ws-bin-1", "site_ws_bin_1", "cam_ws_bin_1"))
+                meta_ack = websocket.receive_json()
+                assert meta_ack["type"] == "meta_received"
+                assert meta_ack["status"] == "ok"
 
-            img = b"\x89PNG\x00\x01\x02binary-image-content"
-            websocket.send_bytes(img)
-            ack = websocket.receive_json()
-            assert ack["type"] == "ack"
-            assert ack["status"] == "ok"
-            assert ack["alert"]["edge_pc_id"] == "edge-ws-bin-1"
-            assert ack["alert"]["image_bytes_received"] == len(img)
+                img = b"\x89PNG\r\n\x1a\n\x00\x01binary-image-content"
+                websocket.send_bytes(img)
+                ack = websocket.receive_json()
+                assert ack["type"] == "ack"
+                assert ack["status"] == "ok"
+                assert ack["alert"]["edge_pc_id"] == "edge-ws-bin-1"
+                assert ack["alert"]["image_path"] is not None
+                image_path = Path(ack["alert"]["image_path"])
+                assert image_path.exists()
+                assert image_path.parent == tmp_path
+                assert "site_ws_bin_1" in image_path.name
+                assert "cam_ws_bin_1" in image_path.name
+        finally:
+            app.state.ws_image_storage = original_storage
 
 
 def test_websocket_binary_without_meta_returns_error():

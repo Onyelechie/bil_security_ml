@@ -31,3 +31,11 @@ def test_ws_max_image_bytes_must_be_positive():
         assert False, "Expected ValueError for ws_max_image_bytes=0"
     except ValueError as exc:
         assert "WS_MAX_IMAGE_BYTES" in str(exc)
+
+
+def test_ws_image_storage_dir_must_not_be_empty():
+    try:
+        Settings(ws_image_storage_dir="   ")
+        assert False, "Expected ValueError for empty ws_image_storage_dir"
+    except ValueError as exc:
+        assert "WS_IMAGE_STORAGE_DIR" in str(exc)

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, WebSocket
 
+from ..schemas import AlertCreate
+from ..services.image_storage import ImageStorageError, ImageStorageService
 from ..services.ws_alert_dispatcher import (
     AlertDispatchFailure,
     AlertQueueFullError,
@@ -12,6 +15,7 @@ from ..services.ws_alert_dispatcher import (
     WebSocketAlertDispatcher,
 )
 from ..services.ws_connection_manager import WebSocketConnectionManager
+from pydantic import ValidationError
 
 router = APIRouter(tags=["alerts-websocket"])
 
@@ -36,9 +40,10 @@ def _extract_alert_payload(message: Any, *, strip_type: bool = False) -> dict[st
 async def alerts_websocket(websocket: WebSocket) -> None:
     manager: WebSocketConnectionManager | None = getattr(websocket.app.state, "ws_connection_manager", None)
     dispatcher: WebSocketAlertDispatcher | None = getattr(websocket.app.state, "ws_alert_dispatcher", None)
+    image_storage: ImageStorageService | None = getattr(websocket.app.state, "ws_image_storage", None)
     max_image_bytes: int = int(getattr(websocket.app.state, "ws_max_image_bytes", 5_000_000))
 
-    if manager is None or dispatcher is None:
+    if manager is None or dispatcher is None or image_storage is None:
         await websocket.close(code=1011, reason="WebSocket alert subsystem not initialized")
         return
 
@@ -104,8 +109,25 @@ async def alerts_websocket(websocket: WebSocket) -> None:
 
                 alert_payload = pending_alert_payload
                 pending_alert_payload = None
+                site_id = str(alert_payload.get("site_id", "unknown"))
+                camera_id = str(alert_payload.get("camera_id", "unknown"))
                 try:
-                    alert_out = await dispatcher.submit(alert_payload, image_bytes=binary_payload)
+                    image_path = image_storage.save_alert_image(
+                        site_id=site_id,
+                        camera_id=camera_id,
+                        image_bytes=binary_payload,
+                        received_at=datetime.now(timezone.utc),
+                    )
+                except ImageStorageError as exc:
+                    await manager.send_json(
+                        websocket,
+                        {"type": "error", "code": "image_store_failed", "message": str(exc)},
+                    )
+                    continue
+
+                alert_payload = {**alert_payload, "image_path": image_path}
+                try:
+                    alert_out = await dispatcher.submit(alert_payload)
                 except AlertValidationFailure as exc:
                     await manager.send_json(
                         websocket,
@@ -167,7 +189,23 @@ async def alerts_websocket(websocket: WebSocket) -> None:
                             },
                         )
                         continue
-                    pending_alert_payload = _extract_alert_payload(incoming_json, strip_type=True)
+                    candidate_payload = _extract_alert_payload(incoming_json, strip_type=True)
+                    try:
+                        pending_alert_payload = AlertCreate.model_validate(candidate_payload).model_dump(
+                            mode="json",
+                            by_alias=True,
+                            exclude_none=True,
+                        )
+                    except ValidationError as exc:
+                        await manager.send_json(
+                            websocket,
+                            {
+                                "type": "error",
+                                "code": "validation_error",
+                                "errors": exc.errors(),
+                            },
+                        )
+                        continue
                     await manager.send_json(
                         websocket,
                         {

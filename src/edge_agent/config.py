@@ -20,7 +20,7 @@ class EdgeSettings(BaseSettings):
 
     # --- Motion events input (BIL software -> Edge Agent) ---
     # Edge agent will listen on this host/port for TCP motion events.
-    tcp_host: str = "172.22.0.5"
+    tcp_host: str = "0.0.0.0"  # bind on all interfaces by default
     tcp_port: int = 8127
 
     # --- Central server output (Edge Agent -> Area C) ---

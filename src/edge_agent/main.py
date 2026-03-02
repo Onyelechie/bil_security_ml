@@ -93,7 +93,12 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 await trigger.start()
                 try:
                     while True:
-                        evt = await trigger.queue.get()
+                        try:
+                            evt = await trigger.queue.get()
+                        except asyncio.CancelledError:
+                            # Happens when Ctrl+C cancels the running task
+                            break
+
                         logger.info(
                             "MOTION: source=%s camera_id=%s camera_name=%s policy=%s user=%s",
                             evt.source,
@@ -105,7 +110,10 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 finally:
                     await trigger.stop()
 
-            asyncio.run(_main())
+            try:
+                asyncio.run(_main())
+            except KeyboardInterrupt:
+                logger.info("TCP listener stopped (Ctrl+C).")
             return 0
 
         if args.run:

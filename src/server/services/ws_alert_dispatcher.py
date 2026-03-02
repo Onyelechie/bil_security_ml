@@ -88,7 +88,8 @@ class WebSocketAlertDispatcher:
             try:
                 if job is _STOP:
                     return
-                assert isinstance(job, _AlertJob)
+                if not isinstance(job, _AlertJob):
+                    continue
                 try:
                     result = await asyncio.to_thread(self._process_payload, job.payload)
                 except Exception as exc:  # noqa: BLE001

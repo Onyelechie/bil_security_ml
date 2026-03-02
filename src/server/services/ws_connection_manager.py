@@ -36,4 +36,3 @@ class WebSocketConnectionManager:
     @property
     def active_count(self) -> int:
         return len(self._active_connections)
-

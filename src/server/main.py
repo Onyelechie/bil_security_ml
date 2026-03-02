@@ -86,7 +86,11 @@ async def lifespan(app: FastAPI):
     )
     await app.state.ws_alert_dispatcher.start()
     logger.info(
-        "WebSocket alert dispatcher started (workers=%s, queue_size=%s, max_image_bytes=%s, image_dir=%s, image_retention_hours=%s, image_cleanup_interval_hours=%s)",
+        (
+            "WebSocket alert dispatcher started "
+            "(workers=%s, queue_size=%s, max_image_bytes=%s, image_dir=%s, "
+            "image_retention_hours=%s, image_cleanup_interval_hours=%s)"
+        ),
         settings.ws_alert_worker_count,
         settings.ws_alert_queue_size,
         settings.ws_max_image_bytes,

@@ -60,4 +60,3 @@ class AlertIngestionService:
                 "WHERE NOT EXISTS (SELECT 1 FROM edge_pcs WHERE edge_pc_id = :edge_pc_id)"
             )
         db.execute(text(sql), {"edge_pc_id": edge_pc_id})
-

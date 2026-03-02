@@ -20,6 +20,13 @@ def _alert_payload(edge_pc_id: str, site_id: str, camera_id: str) -> dict:
     }
 
 
+def _alert_meta_frame(edge_pc_id: str, site_id: str, camera_id: str) -> dict:
+    return {
+        "type": "alert_meta",
+        "alert": _alert_payload(edge_pc_id=edge_pc_id, site_id=site_id, camera_id=camera_id),
+    }
+
+
 def test_websocket_alert_ingestion_ack():
     with TestClient(app) as client:
         with client.websocket_connect("/ws/alerts") as websocket:
@@ -74,6 +81,51 @@ def test_websocket_invalid_json_message_returns_error():
             err = websocket.receive_json()
             assert err["type"] == "error"
             assert err["code"] == "invalid_message"
+
+
+def test_websocket_alert_meta_then_binary_ingestion_ack():
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws/alerts") as websocket:
+            websocket.receive_json()
+            websocket.send_json(_alert_meta_frame("edge-ws-bin-1", "site_ws_bin_1", "cam_ws_bin_1"))
+            meta_ack = websocket.receive_json()
+            assert meta_ack["type"] == "meta_received"
+            assert meta_ack["status"] == "ok"
+
+            img = b"\x89PNG\x00\x01\x02binary-image-content"
+            websocket.send_bytes(img)
+            ack = websocket.receive_json()
+            assert ack["type"] == "ack"
+            assert ack["status"] == "ok"
+            assert ack["alert"]["edge_pc_id"] == "edge-ws-bin-1"
+            assert ack["alert"]["image_bytes_received"] == len(img)
+
+
+def test_websocket_binary_without_meta_returns_error():
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws/alerts") as websocket:
+            websocket.receive_json()
+            websocket.send_bytes(b"\x00\x01orphan-image")
+            err = websocket.receive_json()
+            assert err["type"] == "error"
+            assert err["code"] == "meta_missing"
+
+
+def test_websocket_binary_too_large_returns_error():
+    with TestClient(app) as client:
+        original_limit = app.state.ws_max_image_bytes
+        app.state.ws_max_image_bytes = 4
+        try:
+            with client.websocket_connect("/ws/alerts") as websocket:
+                websocket.receive_json()
+                websocket.send_json(_alert_meta_frame("edge-ws-bin-2", "site_ws_bin_2", "cam_ws_bin_2"))
+                websocket.receive_json()
+                websocket.send_bytes(b"\x01\x02\x03\x04\x05")
+                err = websocket.receive_json()
+                assert err["type"] == "error"
+                assert err["code"] == "image_too_large"
+        finally:
+            app.state.ws_max_image_bytes = original_limit
 
 
 def test_websocket_queue_full_returns_error():

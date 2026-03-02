@@ -47,11 +47,13 @@ async def lifespan(app: FastAPI):
         worker_count=settings.ws_alert_worker_count,
         queue_size=settings.ws_alert_queue_size,
     )
+    app.state.ws_max_image_bytes = settings.ws_max_image_bytes
     await app.state.ws_alert_dispatcher.start()
     logger.info(
-        "WebSocket alert dispatcher started (workers=%s, queue_size=%s)",
+        "WebSocket alert dispatcher started (workers=%s, queue_size=%s, max_image_bytes=%s)",
         settings.ws_alert_worker_count,
         settings.ws_alert_queue_size,
+        settings.ws_max_image_bytes,
     )
     try:
         yield

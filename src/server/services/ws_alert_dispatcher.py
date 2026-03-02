@@ -30,6 +30,7 @@ class AlertDispatchFailure(RuntimeError):
 @dataclass(slots=True)
 class _AlertJob:
     payload: dict[str, Any]
+    image_bytes: bytes | None
     result_future: asyncio.Future[dict[str, Any]]
 
 
@@ -69,13 +70,13 @@ class WebSocketAlertDispatcher:
         await asyncio.gather(*self._workers, return_exceptions=True)
         self._workers.clear()
 
-    async def submit(self, payload: dict[str, Any]) -> dict[str, Any]:
+    async def submit(self, payload: dict[str, Any], image_bytes: bytes | None = None) -> dict[str, Any]:
         if not self._running:
             raise AlertDispatchFailure("Alert dispatcher is not running")
 
         loop = asyncio.get_running_loop()
         result_future: asyncio.Future[dict[str, Any]] = loop.create_future()
-        job = _AlertJob(payload=payload, result_future=result_future)
+        job = _AlertJob(payload=payload, image_bytes=image_bytes, result_future=result_future)
         try:
             self._queue.put_nowait(job)
         except asyncio.QueueFull as exc:
@@ -90,7 +91,7 @@ class WebSocketAlertDispatcher:
                     return
                 assert isinstance(job, _AlertJob)
                 try:
-                    result = await asyncio.to_thread(self._process_payload, job.payload)
+                    result = await asyncio.to_thread(self._process_payload, job.payload, job.image_bytes)
                 except Exception as exc:  # noqa: BLE001
                     if not job.result_future.done():
                         job.result_future.set_exception(exc)
@@ -100,7 +101,7 @@ class WebSocketAlertDispatcher:
             finally:
                 self._queue.task_done()
 
-    def _process_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def _process_payload(self, payload: dict[str, Any], image_bytes: bytes | None) -> dict[str, Any]:
         try:
             alert = AlertCreate.model_validate(payload)
         except ValidationError as exc:
@@ -114,4 +115,9 @@ class WebSocketAlertDispatcher:
         finally:
             db.close()
 
-        return AlertOut.model_validate(created_alert).model_dump(mode="json", by_alias=True)
+        alert_out = AlertOut.model_validate(created_alert).model_dump(mode="json", by_alias=True)
+        # Binary frames are accepted for real-time transport; image bytes are not
+        # persisted in the current schema.
+        if image_bytes is not None:
+            alert_out["image_bytes_received"] = len(image_bytes)
+        return alert_out

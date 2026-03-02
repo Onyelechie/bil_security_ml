@@ -59,7 +59,7 @@ copy .env.example .env
 # On Unix/macOS: cp .env.example .env
 ```
 
-Important variables (see `.env.example`): `DATABASE_URL`, `HOST`, `PORT`, `DEBUG`, `SECRET_KEY`, `CORS_ORIGINS` (comma-separated), `WS_MAX_CONNECTIONS`, `WS_ALERT_QUEUE_SIZE`, `WS_ALERT_WORKER_COUNT`.
+Important variables (see `.env.example`): `DATABASE_URL`, `HOST`, `PORT`, `DEBUG`, `SECRET_KEY`, `CORS_ORIGINS` (comma-separated), `WS_MAX_CONNECTIONS`, `WS_ALERT_QUEUE_SIZE`, `WS_ALERT_WORKER_COUNT`, `WS_MAX_IMAGE_BYTES`.
 
 Note: Edge agents SHOULD provide `edge_pc_id` when sending alerts. The server accepts
 alerts that omit `edge_pc_id` for backward compatibility: when missing the server will
@@ -164,6 +164,16 @@ Quick copy-paste command (PowerShell, fixed host/port):
 $env:PYTHONPATH="$PWD\src"; python -m uvicorn server.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
+#### Route Table (Server)
+
+| Method | Route | Purpose |
+|---|---|---|
+| GET | `/` | Health check |
+| POST | `/api/heartbeat` | Upsert edge heartbeat/status |
+| POST | `/api/alerts` | Ingest alert over HTTP |
+| GET | `/api/alerts` | List alerts |
+| WS | `/ws/alerts` | Ingest alerts over WebSocket (`connected` / `meta_received` / `ack` / `error`) |
+
 Apply migrations before first run:
 ```bash
 python -m alembic -c alembic.ini upgrade head
@@ -186,7 +196,6 @@ $payload = @{
   detections = @(
     @{ "class" = "person"; confidence = 0.98 }
   )
-  image_path = $null
 }
 
 $json = $payload | ConvertTo-Json -Depth 5
@@ -199,7 +208,7 @@ $json | Set-Content -Path .\alert.json -Encoding utf8NoBOM
 curl.exe -X POST "http://127.0.0.1:8000/api/alerts" -H "Content-Type: application/json" --data-binary "@alert.json"
 ```
 
-Real-time WebSocket ingestion test (`/ws/alerts`):
+Real-time WebSocket ingestion test (`/ws/alerts`) with metadata + binary image:
 ```powershell
 @'
 import asyncio, json
@@ -209,20 +218,29 @@ import websockets
 async def main():
     async with websockets.connect("ws://127.0.0.1:8000/ws/alerts") as ws:
         print("connected:", await ws.recv())
-        payload = {
-            "site_id": "site_ws",
-            "camera_id": "cam_ws",
-            "edge_pc_id": "edge-ws-1",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "detections": [{"class": "person", "confidence": 0.95}],
-            "image_path": None,
+
+        meta = {
+            "type": "alert_meta",
+            "alert": {
+                "site_id": "site_ws",
+                "camera_id": "cam_ws",
+                "edge_pc_id": "edge-ws-1",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "detections": [{"class": "person", "confidence": 0.95}]
+            }
         }
-        await ws.send(json.dumps(payload))
+        await ws.send(json.dumps(meta))
+        print("meta ack:", await ws.recv())
+
+        # Send JPEG/PNG bytes in binary frame
+        await ws.send(b"\x89PNG\x00demo-image-bytes")
         print("ack:", await ws.recv())
 
 asyncio.run(main())
 '@ | python -
 ```
+
+Note: JSON-only alert messages are still accepted for backward compatibility, but binary image transport uses the `alert_meta` + binary frame sequence.
 
 If needed:
 ```bash
@@ -246,7 +264,7 @@ The script exits with code `1` if all expected messages are not ACKed.
 
 - **Heartbeat** (`POST /api/heartbeat`): Used by edge PCs to report their own status and last-seen time to the server. This lets the server track which devices are online and their current state.
 - **Healthcheck** (`GET /`): Used by anyone (user, monitoring system, load balancer) to check if the server itself is running and responsive. Returns a simple status message.
-- **WebSocket Alert Ingestion** (`WS /ws/alerts`): Used by edge clients or UI clients to stream alert payloads in real time and receive immediate ACK or error responses.
+- **WebSocket Alert Ingestion** (`WS /ws/alerts`): Used by edge clients or UI clients to stream alert payloads in real time and receive immediate ACK or error responses. Supports metadata-first + binary image frames.
 
 ---
 
@@ -298,7 +316,7 @@ Used by edge PCs to report their status. The server records the time it receives
 #### Alerts Endpoint
 - **POST /api/alerts**: Ingests alerts from edge PCs (see code for schema).
 - **GET /api/alerts**: Lists alerts (filtering to be implemented).
-- **WS /ws/alerts**: Accepts alert JSON messages and returns `connected`, `ack`, or `error` frames.
+- **WS /ws/alerts**: Accepts alert JSON messages (backward compatible) and metadata + binary image frames. Returns `connected`, `meta_received`, `ack`, or `error` frames.
 
 Note: `alerts.edge_pc_id` is now a required foreign key referencing `edge_pcs.edge_pc_id`.
 When upgrading older databases, a migration will insert a sentinel `edge_pcs` row with `edge_pc_id='edge-001'`

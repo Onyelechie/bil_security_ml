@@ -24,3 +24,10 @@ def test_ws_max_connections_must_be_positive():
     except ValueError as exc:
         assert "WS_MAX_CONNECTIONS" in str(exc)
 
+
+def test_ws_max_image_bytes_must_be_positive():
+    try:
+        Settings(ws_max_image_bytes=0)
+        assert False, "Expected ValueError for ws_max_image_bytes=0"
+    except ValueError as exc:
+        assert "WS_MAX_IMAGE_BYTES" in str(exc)

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket
 
 from ..services.ws_alert_dispatcher import (
     AlertDispatchFailure,
@@ -15,12 +16,19 @@ from ..services.ws_connection_manager import WebSocketConnectionManager
 router = APIRouter(tags=["alerts-websocket"])
 
 
-def _extract_alert_payload(message: Any) -> dict[str, Any]:
+def _extract_alert_payload(message: Any, *, strip_type: bool = False) -> dict[str, Any]:
     if not isinstance(message, dict):
         raise TypeError("Expected a JSON object payload")
-    payload = message.get("alert", message)
+    if "alert" in message:
+        payload = message["alert"]
+    elif "payload" in message:
+        payload = message["payload"]
+    elif strip_type and "type" in message:
+        payload = {k: v for k, v in message.items() if k != "type"}
+    else:
+        payload = message
     if not isinstance(payload, dict):
-        raise TypeError("Expected 'alert' to be a JSON object")
+        raise TypeError("Expected alert payload to be a JSON object")
     return payload
 
 
@@ -28,6 +36,7 @@ def _extract_alert_payload(message: Any) -> dict[str, Any]:
 async def alerts_websocket(websocket: WebSocket) -> None:
     manager: WebSocketConnectionManager | None = getattr(websocket.app.state, "ws_connection_manager", None)
     dispatcher: WebSocketAlertDispatcher | None = getattr(websocket.app.state, "ws_alert_dispatcher", None)
+    max_image_bytes: int = int(getattr(websocket.app.state, "ws_max_image_bytes", 5_000_000))
 
     if manager is None or dispatcher is None:
         await websocket.close(code=1011, reason="WebSocket alert subsystem not initialized")
@@ -44,15 +53,98 @@ async def alerts_websocket(websocket: WebSocket) -> None:
                 "type": "connected",
                 "status": "ok",
                 "message": "WebSocket alert ingestion channel ready",
+                "max_image_bytes": max_image_bytes,
             },
         )
 
+        pending_alert_payload: dict[str, Any] | None = None
         while True:
-            try:
-                incoming = await websocket.receive_json()
-            except WebSocketDisconnect:
+            incoming = await websocket.receive()
+            incoming_type = incoming.get("type")
+            if incoming_type == "websocket.disconnect":
                 return
-            except (TypeError, ValueError):
+            if incoming_type != "websocket.receive":
+                continue
+
+            binary_payload = incoming.get("bytes")
+            text_payload = incoming.get("text")
+
+            if binary_payload is not None:
+                if pending_alert_payload is None:
+                    await manager.send_json(
+                        websocket,
+                        {
+                            "type": "error",
+                            "code": "meta_missing",
+                            "message": "Send an 'alert_meta' JSON frame before binary image bytes",
+                        },
+                    )
+                    continue
+                if len(binary_payload) == 0:
+                    await manager.send_json(
+                        websocket,
+                        {
+                            "type": "error",
+                            "code": "invalid_message",
+                            "message": "Binary image frame is empty",
+                        },
+                    )
+                    continue
+                if len(binary_payload) > max_image_bytes:
+                    pending_alert_payload = None
+                    await manager.send_json(
+                        websocket,
+                        {
+                            "type": "error",
+                            "code": "image_too_large",
+                            "message": f"Image exceeds max size ({max_image_bytes} bytes)",
+                        },
+                    )
+                    continue
+
+                alert_payload = pending_alert_payload
+                pending_alert_payload = None
+                try:
+                    alert_out = await dispatcher.submit(alert_payload, image_bytes=binary_payload)
+                except AlertValidationFailure as exc:
+                    await manager.send_json(
+                        websocket,
+                        {"type": "error", "code": "validation_error", "errors": exc.errors},
+                    )
+                    continue
+                except AlertQueueFullError as exc:
+                    await manager.send_json(
+                        websocket,
+                        {"type": "error", "code": "queue_full", "message": str(exc)},
+                    )
+                    continue
+                except AlertDispatchFailure as exc:
+                    await manager.send_json(
+                        websocket,
+                        {"type": "error", "code": "ingestion_error", "message": str(exc)},
+                    )
+                    continue
+
+                await manager.send_json(
+                    websocket,
+                    {"type": "ack", "status": "ok", "alert": alert_out},
+                )
+                continue
+
+            if text_payload is None:
+                await manager.send_json(
+                    websocket,
+                    {
+                        "type": "error",
+                        "code": "invalid_message",
+                        "message": "Expected a text JSON frame or binary image frame",
+                    },
+                )
+                continue
+
+            try:
+                incoming_json = json.loads(text_payload)
+            except json.JSONDecodeError:
                 await manager.send_json(
                     websocket,
                     {
@@ -64,7 +156,40 @@ async def alerts_websocket(websocket: WebSocket) -> None:
                 continue
 
             try:
-                alert_payload = _extract_alert_payload(incoming)
+                if isinstance(incoming_json, dict) and incoming_json.get("type") == "alert_meta":
+                    if pending_alert_payload is not None:
+                        await manager.send_json(
+                            websocket,
+                            {
+                                "type": "error",
+                                "code": "binary_expected",
+                                "message": "Binary frame expected for previously received metadata",
+                            },
+                        )
+                        continue
+                    pending_alert_payload = _extract_alert_payload(incoming_json, strip_type=True)
+                    await manager.send_json(
+                        websocket,
+                        {
+                            "type": "meta_received",
+                            "status": "ok",
+                            "message": "Metadata accepted; send binary image frame next",
+                        },
+                    )
+                    continue
+
+                if pending_alert_payload is not None:
+                    await manager.send_json(
+                        websocket,
+                        {
+                            "type": "error",
+                            "code": "binary_expected",
+                            "message": "Binary frame expected for previously received metadata",
+                        },
+                    )
+                    continue
+
+                alert_payload = _extract_alert_payload(incoming_json)
                 alert_out = await dispatcher.submit(alert_payload)
             except TypeError as exc:
                 await manager.send_json(

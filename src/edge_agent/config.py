@@ -47,6 +47,15 @@ class EdgeSettings(BaseSettings):
     trigger_cooldown_sec: int = 10
     trigger_merge_window_sec: float = 2.0
 
+    # --- RTSP ingest (low-res stream for analysis) ---
+    rtsp_url_low: str = ""  # set in .env
+    ring_buffer_seconds: int = 10  # keep last N seconds of frames
+
+    # Frame sampling / scaling (keep it light)
+    analysis_fps: float = 5.0  # frames per second stored in ring buffer
+    frame_width: int = 640
+    frame_height: int = 360
+
 
 # Convenience global settings object.
 # This lets other modules do: from edge_agent.config import settings

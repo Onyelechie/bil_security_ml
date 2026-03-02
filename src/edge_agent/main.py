@@ -33,6 +33,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run the full edge pipeline (placeholder for now).",
     )
 
+    parser.add_argument(
+        "--rtsp-test",
+        action="store_true",
+        help="Start RTSP reader and print ring buffer size.",
+    )
+
     return parser
 
 
@@ -129,6 +135,25 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 asyncio.run(_main())
             except KeyboardInterrupt:
                 logger.info("TCP listener stopped (Ctrl+C).")
+            return 0
+
+        if args.rtsp_test:
+            import asyncio
+            from .video.ring_buffer import RingBuffer
+            from .video.rtsp_reader import RtspReader
+
+            async def _rtsp_main() -> None:
+                ring = RingBuffer(seconds=cfg.ring_buffer_seconds)
+                reader = RtspReader(cfg, ring)
+                await reader.start()
+                try:
+                    while True:
+                        logger.info("RingBuffer frames=%d", ring.size())
+                        await asyncio.sleep(2)
+                finally:
+                    await reader.stop()
+
+            asyncio.run(_rtsp_main())
             return 0
 
         if args.run:

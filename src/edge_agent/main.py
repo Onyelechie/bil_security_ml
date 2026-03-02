@@ -86,7 +86,15 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
 
         if args.tcp_listen:
             import asyncio
+
             from .triggers.tcp_trigger import TcpMotionTrigger
+            from .triggers.trigger_manager import TriggerManager
+
+            # Create the manager once (config-driven, not hardcoded)
+            mgr = TriggerManager(
+                cooldown_sec=cfg.trigger_cooldown_sec,
+                merge_window_sec=cfg.trigger_merge_window_sec,
+            )
 
             async def _main() -> None:
                 trigger = TcpMotionTrigger(cfg)
@@ -96,17 +104,24 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                         try:
                             evt = await trigger.queue.get()
                         except asyncio.CancelledError:
-                            # Happens when Ctrl+C cancels the running task
                             break
 
-                        logger.info(
-                            "MOTION: source=%s camera_id=%s camera_name=%s policy=%s user=%s",
-                            evt.source,
-                            evt.camera_id,
-                            evt.camera_name,
-                            evt.policy_name,
-                            evt.user_string,
-                        )
+                        accepted = mgr.accept(evt)
+                        if accepted:
+                            logger.info(
+                                "MOTION(accepted): source=%s camera_id=%s camera_name=%s policy=%s user=%s",
+                                evt.source,
+                                evt.camera_id,
+                                evt.camera_name,
+                                evt.policy_name,
+                                evt.user_string,
+                            )
+                        else:
+                            logger.debug(
+                                "MOTION(dropped): source=%s camera_id=%s",
+                                evt.source,
+                                evt.camera_id,
+                            )
                 finally:
                     await trigger.stop()
 

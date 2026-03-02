@@ -43,6 +43,10 @@ class EdgeSettings(BaseSettings):
     edge_pc_id: str = "edge_demo"
     site_name: str = "Demo Site"
 
+    # --- Trigger control (rate limit / dedupe) ---
+    trigger_cooldown_sec: int = 10
+    trigger_merge_window_sec: float = 2.0
+
 
 # Convenience global settings object.
 # This lets other modules do: from edge_agent.config import settings

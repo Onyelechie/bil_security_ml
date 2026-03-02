@@ -39,6 +39,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Start RTSP reader and print ring buffer size.",
     )
 
+    parser.add_argument(
+        "--motion-test",
+        action="store_true",
+        help="Run RTSP reader + local motion trigger (live test).",
+    )
+
     return parser
 
 
@@ -158,6 +164,42 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
 
         if args.run:
             logger.info("Full edge pipeline not implemented yet. (Step 1 placeholder)")
+            return 0
+
+        if args.motion_test:
+            import asyncio
+
+            from .triggers.local_motion_trigger import LocalMotionTrigger
+            from .triggers.trigger_manager import TriggerManager
+            from .video.ring_buffer import RingBuffer
+            from .video.rtsp_reader import RtspReader
+
+            async def _motion_main() -> None:
+                ring = RingBuffer(seconds=cfg.ring_buffer_seconds)
+
+                mgr = TriggerManager(
+                    cooldown_sec=cfg.trigger_cooldown_sec,
+                    merge_window_sec=cfg.trigger_merge_window_sec,
+                )
+
+                reader = RtspReader(cfg, ring)
+                local = LocalMotionTrigger(cfg, ring, mgr)
+
+                await reader.start()
+                task_local = asyncio.create_task(local.run(), name="local-motion")
+
+                try:
+                    while True:
+                        logger.info("RTSP live: ring_frames=%d", ring.size())
+                        await asyncio.sleep(2)
+                finally:
+                    task_local.cancel()
+                    await reader.stop()
+
+            try:
+                asyncio.run(_motion_main())
+            except KeyboardInterrupt:
+                logger.info("Motion test stopped (Ctrl+C).")
             return 0
 
         logger.info("Nothing to do. Use --print-config, --http-serve, --tcp-listen, or --run.")

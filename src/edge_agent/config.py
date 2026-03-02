@@ -56,6 +56,12 @@ class EdgeSettings(BaseSettings):
     frame_width: int = 640
     frame_height: int = 360
 
+    # --- Local motion trigger (cheap) ---
+    motion_fps: float = 2.0  # how often we check for motion
+    motion_pixel_delta: int = 25  # per-pixel diff threshold (0..255)
+    motion_threshold: float = 0.02  # ratio of changed pixels required to trigger
+    default_camera_id: str = "1"  # used for local motion events to match TCP camera_id
+
 
 # Convenience global settings object.
 # This lets other modules do: from edge_agent.config import settings

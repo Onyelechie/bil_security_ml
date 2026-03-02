@@ -4,9 +4,10 @@ import asyncio
 import logging
 import subprocess
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
-import numpy as np
 import imageio_ffmpeg
+import numpy as np
 
 from ..config import EdgeSettings
 from .ring_buffer import RingBuffer
@@ -28,7 +29,7 @@ class RtspReader:
             return
         self._stop.clear()
         self._task = asyncio.create_task(self._run_loop(), name="rtsp-reader")
-        logger.info("RTSP reader started")
+        logger.info("RTSP reader started (stream=%s)", self._stream_label(self._cfg.rtsp_url_low))
 
     async def stop(self) -> None:
         self._stop.set()
@@ -43,23 +44,73 @@ class RtspReader:
         fps = float(self._cfg.analysis_fps)
         frame_bytes = w * h  # grayscale
 
+        stream = self._stream_label(self._cfg.rtsp_url_low)
+
+        attempt = 0
+        backoff_s = 2.0  # exponential backoff up to 10s
+
         while not self._stop.is_set():
+            attempt += 1
+            first_frame = True
+
             try:
                 self._start_ffmpeg(w=w, h=h, fps=fps)
                 assert self._proc is not None and self._proc.stdout is not None
 
+                logger.info("RTSP connect attempt=%d stream=%s", attempt, stream)
+
                 while not self._stop.is_set():
-                    buf = self._proc.stdout.read(frame_bytes)
+                    # Give extra time for the *first* decoded frame (keyframe wait), then tighter stall checks.
+                    timeout_s = 30.0 if first_frame else 5.0
+
+                    try:
+                        buf = await asyncio.wait_for(
+                            asyncio.to_thread(self._proc.stdout.read, frame_bytes),
+                            timeout=timeout_s,
+                        )
+                    except asyncio.TimeoutError:
+                        # More user-friendly classification
+                        if first_frame:
+                            raise RuntimeError(f"STARTUP_TIMEOUT: no first frame within {timeout_s:.0f}s")
+                        raise RuntimeError(f"STALL: no frame bytes for {timeout_s:.0f}s")
+
                     if not buf or len(buf) < frame_bytes:
-                        raise RuntimeError("ffmpeg stream ended")
+                        raise RuntimeError("DISCONNECT: ffmpeg stream ended")
 
                     frame = np.frombuffer(buf, dtype=np.uint8).reshape((h, w))
                     self._ring.push(datetime.now(timezone.utc), frame)
 
+                    if first_frame:
+                        logger.info("RTSP first frame received stream=%s (attempt=%d)", stream, attempt)
+                        first_frame = False
+                        # reset backoff after success
+                        backoff_s = 2.0
+
             except Exception as exc:
-                logger.warning("RTSP read error: %s (restarting in 2s)", exc)
+                stderr_short = self._read_stderr_if_exited_short()
+
+                msg = str(exc)
+                if msg.startswith(("STARTUP_TIMEOUT", "STALL", "DISCONNECT")):
+                    code = msg.split(":", 1)[0]
+                    detail = msg.split(":", 1)[1].strip() if ":" in msg else ""
+                else:
+                    code = "ERROR"
+                    detail = msg
+
+                logger.warning(
+                    "RTSP %s: %s stream=%s (attempt=%d). Retrying in %.1fs",
+                    code,
+                    detail,
+                    stream,
+                    attempt,
+                    backoff_s,
+                )
+                if stderr_short:
+                    logger.warning("ffmpeg stderr (short): %s", stderr_short)
+
                 self._kill_proc()
-                await asyncio.sleep(2)
+                await asyncio.sleep(backoff_s)
+                backoff_s = min(backoff_s * 2.0, 10.0)
 
     def _start_ffmpeg(self, *, w: int, h: int, fps: float) -> None:
         self._kill_proc()
@@ -83,6 +134,7 @@ class RtspReader:
             "gray",
             "pipe:1",
         ]
+        logger.debug("Starting ffmpeg: %s", " ".join(cmd))
         self._proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     def _kill_proc(self) -> None:
@@ -93,3 +145,36 @@ class RtspReader:
         except Exception:
             pass
         self._proc = None
+
+    @staticmethod
+    def _stream_label(url: str) -> str:
+        """
+        Return a safe label like: 192.168.2.100:8554/Streaming/Channels/102/
+        (no username/password)
+        """
+        try:
+            p = urlparse(url)
+            host = p.hostname or "unknown-host"
+            port = p.port or 554
+            path = p.path or "/"
+            return f"{host}:{port}{path}"
+        except Exception:
+            return "unknown-stream"
+
+    def _read_stderr_if_exited_short(self) -> str:
+        """
+        Read a short stderr snippet only if ffmpeg has exited.
+        Prevents blocking on stderr when process is still running.
+        """
+        if not self._proc or not self._proc.stderr:
+            return ""
+        if self._proc.poll() is None:
+            return ""
+        try:
+            txt = self._proc.stderr.read().decode("utf-8", errors="replace").strip()
+        except Exception:
+            return ""
+        if not txt:
+            return ""
+        # keep only first line (demo-friendly)
+        return txt.splitlines()[0][:300]

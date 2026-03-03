@@ -33,7 +33,7 @@ def test_receive_alert():
 
 
 def test_list_alerts():
-    #Get existing alerts (if any)
+    # Get existing alerts (if any)
     inital_response = client.get("/api/alerts")
     assert inital_response.status_code == 200
     initial_count = len(inital_response.json().get("alerts", []))

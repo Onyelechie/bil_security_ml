@@ -34,11 +34,11 @@ def test_receive_alert():
 
 def test_list_alerts():
     # Get existing alerts (if any)
-    inital_response = client.get("/api/alerts")
-    assert inital_response.status_code == 200
-    initial_count = len(inital_response.json().get("alerts", []))
+    initial_response = client.get("/api/alerts")
+    assert initial_response.status_code == 200
+    initial_count = len(initial_response.json().get("alerts", []))
 
-    # create a new alert
+    # Create a new alert
     payload = {
         "site_id": "site_002",
         "camera_id": "cam_02",
@@ -54,8 +54,10 @@ def test_list_alerts():
     assert response.status_code == 200
     data = response.json()
     assert "alerts" in data
-    assert len(data["alerts"]) == initial_count + 1 # At least one more than before
-    assert data["alerts"][-1]["site_id"] == payload["site_id"] # The last alert should be the one we just added
+    assert len(data["alerts"]) == initial_count + 1  # At least one more than before
+    assert (
+        data["alerts"][-1]["site_id"] == payload["site_id"]
+      )  # The last alert should be the one we just added
 
 def test_health_check():
     response = client.get("/")

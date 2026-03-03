@@ -13,6 +13,7 @@ engine = create_engine(
 # Ensure SQLite enforces foreign key constraints at the connection level.
 # PostgreSQL enforces FKs by default; SQLite requires the PRAGMA to be set per connection.
 if settings.database_url.startswith("sqlite"):
+
     def _enable_sqlite_foreign_keys(dbapi_con, connection_record):
         try:
             cursor = dbapi_con.cursor()
@@ -22,9 +23,7 @@ if settings.database_url.startswith("sqlite"):
             # Log a warning rather than silently swallowing the exception so
             # static analysis tools (Bandit) do not flag a bare pass and
             # operators have visibility into the failure.
-            logging.getLogger(__name__).warning(
-                "Could not enable SQLite foreign_keys PRAGMA on connect: %s", exc
-            )
+            logging.getLogger(__name__).warning("Could not enable SQLite foreign_keys PRAGMA on connect: %s", exc)
 
     event.listen(engine, "connect", _enable_sqlite_foreign_keys)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

@@ -4,39 +4,37 @@ on:
   pull_request:
     types: [opened, reopened, ready_for_review, closed]
   pull_request_review:
-    types: [submitted, edited, dismissed]
-  pull_request_review_comment:
-    types: [created]   # change to [created, edited, deleted] if you want
-  issue_comment:
-    types: [created]   # change to [created, edited, deleted] if you want
+    types: [submitted]  # <- keep only submitted to avoid repeats/spam
 
 jobs:
   notify:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      pull-requests: read   # needed to fetch inline review comments via GitHub API
 
     steps:
       - name: Notify Discord
         env:
-          DISCORD_WEBHOOK_PR_CREATED: ${{ secrets.DISCORD_WEBHOOK_PR_CREATED }}
-          DISCORD_WEBHOOK_PR_MERGED:  ${{ secrets.DISCORD_WEBHOOK_PR_MERGED }}
-          DISCORD_WEBHOOK_PR_REVIEWS: ${{ secrets.DISCORD_WEBHOOK_PR_CREATED }}
-          DISCORD_WEBHOOK_PR_COMMENTS: ${{ secrets.DISCORD_WEBHOOK_PR_CREATED }}
+          # built-in token (no new secrets needed)
+          GITHUB_TOKEN: ${{ github.token }}
+
+          # reuse your existing webhooks (no new Discord webhooks needed)
+          DISCORD_WEBHOOK_PR_CREATED:  ${{ secrets.DISCORD_WEBHOOK_PR_CREATED }}
+          DISCORD_WEBHOOK_PR_MERGED:   ${{ secrets.DISCORD_WEBHOOK_PR_MERGED }}
+          DISCORD_WEBHOOK_PR_REVIEWS:  ${{ secrets.DISCORD_WEBHOOK_PR_CREATED }}
         run: |
           set -euo pipefail
 
           EVENT_NAME='${{ github.event_name }}'
           ACTION='${{ github.event.action }}'
 
-          # Read everything from the event payload (more reliable than string interpolation)
           JQ="jq -r"
           PAYLOAD_FILE="$GITHUB_EVENT_PATH"
 
-          # Helper: truncate long bodies so Discord doesn't get spammed
           truncate() {
             local s="$1"
-            local max=500
+            local max="${2:-500}"
             if [ "${#s}" -gt "$max" ]; then
               echo "${s:0:$max}…"
             else
@@ -44,14 +42,23 @@ jobs:
             fi
           }
 
+          sanitize_body() {
+            # Remove GitHub-rendered image tags and collapse whitespace/newlines
+            echo "$1" \
+              | sed -E 's/<img[^>]*>//g' \
+              | tr '\r' ' ' \
+              | sed -E 's/[[:space:]]+/ /g' \
+              | sed -E 's/^ +| +$//g'
+          }
+
           post_discord() {
             local webhook="$1"
             local msg="$2"
             [ -z "$webhook" ] && { echo "Webhook missing, skipping."; return 0; }
 
-            # Avoid accidental @everyone/@here
+            # flags:4 => suppress link embeds so it doesn't look "duplicated"
             local json
-            json="$(jq -n --arg content "$msg" '{content:$content, allowed_mentions:{parse:[]}}')"
+            json="$(jq -n --arg content "$msg" '{content:$content, flags:4, allowed_mentions:{parse:[]}}')"
             curl -sS -H "Content-Type: application/json" -X POST -d "$json" "$webhook" >/dev/null
           }
 
@@ -88,59 +95,62 @@ jobs:
             exit 0
           fi
 
-          # --- pull_request_review events (approve / changes requested / review comment) ---
+          # --- pull_request_review events (ONE message, includes inline comments from that review) ---
           if [ "$EVENT_NAME" = "pull_request_review" ]; then
             PR_TITLE="$($JQ '.pull_request.title' "$PAYLOAD_FILE")"
             PR_URL="$($JQ '.pull_request.html_url' "$PAYLOAD_FILE")"
             PR_NUMBER="$($JQ '.pull_request.number' "$PAYLOAD_FILE")"
+
+            REVIEW_ID="$($JQ '.review.id' "$PAYLOAD_FILE")"
+            REVIEW_URL="$($JQ '.review.html_url // ""' "$PAYLOAD_FILE")"
             REVIEWER="$($JQ '.review.user.login' "$PAYLOAD_FILE")"
-            STATE="$($JQ '.review.state // "" | ascii_downcase' "$PAYLOAD_FILE")"  # approved | changes_requested | commented | dismissed
+
+            STATE="$($JQ '.review.state // "" | ascii_downcase' "$PAYLOAD_FILE")"  # approved|changes_requested|commented
             BODY_RAW="$($JQ '.review.body // ""' "$PAYLOAD_FILE")"
-            BODY="$(truncate "$BODY_RAW")"
+            BODY="$(truncate "$(sanitize_body "$BODY_RAW")" 700)"
 
             ICON="📝"
             if [ "$STATE" = "approved" ]; then ICON="✅"; fi
             if [ "$STATE" = "changes_requested" ]; then ICON="❌"; fi
-            if [ "$STATE" = "dismissed" ]; then ICON="⚠️"; fi
 
-            MSG=$''"${ICON}"$' **Review '"${STATE}"$'** — PR #'"${PR_NUMBER}"$'\n**'"${PR_TITLE}"$'**\n👤 Reviewer: '"${REVIEWER}"$'\n💬 '"${BODY}"$'\n🔗 '"${PR_URL}"
+            # Fetch inline comments that belong to THIS review
+            COMMENTS_JSON="$(curl -sS \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews/${REVIEW_ID}/comments?per_page=100")"
+
+            COUNT="$(echo "$COMMENTS_JSON" | jq 'length')"
+
+            # Build bullet list (limit to first 8 to avoid Discord 2000 char limit)
+            LIST="$(echo "$COMMENTS_JSON" | jq -r '
+              .[0:8][] |
+              "• \(.path):\(.line // .original_line // \"?\") — " +
+              (.body
+                | gsub("<img[^>]*>";"")
+                | gsub("\r";" ")
+                | gsub("\n+";" ")
+                | gsub("[[:space:]]+";" ")
+                | if length>160 then .[0:160] + "…" else . end
+              )
+            ')"
+
+            INLINE_SECTION=""
+            if [ "$COUNT" -gt 0 ]; then
+              INLINE_SECTION=$'\n\n**Inline comments ('"${COUNT}"$')**\n'"${LIST}"
+              if [ "$COUNT" -gt 8 ]; then
+                INLINE_SECTION+=$'\n… +'"$((COUNT-8))"$' more (see PR).'
+              fi
+            fi
+
+            # Prefer linking the review if present
+            LINK="$PR_URL"
+            if [ -n "$REVIEW_URL" ] && [ "$REVIEW_URL" != "null" ]; then
+              LINK="$REVIEW_URL"
+            fi
+
+            MSG=$''"${ICON}"$' **Review '"${STATE}"$'** — PR #'"${PR_NUMBER}"$'\n**'"${PR_TITLE}"$'**\n👤 Reviewer: '"${REVIEWER}"$'\n💬 '"${BODY}"$''"${INLINE_SECTION}"$'\n🔗 '"${LINK}"
+
             post_discord "$DISCORD_WEBHOOK_PR_REVIEWS" "$MSG"
-            exit 0
-          fi
-
-          # --- inline code comments on a PR diff ---
-          if [ "$EVENT_NAME" = "pull_request_review_comment" ]; then
-            PR_TITLE="$($JQ '.pull_request.title' "$PAYLOAD_FILE")"
-            PR_URL="$($JQ '.pull_request.html_url' "$PAYLOAD_FILE")"
-            PR_NUMBER="$($JQ '.pull_request.number' "$PAYLOAD_FILE")"
-            WHO="$($JQ '.comment.user.login' "$PAYLOAD_FILE")"
-            PATH_="$($JQ '.comment.path // ""' "$PAYLOAD_FILE")"
-            LINE_="$($JQ '.comment.line // .comment.original_line // ""' "$PAYLOAD_FILE")"
-            COMMENT_URL="$($JQ '.comment.html_url' "$PAYLOAD_FILE")"
-            BODY_RAW="$($JQ '.comment.body // ""' "$PAYLOAD_FILE")"
-            BODY="$(truncate "$BODY_RAW")"
-
-            MSG=$'🧵 **Inline PR Comment** — PR #'"${PR_NUMBER}"$'\n**'"${PR_TITLE}"$'**\n👤 '"${WHO}"$'\n📄 '"${PATH_}"$' : line '"${LINE_}"$'\n💬 '"${BODY}"$'\n🔗 '"${COMMENT_URL}"$'\n(PR: '"${PR_URL}"$')'
-            post_discord "$DISCORD_WEBHOOK_PR_COMMENTS" "$MSG"
-            exit 0
-          fi
-
-          # --- general Conversation tab comments (issues API) ---
-          if [ "$EVENT_NAME" = "issue_comment" ]; then
-            # Only notify if it's a PR (not a regular issue)
-            IS_PR="$(jq -r '.issue.pull_request != null' "$PAYLOAD_FILE")"
-            [ "$IS_PR" != "true" ] && { echo "Issue comment, but not a PR. Skipping."; exit 0; }
-
-            PR_TITLE="$($JQ '.issue.title' "$PAYLOAD_FILE")"
-            PR_URL="$($JQ '.issue.html_url' "$PAYLOAD_FILE")"
-            PR_NUMBER="$($JQ '.issue.number' "$PAYLOAD_FILE")"
-            WHO="$($JQ '.comment.user.login' "$PAYLOAD_FILE")"
-            BODY_RAW="$($JQ '.comment.body // ""' "$PAYLOAD_FILE")"
-            BODY="$(truncate "$BODY_RAW")"
-            COMMENT_URL="$($JQ '.comment.html_url' "$PAYLOAD_FILE")"
-
-            MSG=$'💬 **PR Comment (Conversation)** — PR #'"${PR_NUMBER}"$'\n**'"${PR_TITLE}"$'**\n👤 '"${WHO}"$'\n💬 '"${BODY}"$'\n🔗 '"${COMMENT_URL}"$'\n(PR: '"${PR_URL}"$')'
-            post_discord "$DISCORD_WEBHOOK_PR_COMMENTS" "$MSG"
             exit 0
           fi
 

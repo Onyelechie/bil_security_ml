@@ -145,8 +145,6 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
 
         if args.rtsp_test:
             import asyncio
-            from .video.ring_buffer import RingBuffer
-            from .video.rtsp_reader import RtspReader
 
             async def _rtsp_main() -> None:
                 ring = RingBuffer(seconds=cfg.ring_buffer_seconds)
@@ -169,35 +167,36 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
         if args.motion_test:
             import asyncio
 
+            from .video.ring_buffer import RingBuffer
+            from .video.rtsp_reader import RtspReader
             from .triggers.local_motion_trigger import LocalMotionTrigger
             from .triggers.trigger_manager import TriggerManager
 
+            if not cfg.rtsp_url_low:
+                logger.warning("Motion test requires RTSP_URL_LOW. Set it in env/.env and retry.")
+                return 0
+
             async def _motion_main() -> None:
                 ring = RingBuffer(seconds=cfg.ring_buffer_seconds)
+                reader = RtspReader(cfg, ring)
 
                 mgr = TriggerManager(
                     cooldown_sec=cfg.trigger_cooldown_sec,
                     merge_window_sec=cfg.trigger_merge_window_sec,
                 )
-
-                reader = RtspReader(cfg, ring)
-                local = LocalMotionTrigger(cfg, ring, mgr)
+                motion = LocalMotionTrigger(cfg, ring, mgr)
 
                 await reader.start()
-                task_local = asyncio.create_task(local.run(), name="local-motion")
-
+                await motion.start()
                 try:
                     while True:
+                        await asyncio.sleep(2.0)
                         logger.info("RTSP live: ring_frames=%d", ring.size())
-                        await asyncio.sleep(2)
                 finally:
-                    task_local.cancel()
+                    await motion.stop()
                     await reader.stop()
 
-            try:
-                asyncio.run(_motion_main())
-            except KeyboardInterrupt:
-                logger.info("Motion test stopped (Ctrl+C).")
+            asyncio.run(_motion_main())
             return 0
 
         logger.info("Nothing to do. Use --print-config, --http-serve, --tcp-listen, or --run.")

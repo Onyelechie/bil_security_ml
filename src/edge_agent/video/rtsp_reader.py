@@ -29,12 +29,24 @@ class RtspReader:
             return
         self._stop.clear()
         self._task = asyncio.create_task(self._run_loop(), name="rtsp-reader")
-        logger.info("RTSP reader started (stream=%s)", self._stream_label(self._cfg.rtsp_url_low))
+        logger.info(
+            "RTSP reader started (stream=%s)",
+            self._stream_label(self._cfg.rtsp_url_low),
+        )
 
     async def stop(self) -> None:
         self._stop.set()
-        if self._task:
-            self._task.cancel()
+
+        task = self._task
+        self._task = None
+
+        if task:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
         self._kill_proc()
         logger.info("RTSP reader stopped")
 
@@ -82,7 +94,11 @@ class RtspReader:
                     self._ring.push(datetime.now(timezone.utc), frame)
 
                     if first_frame:
-                        logger.info("RTSP first frame received stream=%s (attempt=%d)", stream, attempt)
+                        logger.info(
+                            "RTSP first frame received stream=%s (attempt=%d)",
+                            stream,
+                            attempt,
+                        )
                         first_frame = False
                         # reset backoff after success
                         backoff_s = 2.0

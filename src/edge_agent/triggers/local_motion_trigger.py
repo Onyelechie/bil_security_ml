@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import suppress
 from datetime import datetime, timezone
 
 import numpy as np
@@ -34,16 +35,53 @@ class LocalMotionTrigger:
     Emits MotionEvent(source="local") through TriggerManager when motion is detected.
     """
 
-    def __init__(self, cfg: EdgeSettings, ring: RingBuffer, mgr: TriggerManager) -> None:
+    def __init__(
+        self,
+        cfg: EdgeSettings,
+        ring: RingBuffer,
+        mgr: TriggerManager,
+        *,
+        queue_max: int = 1000,
+    ) -> None:
         self._cfg = cfg
         self._ring = ring
         self._mgr = mgr
         self._prev: np.ndarray | None = None
 
+        self._stop = asyncio.Event()
+        self._task: asyncio.Task | None = None
+        self._queue: asyncio.Queue[MotionEvent] = asyncio.Queue(maxsize=queue_max)
+
+    @property
+    def queue(self) -> asyncio.Queue[MotionEvent]:
+        return self._queue
+
+    async def start(self) -> None:
+        # Prevent double-start
+        if self._task and not self._task.done():
+            return
+
+        self._stop.clear()
+        self._task = asyncio.create_task(self.run(), name="local-motion-trigger")
+        logger.info("Local motion trigger started")
+
+    async def stop(self) -> None:
+        self._stop.set()
+
+        task = self._task
+        self._task = None
+
+        if task:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+        logger.info("Local motion trigger stopped")
+
     async def run(self) -> None:
         period = 1.0 / max(self._cfg.motion_fps, 0.1)
 
-        while True:
+        while not self._stop.is_set():
             curr = self._ring.latest()
             if curr is None:
                 await asyncio.sleep(0.2)
@@ -66,11 +104,23 @@ class LocalMotionTrigger:
                         camera_id=self._cfg.default_camera_id,
                         source="local",
                     )
+
                     accepted = self._mgr.accept(evt)
+
                     if accepted:
-                        logger.info("LOCAL MOTION(accepted): camera_id=%s score=%.4f", evt.camera_id, score)
+                        logger.info(
+                            "LOCAL MOTION(accepted): camera_id=%s score=%.4f",
+                            evt.camera_id,
+                            score,
+                        )
+                        with suppress(asyncio.QueueFull):
+                            self._queue.put_nowait(evt)
                     else:
-                        logger.debug("LOCAL MOTION(dropped): camera_id=%s score=%.4f", evt.camera_id, score)
+                        logger.debug(
+                            "LOCAL MOTION(dropped): camera_id=%s score=%.4f",
+                            evt.camera_id,
+                            score,
+                        )
 
             self._prev = curr
             await asyncio.sleep(period)

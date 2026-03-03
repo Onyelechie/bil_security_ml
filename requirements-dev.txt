@@ -31,5 +31,9 @@ flake8>=6.1.0
 pip-audit>=2.0.0
 bandit>=1.7.0
 
+# Optional lightweight CV runtime for tests that require `cv2` (headless)
+# Use headless build to avoid GUI deps in CI.
+opencv-python-headless>=4.8.0
+
 # Note: For full ML / CV features (torch, torchvision, ultralytics, opencv, etc.)
 # install the main `requirements.txt` on a machine with appropriate wheels or use conda.

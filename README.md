@@ -456,6 +456,56 @@ python -m pytest tests/server/test_heartbeat.py -v
 python -m pytest tests/edge_agent/test_edge_api.py -v
 ```
 
+### Testing with Makefile (recommended)
+
+A `Makefile` is provided to simplify running the test suite. From the repository root run:
+
+```bash
+make test
+```
+
+What `make test` does:
+- Ensures the `PYTHONPATH` includes the `src/` package layout and project root so tests import correctly.
+- Invokes `pytest -v` using the repository `pytest.ini` configuration (including coverage reporting).
+
+Prerequisites:
+- Install project dependencies before running tests: `pip install -r requirements.txt`.
+- Note: some ML packages (e.g. `torch`, `torchvision`) are large binary packages and may take time to download or require platform-specific wheels. If you only want to run server/unit tests (and avoid heavy ML packages), consider creating a lightweight `requirements-dev.txt` that omits the large ML deps.
+
+Troubleshooting:
+- If pytest fails with an error about `--cov` options, install `pytest-cov` (already included in `requirements.txt`):
+
+```bash
+pip install pytest-cov
+```
+
+- If tests fail due to missing DB tables (Alembic migrations not applied), the test suite will attempt to create tables via SQLAlchemy metadata for development. For stricter environments, run migrations before testing:
+
+```bash
+alembic upgrade head
+```
+
+- If you see import errors for top-level packages (for example `benchmark`), ensure you're running `make test` from the repository root so the `Makefile` sets `PYTHONPATH` correctly, or run:
+
+```bash
+PYTHONPATH=src:. pytest -v
+```
+
+If you'd like, I can add a `requirements-dev.txt` (lighter) and a small `scripts/run_tests.sh` wrapper — tell me which you'd prefer.
+I have added a `requirements-dev.txt` that excludes heavy machine-learning and CV packages so you can install dev/test dependencies quickly.
+
+Quick start using the lightweight development dependencies:
+
+```bash
+# Install lightweight dev-only deps (fast)
+pip install -r requirements-dev.txt
+
+# Run the test suite via Makefile
+make test
+```
+
+When you need full ML capabilities (training, model benchmarks, CV tooling) install the full pinned `requirements.txt` or use the conda instructions provided earlier.
+
 ### Technical Notes
 
 - "Motion events" (from the problem statement) can be sent from our existing software via TCP.

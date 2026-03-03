@@ -1,8 +1,8 @@
 # --- Computer Vision & ML ---
-torch==2.10.0
-torchvision==0.25.0
+torch>=2.2.0
+torchvision>=0.17.2
 ultralytics==8.4.12
-opencv-python==4.13.0.92
+opencv-python==4.12.0.88
 effdet==0.4.1
 timm==1.0.24
 
@@ -32,3 +32,4 @@ pandas-stubs==3.0.0.260204
 # --- Testing ---
 pytest>=8.0.0
 pytest-asyncio>=0.23.5
+pytest-cov>=4.0.0

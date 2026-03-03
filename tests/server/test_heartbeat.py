@@ -9,8 +9,10 @@ client = TestClient(app)
 
 
 def test_heartbeat_create_and_update():
+    import uuid
+    edge_pc_id = f"edge-{uuid.uuid4()}"
     payload = {
-        "edge_pc_id": "edge-001",
+        "edge_pc_id": edge_pc_id,
         "site_name": "Site A",
         "status": "online",
         "timestamp": datetime.now(timezone.utc).isoformat(),

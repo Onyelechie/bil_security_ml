@@ -58,6 +58,7 @@ def test_list_alerts():
     assert (
         data["alerts"][-1]["site_id"] == payload["site_id"]
       )  # The last alert should be the one we just added
+    
 
 def test_health_check():
     response = client.get("/")

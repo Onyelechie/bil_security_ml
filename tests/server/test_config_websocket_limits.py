@@ -8,7 +8,6 @@ def test_ws_worker_count_must_be_positive():
         Settings(ws_alert_worker_count=0)
 
 
-
 def test_ws_queue_size_must_be_positive():
     with pytest.raises(ValueError, match="WS_ALERT_QUEUE_SIZE"):
         Settings(ws_alert_queue_size=0)

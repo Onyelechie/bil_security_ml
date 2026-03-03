@@ -26,5 +26,10 @@ pytest>=8.0.0
 pytest-asyncio>=0.23.0
 pytest-cov>=4.0.0
 
+# --- Lint & Security ---
+flake8>=6.1.0
+pip-audit>=2.0.0
+bandit>=1.7.0
+
 # Note: For full ML / CV features (torch, torchvision, ultralytics, opencv, etc.)
 # install the main `requirements.txt` on a machine with appropriate wheels or use conda.

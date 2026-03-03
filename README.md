@@ -372,6 +372,10 @@ python -m pytest tests/server/test_heartbeat.py -v
 python -m pytest tests/edge_agent/test_edge_api.py -v
 ```
 
+> Test DB note: Running `pytest` automatically applies Alembic migrations to a dedicated test database.
+By default it uses `sqlite:///./_pytest.db` and recreates it each run.
+If you set `DATABASE_URL`, tests will use that DB instead (recommended only for CI or a dedicated test DB).
+
 ### Technical Notes
 
 - "Motion events" (from the problem statement) can be sent from our existing software via TCP.

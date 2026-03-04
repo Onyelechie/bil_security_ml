@@ -59,7 +59,7 @@ copy .env.example .env
 # On Unix/macOS: cp .env.example .env
 ```
 
-Important variables (see `.env.example`): `DATABASE_URL`, `HOST`, `PORT`, `DEBUG`, `CORS_ORIGINS` (comma-separated), `SECRET_KEY`.
+Important variables (see `.env.example`): `DATABASE_URL`, `HOST`, `PORT`, `DEBUG`, `SECRET_KEY`, `CORS_ORIGINS` (comma-separated), `WS_MAX_CONNECTIONS`, `WS_ALERT_QUEUE_SIZE`, `WS_ALERT_WORKER_COUNT`, `WS_MAX_IMAGE_BYTES`, `WS_IMAGE_STORAGE_DIR`, `WS_IMAGE_RETENTION_HOURS`, `WS_IMAGE_CLEANUP_INTERVAL_HOURS`.
 
 Note: Edge agents SHOULD provide `edge_pc_id` when sending alerts. The server accepts
 alerts that omit `edge_pc_id` for backward compatibility: when missing the server will
@@ -134,7 +134,7 @@ committed before opening a PR.
 
 Security note
 
-- The repository contains a development `SECRET_KEY` default. Do not run the server in production with the default key. The server will warn at startup if `DEBUG` is False and the `SECRET_KEY` is left as the default.
+- Do not run the server in production with an empty or placeholder `SECRET_KEY` (for example, `your-secret-key-here`). The server warns at startup if `DEBUG` is `False` and `SECRET_KEY` is empty or still set to the placeholder value.
 
 #### Prerequisites
 - Python 3.9+
@@ -170,12 +170,146 @@ pip install -r requirements.txt -r requirements-dev.txt
 # Set Python path for src/ layout
 # On Windows PowerShell:
 $env:PYTHONPATH = "$PWD\src"
+# Optional host/port (defaults shown):
+$env:HOST = "127.0.0.1"
+$env:PORT = "8000"
 # On Unix/Mac:
 # export PYTHONPATH="$PWD/src"
+# Optional host/port:
+# export HOST="127.0.0.1"
+# export PORT="8000"
 
-# Run the server
-python -m uvicorn server.main:app --reload --port 8000
+# Run the server (uses HOST/PORT values from env)
+# On Windows PowerShell:
+$bindHost = if ($env:HOST) { $env:HOST } else { "127.0.0.1" }
+$bindPort = if ($env:PORT) { $env:PORT } else { "8000" }
+python -m uvicorn server.main:app --reload --host $bindHost --port $bindPort
+# On Unix/Mac:
+# python -m uvicorn server.main:app --reload --host "${HOST:-127.0.0.1}" --port "${PORT:-8000}"
 ```
+
+Quick copy-paste command (PowerShell, fixed host/port):
+```powershell
+$env:PYTHONPATH="$PWD\src"; python -m uvicorn server.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+#### Route Table (Server)
+
+| Method | Route | Purpose |
+|---|---|---|
+| GET | `/` | Health check |
+| POST | `/api/heartbeat` | Upsert edge heartbeat/status |
+| POST | `/api/alerts` | Ingest alert over HTTP |
+| GET | `/api/alerts` | List alerts |
+| WS | `/ws/alerts` | Ingest alerts over WebSocket (`connected` / `meta_received` / `ack` / `error`) |
+
+Apply migrations before first run:
+```bash
+python -m alembic -c alembic.ini upgrade head
+```
+
+#### Quick Test (HTTP + WebSocket)
+
+HTTP health check:
+```powershell
+curl.exe http://127.0.0.1:8000/
+```
+
+HTTP alert ingestion from PowerShell (recommended):
+```powershell
+$payload = @{
+  site_id    = "site_001"
+  camera_id  = "cam_001"
+  edge_pc_id = "edge-live-1"
+  timestamp  = "2026-03-01T12:00:00Z"
+  detections = @(
+    @{ "class" = "person"; confidence = 0.98 }
+  )
+}
+
+$json = $payload | ConvertTo-Json -Depth 5
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/alerts" -Method Post -ContentType "application/json" -Body $json
+```
+
+Optional `curl.exe` fallback (send JSON from file):
+```powershell
+$json | Set-Content -Path .\alert.json -Encoding utf8NoBOM
+curl.exe -X POST "http://127.0.0.1:8000/api/alerts" -H "Content-Type: application/json" --data-binary "@alert.json"
+```
+
+Real-time WebSocket ingestion test (`/ws/alerts`) with metadata + binary image:
+```powershell
+@'
+import asyncio, json
+from datetime import datetime, timezone
+import websockets
+
+async def main():
+    async with websockets.connect("ws://127.0.0.1:8000/ws/alerts") as ws:
+        print("connected:", await ws.recv())
+
+        meta = {
+            "type": "alert_meta",
+            "alert": {
+                "site_id": "site_ws",
+                "camera_id": "cam_ws",
+                "edge_pc_id": "edge-ws-1",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "detections": [{"class": "person", "confidence": 0.95}]
+            }
+        }
+        await ws.send(json.dumps(meta))
+        print("meta ack:", await ws.recv())
+
+        # Send JPEG/PNG bytes in binary frame
+        await ws.send(b"\x89PNG\r\n\x1a\n\x00demo-image-bytes")
+        print("ack:", await ws.recv())
+
+asyncio.run(main())
+'@ | python -
+```
+
+Note: JSON-only alert messages are still accepted for backward compatibility, but binary image transport uses the `alert_meta` + binary frame sequence.
+
+WebSocket protocol summary (`WS /ws/alerts`):
+- Server sends `connected` immediately after handshake.
+- Client can send either:
+  - a complete JSON alert payload (backward-compatible path), or
+  - metadata-first binary flow:
+    1. JSON frame: `{"type":"alert_meta","alert":{...}}`
+    2. binary frame: image bytes (JPEG/PNG/GIF/WEBP or raw bytes)
+- Server sends `meta_received` after valid metadata.
+- Server sends `ack` when alert persistence succeeds.
+- Server sends `error` for invalid frames, validation failures, queue pressure, or storage/persistence failures.
+
+Backpressure behavior:
+- If internal ingestion queue is full, server returns `{"type":"error","code":"queue_full",...}`.
+- The overloaded message is dropped (not queued); connection stays open.
+- Client should retry with backoff/jitter.
+
+Image storage behavior:
+- Binary image frames are saved under `WS_IMAGE_STORAGE_DIR`.
+- Filename format: `<site_id>_<camera_id>_<received_utc_timestamp>.<ext>`.
+- `received_utc_timestamp` is server receive time.
+- Stored path is written to `alerts.image_path`.
+- Storage directory is created automatically if it does not exist.
+- Images older than `WS_IMAGE_RETENTION_HOURS` are deleted by a background cleanup task every `WS_IMAGE_CLEANUP_INTERVAL_HOURS` (defaults are both `24`).
+
+If needed:
+```bash
+pip install websockets
+```
+
+WebSocket load test script:
+```powershell
+# Example: 200 clients, 10 messages each
+python scripts/ws_load_test.py --clients 200 --messages-per-client 10
+
+# Smoother ramp-up (20 ms between client starts)
+python scripts/ws_load_test.py --clients 200 --messages-per-client 10 --stagger-ms 20
+```
+
+The script exits with code `1` if all expected messages are not ACKed.
 
 
 
@@ -183,6 +317,7 @@ python -m uvicorn server.main:app --reload --port 8000
 
 - **Heartbeat** (`POST /api/heartbeat`): Used by edge PCs to report their own status and last-seen time to the server. This lets the server track which devices are online and their current state.
 - **Healthcheck** (`GET /`): Used by anyone (user, monitoring system, load balancer) to check if the server itself is running and responsive. Returns a simple status message.
+- **WebSocket Alert Ingestion** (`WS /ws/alerts`): Used by edge clients or UI clients to stream alert payloads in real time and receive immediate ACK or error responses. Supports metadata-first + binary image frames.
 
 ---
 
@@ -234,6 +369,7 @@ Used by edge PCs to report their status. The server records the time it receives
 #### Alerts Endpoint
 - **POST /api/alerts**: Ingests alerts from edge PCs (see code for schema).
 - **GET /api/alerts**: Lists alerts (filtering to be implemented).
+- **WS /ws/alerts**: Accepts alert JSON messages (backward compatible) and metadata + binary image frames. Returns `connected`, `meta_received`, `ack`, or `error` frames.
 
 Note: `alerts.edge_pc_id` is now a required foreign key referencing `edge_pcs.edge_pc_id`.
 When upgrading older databases, a migration will insert a sentinel `edge_pcs` row with `edge_pc_id='edge-001'`
@@ -372,9 +508,55 @@ python -m pytest tests/server/test_heartbeat.py -v
 python -m pytest tests/edge_agent/test_edge_api.py -v
 ```
 
-> Test DB note: Running `pytest` automatically applies Alembic migrations to a dedicated test database.
-By default it uses `sqlite:///./_pytest.db` and recreates it each run.
-If you set `DATABASE_URL`, tests will use that DB instead (recommended only for CI or a dedicated test DB).
+### Testing with Makefile (recommended)
+
+A `Makefile` is provided to simplify running the test suite. From the repository root run:
+
+```bash
+make test
+```
+
+What `make test` does:
+- Ensures the `PYTHONPATH` includes the `src/` package layout and project root so tests import correctly.
+- Invokes `pytest -v` using the repository `pytest.ini` configuration (including coverage reporting).
+
+Prerequisites:
+- Install project dependencies before running tests: `pip install -r requirements.txt`.
+- Note: some ML packages (e.g. `torch`, `torchvision`) are large binary packages and may take time to download or require platform-specific wheels. If you only want to run server/unit tests (and avoid heavy ML packages), consider creating a lightweight `requirements-dev.txt` that omits the large ML deps.
+
+Troubleshooting:
+- If pytest fails with an error about `--cov` options, install `pytest-cov` (already included in `requirements.txt`):
+
+```bash
+pip install pytest-cov
+```
+
+- If tests fail due to missing DB tables (Alembic migrations not applied), the test suite will attempt to create tables via SQLAlchemy metadata for development. For stricter environments, run migrations before testing:
+
+```bash
+alembic upgrade head
+```
+
+- If you see import errors for top-level packages (for example `benchmark`), ensure you're running `make test` from the repository root so the `Makefile` sets `PYTHONPATH` correctly, or run:
+
+```bash
+PYTHONPATH=src:. pytest -v
+```
+
+If you'd like, I can add a `requirements-dev.txt` (lighter) and a small `scripts/run_tests.sh` wrapper — tell me which you'd prefer.
+I have added a `requirements-dev.txt` that excludes heavy machine-learning and CV packages so you can install dev/test dependencies quickly.
+
+Quick start using the lightweight development dependencies:
+
+```bash
+# Install lightweight dev-only deps (fast)
+pip install -r requirements-dev.txt
+
+# Run the test suite via Makefile
+make test
+```
+
+When you need full ML capabilities (training, model benchmarks, CV tooling) install the full pinned `requirements.txt` or use the conda instructions provided earlier.
 
 ### Technical Notes
 

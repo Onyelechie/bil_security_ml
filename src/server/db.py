@@ -4,6 +4,12 @@ import logging
 
 from .config import settings
 from sqlalchemy import event, inspect, text
+from .models.base import Base
+
+# Import model modules so they are registered on Base.metadata
+from .models import alert as _m_alert  # noqa: F401
+from .models import edge_pc as _m_edge_pc  # noqa: F401
+from .models import model_version as _m_model_version  # noqa: F401
 
 engine = create_engine(
     settings.database_url,
@@ -43,10 +49,20 @@ def init_db():
         with engine.begin() as conn:
             if not inspect(conn).has_table("edge_pcs"):
                 logging.getLogger(__name__).warning(
-                    "edge_pcs table not found; schema is not initialized. "
-                    "Run `alembic upgrade head` before starting the server."
+                    "edge_pcs table not found; attempting to create tables using SQLAlchemy metadata"
                 )
-                return
+
+                # Create all tables for development / test environments. In production
+                # migrations should manage schema; this fallback helps tests and local
+                # development where alembic migrations haven't been applied.
+                try:
+                    Base.metadata.create_all(bind=engine)
+                    logging.getLogger(__name__).info("Created missing tables via SQLAlchemy metadata")
+                except Exception:
+                    logging.getLogger(__name__).exception(
+                        "Failed to create tables via SQLAlchemy metadata; Run `alembic upgrade head`"
+                    )
+                    return
 
             conn.execute(
                 text(

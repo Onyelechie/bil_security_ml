@@ -20,7 +20,7 @@ class EdgeSettings(BaseSettings):
 
     # --- Motion events input (BIL software -> Edge Agent) ---
     # Edge agent will listen on this host/port for TCP motion events.
-    tcp_host: str = "172.22.0.5"
+    tcp_host: str = "127.0.0.1"  # override via TCP_HOST=0.0.0.0 when needed
     tcp_port: int = 8127
 
     # --- Central server output (Edge Agent -> Area C) ---
@@ -42,6 +42,25 @@ class EdgeSettings(BaseSettings):
     # Identity fields that match what Area C uses
     edge_pc_id: str = "edge_demo"
     site_name: str = "Demo Site"
+
+    # --- Trigger control (rate limit / dedupe) ---
+    trigger_cooldown_sec: int = 10
+    trigger_merge_window_sec: float = 2.0
+
+    # --- RTSP ingest (low-res stream for analysis) ---
+    rtsp_url_low: str = ""  # set in .env
+    ring_buffer_seconds: int = 10  # keep last N seconds of frames
+
+    # Frame sampling / scaling (keep it light)
+    analysis_fps: float = 5.0  # frames per second stored in ring buffer
+    frame_width: int = 640
+    frame_height: int = 360
+
+    # --- Local motion trigger (cheap) ---
+    motion_fps: float = 2.0  # how often we check for motion
+    motion_pixel_delta: int = 25  # per-pixel diff threshold (0..255)
+    motion_threshold: float = 0.02  # ratio of changed pixels required to trigger
+    default_camera_id: str = "1"  # used for local motion events to match TCP camera_id
 
 
 # Convenience global settings object.

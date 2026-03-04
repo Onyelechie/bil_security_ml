@@ -67,6 +67,35 @@ store a sentinel value `'edge-001'` for provenance. If you prefer strict provena
 use the `scripts/backfill_edge_001.py` helper to map historical alerts and
 `scripts/remove_sentinel_if_safe.py` for manual sentinel cleanup when safe.
 
+### Edge Agent Configuration (.env)
+
+Copy `.env.example` and edit `.env`. **Do not commit credentials**.
+
+Edge Agent key variables (see `.env.example`):
+
+**Core**
+- `SITE_ID`, `EDGE_PC_ID`, `SITE_NAME`
+- `TCP_HOST`, `TCP_PORT` (motion events)
+- `SERVER_BASE_URL` (central server)
+
+**Trigger control (rate limit / dedupe)**
+- `TRIGGER_COOLDOWN_SEC` (e.g., 10)
+- `TRIGGER_MERGE_WINDOW_SEC` (e.g., 2.0)
+
+**RTSP ingest (low-res stream for analysis)**
+- `RTSP_URL_LOW` (low stream, e.g. /Streaming/Channels/102/)
+- `RING_BUFFER_SECONDS` (e.g., 10)
+- `ANALYSIS_FPS` (e.g., 5)
+- `FRAME_WIDTH`, `FRAME_HEIGHT` (e.g., 640x360)
+
+**Local motion trigger (lightweight)**
+- `MOTION_FPS` (e.g., 2)
+- `MOTION_PIXEL_DELTA` (e.g., 25–45)
+- `MOTION_THRESHOLD` (e.g., 0.02–0.08)
+- `DEFAULT_CAMERA_ID` (used for local motion labeling in single-camera mode)
+
+FFmpeg note:
+- The edge agent uses `imageio-ffmpeg`, which provides an ffmpeg binary automatically (no separate system ffmpeg install required).
 
 ### Database Migrations
 
@@ -393,39 +422,36 @@ The script connects using the repository's configured DB (via `src/server/db.py`
 ## Edge Agent (Area B)
 
 The edge agent is the on-site Windows service that will:
-- listen for motion events over TCP
-- pull frames via RTSP
-- run detection/decision logic
-- send alerts + heartbeats to the central server
+- listen for motion events over TCP (from BIL software / VMS rules)
+- pull frames via RTSP into an in-memory ring buffer
+- run lightweight local motion detection (optional) + later YOLO burst inference
+- apply cooldown/deduplication to avoid flooding
+- send alerts + heartbeats to the central server (later steps)
 
-### Running the Edge Agent (PR1 skeleton)
+### Running the Edge Agent
 
-```bash
-# Set Python path for src/ layout
+> Important: this repo uses a `src/` layout. Set `PYTHONPATH` before running.
+
+```powershell
 # On Windows PowerShell:
 $env:PYTHONPATH = "$PWD\src"
 # On Unix/Mac:
 # export PYTHONPATH="$PWD/src"
+```
 
-python -m edge_agent.main --print-config
+#### Print config
+
+```powershell
+python -m edge_agent --print-config
 ```
 
 See `docs/area_b_edge_agent_context.md` for architecture + demo environment details.
 
-### Edge Agent HTTP API (PR2)
+#### Run Edge HTTP API (install/debug)
 
-The edge agent can optionally run a small HTTP API so office staff (or the central server later) can confirm the edge PC is alive.
-
-#### Run the Edge HTTP API
-```bash
-# Set Python path for src/ layout
-# On Windows PowerShell:
-$env:PYTHONPATH = "$PWD\src"
-# On Unix/Mac:
-# export PYTHONPATH="$PWD/src"
-
-python -m edge_agent.main --http-serve
-````
+```powershell
+python -m edge_agent --http-serve
+```
 
 #### Endpoints
 
@@ -436,6 +462,29 @@ python -m edge_agent.main --http-serve
 
 > Note: This is the Edge-side heartbeat (server/office → edge).
 > The Central Server heartbeat endpoint is separate (`POST /api/heartbeat`, edge → server).
+
+#### Run TCP motion listener (prints parsed motion events)
+
+```powershell
+python -m edge_agent --tcp-listen
+```
+
+#### Run RTSP + Local Motion live test (requires RTSP_URL_LOW)
+
+```powershell
+python -m edge_agent --motion-test
+```
+
+> This mode validates RTSP ingest + ring buffer + local motion; it does not send alerts to the central server yet.
+
+This starts:
+
+* RTSP ingest (ffmpeg) → ring buffer
+* local frame-diff motion trigger → TriggerManager (cooldown/dedupe)
+
+Logs include RTSP recovery categories like `DISCONNECT`, `STALL`, and `STARTUP_TIMEOUT`, with automatic retry/backoff.
+
+---
 
 
 ## Running Tests
@@ -448,6 +497,9 @@ $env:PYTHONPATH = "$PWD\src"
 
 # Run all tests
 python -m pytest
+
+# Edge agent tests only
+python -m pytest -q tests/edge_agent
 
 # Run only heartbeat tests
 python -m pytest tests/server/test_heartbeat.py -v

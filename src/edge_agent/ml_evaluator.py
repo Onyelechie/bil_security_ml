@@ -62,11 +62,7 @@ class MLEvaluator:
             detections = self.model.predict(frame_bgr)
 
             for det in detections:
-                if len(det) == 6:
-                    x1, y1, x2, y2, conf, label = det
-                else:
-                    label, conf = det
-                    x1, y1, x2, y2 = 0, 0, 0, 0
+                x1, y1, x2, y2, conf, label = det
 
                 label_lower = label.lower()
 

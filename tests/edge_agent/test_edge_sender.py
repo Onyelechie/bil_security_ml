@@ -1,5 +1,4 @@
 # tests/test_sender.py
-import logging
 import time
 from unittest.mock import MagicMock
 
@@ -88,7 +87,6 @@ def test_send_alert_structure(sender: ServerSender):
     mock_resp.raise_for_status.assert_called_once()
 
 
-
 def test_send_heartbeat_handles_server_error(sender, mocker):
     mock_resp = MagicMock()
     mock_resp.raise_for_status.side_effect = requests.HTTPError("500 Server Error")
@@ -115,4 +113,4 @@ def test_send_alert_handles_request_exception(sender, mocker):
     assert success is False
     mocked_logger.error.assert_called()
     assert any("Failed to send alert" in str(call.args[0]) for call in mocked_logger.error.call_args_list)
-
+    

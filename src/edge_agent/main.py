@@ -90,7 +90,7 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
         if args.print_config:
             print(cfg.model_dump())
             return 0
-        
+
         # Start heartbeat thread (runs regardless of mode to ensure server knows we're alive)
         sender = ServerSender(cfg)
         heartbeat_thread = threading.Thread(

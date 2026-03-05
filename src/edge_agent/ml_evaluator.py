@@ -48,7 +48,8 @@ class MLEvaluator:
 
     def evaluate_clip(self, frames: list) -> dict | None:
         """
-        Runs YOLOv8-Nano on a list of BGR frames (up to 40 from RingBuffer).
+        Runs YOLOv8-Nano on a list of frames (BGR or Grayscale, up to 40 from RingBuffer).
+        If frames are grayscale, they are converted to BGR for YOLO compatibility.
         Returns the best detection with an annotated frame (bounding box drawn),
         or None if no person/vehicle found.
         """
@@ -60,7 +61,13 @@ class MLEvaluator:
             if frame is None:
                 continue
 
-            detections = self.model.predict(frame)
+            # Handle grayscale to BGR conversion at inference time
+            if len(frame.shape) == 2:
+                frame_bgr = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+            else:
+                frame_bgr = frame
+
+            detections = self.model.predict(frame_bgr)
 
             for det in detections:
                 if len(det) == 6:

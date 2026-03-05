@@ -18,15 +18,24 @@ def create_dummy_image(color=(255, 255, 255)):
 
 def test_ml_evaluator_initialization():
     """Test that the evaluator loads the model successfully."""
-    # Skip if weights don't exist yet (benchmark script usually downloads them)
     if not os.path.exists(WEIGHTS_PATH):
-        pytest.skip(
-            f"Weights not found at {WEIGHTS_PATH}. Run benchmark once to download."
-        )
+        pytest.skip(f"Weights not found at {WEIGHTS_PATH}.")
 
     evaluator = MLEvaluator(WEIGHTS_PATH)
     assert evaluator.model is not None
     assert evaluator.person_conf == 0.5
+
+
+def test_ml_evaluator_caching():
+    """Test that multiple evaluators share the same model instance."""
+    if not os.path.exists(WEIGHTS_PATH):
+        pytest.skip("Weights not found.")
+
+    evaluator1 = MLEvaluator(WEIGHTS_PATH)
+    evaluator2 = MLEvaluator(WEIGHTS_PATH)
+
+    # They should share the exact same model object
+    assert evaluator1.model is evaluator2.model
 
 
 def test_ml_evaluator_empty_clip():

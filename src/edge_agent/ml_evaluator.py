@@ -2,7 +2,7 @@ import logging
 
 import cv2
 import numpy as np
-from .models.yolo import YOLOWrapper
+from .models import YOLOWrapper, ModelRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -28,15 +28,11 @@ class MLEvaluator:
         self.person_conf = person_conf
         self.vehicle_conf = vehicle_conf
 
-        # We use the YOLO wrapper you built in the benchmark suite
-        self.model = YOLOWrapper("YOLOv8-Nano", weights_path, input_size=640)
-
-        try:
-            self.model.load()
-            logger.info(f"MLEvaluator loaded {weights_path} successfully.")
-        except Exception as e:
-            logger.error(f"MLEvaluator failed to load {weights_path}: {e}")
-            raise
+        # Use the registry to get a cached instance of YOLO
+        self.model = ModelRegistry.get_model(
+            YOLOWrapper, "YOLOv8-Nano", weights_path, input_size=640
+        )
+        logger.info(f"MLEvaluator initialized with model from {weights_path}")
 
     def evaluate_frames(self, frames: list) -> dict | None:
         """

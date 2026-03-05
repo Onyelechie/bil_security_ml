@@ -69,7 +69,11 @@ def test_ml_evaluator_specific_human_frame():
         pytest.skip("Weights not found.")
 
     specific_frame_path = os.path.join(
-        project_root, "accuracy", "dataset_frames", "C1HighRes - Human_frame_135.jpg"
+        project_root,
+        "tests",
+        "edge_agent",
+        "test_data",
+        "C1HighRes - Human_frame_135.jpg",
     )
 
     if not os.path.exists(specific_frame_path):

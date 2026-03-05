@@ -46,7 +46,7 @@ class MLEvaluator:
             logger.error(f"MLEvaluator failed to load {weights_path}: {e}")
             raise
 
-    def evaluate_clip(self, frames: list) -> dict | None:
+    def evaluate_frames(self, frames: list) -> dict | None:
         """
         Runs YOLOv8-Nano on a list of frames (BGR or Grayscale, up to 40 from RingBuffer).
         If frames are grayscale, they are converted to BGR for YOLO compatibility.

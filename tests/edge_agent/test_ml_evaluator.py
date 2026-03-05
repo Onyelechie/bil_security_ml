@@ -41,11 +41,11 @@ def test_ml_evaluator_empty_clip():
     evaluator = MLEvaluator(WEIGHTS_PATH)
 
     # Empty list
-    result = evaluator.evaluate_clip([])
+    result = evaluator.evaluate_frames([])
     assert result is None
 
     # List of Nones
-    result = evaluator.evaluate_clip([None, None])
+    result = evaluator.evaluate_frames([None, None])
     assert result is None
 
 
@@ -57,7 +57,7 @@ def test_ml_evaluator_blank_frames():
     evaluator = MLEvaluator(WEIGHTS_PATH)
     clip = [create_dummy_image() for _ in range(3)]
 
-    result = evaluator.evaluate_clip(clip)
+    result = evaluator.evaluate_frames(clip)
     assert result is None
 
 
@@ -119,7 +119,7 @@ def test_ml_evaluator_specific_frames(
     )
 
     # We pass it as a 1-frame clip
-    result = evaluator.evaluate_clip([frame])
+    result = evaluator.evaluate_frames([frame])
 
     if not expected_to_pass:
         # The model inherently misses this at its core layer (e.g. confidence < 25%)
@@ -170,7 +170,7 @@ def test_ml_evaluator_grayscale():
     assert len(frame_gray.shape) == 2
 
     evaluator = MLEvaluator(WEIGHTS_PATH)
-    result = evaluator.evaluate_clip([frame_gray])
+    result = evaluator.evaluate_frames([frame_gray])
 
     assert result is not None
     assert result["detection"]["label"] == "person"
@@ -193,7 +193,7 @@ if __name__ == "__main__":
     clip = [create_dummy_image((0, 0, 0)), create_dummy_image((255, 255, 255))]
 
     print("Evaluating clip...")
-    result = evaluator.evaluate_clip(clip)
+    result = evaluator.evaluate_frames(clip)
 
     if result is None:
         print("Success! No persons or vehicles detected in blank images.")

@@ -113,4 +113,3 @@ def test_send_alert_handles_request_exception(sender, mocker):
     assert success is False
     mocked_logger.error.assert_called()
     assert any("Failed to send alert" in str(call.args[0]) for call in mocked_logger.error.call_args_list)
-    

@@ -47,7 +47,7 @@ class EdgeSettings(BaseSettings):
 
     # --- RTSP ingest (low-res stream for analysis) ---
     rtsp_url_low: str = ""  # set in .env
-    ring_buffer_seconds: int = 10  # keep last N seconds of frames
+    ring_buffer_seconds: int = 30  # keep last N seconds of frames
 
     # Frame sampling / scaling for motion detection and window extraction
     analysis_fps: float = 5.0  # frames per second stored in ring buffer

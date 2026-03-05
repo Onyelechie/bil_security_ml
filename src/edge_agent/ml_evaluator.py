@@ -1,16 +1,8 @@
 import logging
-import os
-import sys
 
 import cv2
 import numpy as np
-
-# Ensure benchmark is importable (using the same sys.path hack as eval_accuracy.py for now)
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
-from benchmark.benchmark_suite import YOLOWrapper  # noqa: E402
+from .models.yolo import YOLOWrapper
 
 logger = logging.getLogger(__name__)
 

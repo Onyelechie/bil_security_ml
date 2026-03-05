@@ -4,14 +4,10 @@ import cv2
 import pytest
 import numpy as np
 
-# Ensure src is importable
+from src.edge_agent.ml_evaluator import MLEvaluator
+
+# We need a path to the weights
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
-from src.edge_agent.ml_evaluator import MLEvaluator  # noqa: E402
-
-# We need a path to the weights. We'll use the YOLOv8n weights in the benchmark folder.
 WEIGHTS_PATH = os.path.join(project_root, "benchmark", "yolov8n.pt")
 
 

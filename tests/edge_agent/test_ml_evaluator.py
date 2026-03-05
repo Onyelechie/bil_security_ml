@@ -1,5 +1,6 @@
 import os
 import sys
+import glob
 import cv2
 import pytest
 import numpy as np
@@ -9,6 +10,7 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+# ruff: noqa: E402
 from src.edge_agent.ml_evaluator import MLEvaluator
 
 # We need a path to the weights. We'll use the YOLOv8n weights in the benchmark folder.
@@ -59,6 +61,53 @@ def test_ml_evaluator_blank_frames():
 
     result = evaluator.evaluate_clip(clip)
     assert result is None
+
+
+def test_ml_evaluator_real_frames():
+    """Test evaluating a clip using actual images from dataset_frames."""
+    if not os.path.exists(WEIGHTS_PATH):
+        pytest.skip("Weights not found.")
+
+    dataset_dir = os.path.join(project_root, "accuracy", "dataset_frames")
+    if not os.path.exists(dataset_dir):
+        pytest.skip(f"Dataset directory not found at {dataset_dir}")
+
+    # Find all jpg frames in the directory
+    frame_paths = glob.glob(os.path.join(dataset_dir, "*.jpg"))
+
+    if not frame_paths:
+        pytest.skip(f"No .jpg frames found in {dataset_dir}")
+
+    # We'll test with just the first 3 frames to form a "clip"
+    clip_paths = frame_paths[:3]
+    clip_frames = []
+
+    for path in clip_paths:
+        frame = cv2.imread(path)
+        if frame is not None:
+            clip_frames.append(frame)
+
+    if not clip_frames:
+        pytest.skip("Could not load any frames into cv2")
+
+    evaluator = MLEvaluator(WEIGHTS_PATH)
+    result = evaluator.evaluate_clip(clip_frames)
+
+    # Since these are real dataset frames from CCTV, there is a very high likelihood
+    # that at least one person or car exists in these 3 random frames.
+    assert result is not None, (
+        "Evaluator failed to detect any person/vehicle in the real dataset frames."
+    )
+    assert "detection" in result
+    assert "bbox" in result["detection"]
+    assert result["detection"]["label"] in [
+        "person",
+        "car",
+        "truck",
+        "bus",
+        "motorcycle",
+        "vehicle",
+    ]
 
 
 if __name__ == "__main__":

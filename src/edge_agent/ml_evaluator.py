@@ -92,7 +92,7 @@ class MLEvaluator:
                             "confidence": conf,
                             "bbox": [x1, y1, x2, y2],
                         }
-                        best_frame = frame
+                        best_frame = frame_bgr  # Use the BGR version for annotation
 
         if best_detection and best_frame is not None:
             annotated = self._draw_bbox(

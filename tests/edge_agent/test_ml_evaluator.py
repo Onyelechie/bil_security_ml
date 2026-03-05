@@ -147,6 +147,38 @@ def test_ml_evaluator_specific_frames(
         )
 
 
+def test_ml_evaluator_grayscale():
+    """Test that the evaluator correctly handles grayscale images."""
+    if not os.path.exists(WEIGHTS_PATH):
+        pytest.skip("Weights not found.")
+
+    # Use a known frame with a person
+    test_frame_path = os.path.join(
+        project_root,
+        "tests",
+        "edge_agent",
+        "test_data",
+        "C1HighRes - Human_frame_135.jpg",
+    )
+    if not os.path.exists(test_frame_path):
+        pytest.skip("Test data frame 135 not found.")
+
+    frame_color = cv2.imread(test_frame_path)
+    frame_gray = cv2.cvtColor(frame_color, cv2.COLOR_BGR2GRAY)
+
+    # Verify input is 2D
+    assert len(frame_gray.shape) == 2
+
+    evaluator = MLEvaluator(WEIGHTS_PATH)
+    result = evaluator.evaluate_clip([frame_gray])
+
+    assert result is not None
+    assert result["detection"]["label"] == "person"
+    # The output frame should be 3-channel BGR
+    assert len(result["frame"].shape) == 3
+    assert result["frame"].shape[2] == 3
+
+
 if __name__ == "__main__":
     # If run directly as a script (stub test)
     if not os.path.exists(WEIGHTS_PATH):

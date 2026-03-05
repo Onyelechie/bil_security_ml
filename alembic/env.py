@@ -1,9 +1,8 @@
-from logging.config import fileConfig
 import os
 import sys
+from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 
@@ -27,8 +26,8 @@ if db_url:
 # --- Alembic autogenerate model import ---
 # Ensure `src/` is on the import path so Alembic can import models for autogenerate
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
-from server.models.base import Base  # noqa: E402
 from server.models import alert, edge_pc  # noqa: E402,F401
+from server.models.base import Base  # noqa: E402
 
 target_metadata = Base.metadata
 

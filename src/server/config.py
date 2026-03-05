@@ -1,12 +1,15 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import List
 import os
+from typing import List
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", case_sensitive=False, extra="ignore"
+    )
 
     # Database
     database_url: str = os.getenv("DATABASE_URL", "sqlite:///./server.db")
@@ -32,9 +35,13 @@ class Settings(BaseSettings):
     ws_alert_queue_size: int = int(os.getenv("WS_ALERT_QUEUE_SIZE", 5000))
     ws_alert_worker_count: int = int(os.getenv("WS_ALERT_WORKER_COUNT", 4))
     ws_max_image_bytes: int = int(os.getenv("WS_MAX_IMAGE_BYTES", 5_000_000))
-    ws_image_storage_dir: str = os.getenv("WS_IMAGE_STORAGE_DIR", "storage/ws_alert_images")
+    ws_image_storage_dir: str = os.getenv(
+        "WS_IMAGE_STORAGE_DIR", "storage/ws_alert_images"
+    )
     ws_image_retention_hours: int = int(os.getenv("WS_IMAGE_RETENTION_HOURS", 24))
-    ws_image_cleanup_interval_hours: int = int(os.getenv("WS_IMAGE_CLEANUP_INTERVAL_HOURS", 24))
+    ws_image_cleanup_interval_hours: int = int(
+        os.getenv("WS_IMAGE_CLEANUP_INTERVAL_HOURS", 24)
+    )
 
     def __init__(self, **values):
         super().__init__(**values)
@@ -55,7 +62,9 @@ class Settings(BaseSettings):
             raise ValueError("WS_IMAGE_CLEANUP_INTERVAL_HOURS must be >= 1")
 
     def parsed_cors_origins(self) -> List[str]:
-        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        return [
+            origin.strip() for origin in self.cors_origins.split(",") if origin.strip()
+        ]
 
 
 settings = Settings()

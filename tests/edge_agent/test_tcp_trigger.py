@@ -1,4 +1,5 @@
 import asyncio
+
 import pytest
 
 from edge_agent.config import EdgeSettings

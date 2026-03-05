@@ -26,7 +26,9 @@ def test_run_http_serve_calls_uvicorn(monkeypatch):
 
     monkeypatch.setattr(uvicorn, "run", fake_run)
 
-    cfg = EdgeSettings(edge_http_host="127.0.0.1", edge_http_port=9999, log_level="INFO")
+    cfg = EdgeSettings(
+        edge_http_host="127.0.0.1", edge_http_port=9999, log_level="INFO"
+    )
     code = run(argv=["--http-serve"], cfg=cfg)
 
     assert code == 0

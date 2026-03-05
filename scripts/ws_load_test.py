@@ -32,14 +32,42 @@ class WorkerResult:
 
 
 def _parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Run a WebSocket alert ingestion load test.")
-    p.add_argument("--url", default="ws://127.0.0.1:8000/ws/alerts", help="WebSocket endpoint URL")
-    p.add_argument("--clients", type=int, default=50, help="Number of concurrent client connections")
-    p.add_argument("--messages-per-client", type=int, default=10, help="Messages sent by each client")
-    p.add_argument("--stagger-ms", type=int, default=0, help="Delay between client starts in milliseconds")
-    p.add_argument("--connect-timeout", type=float, default=10.0, help="Connect timeout in seconds")
-    p.add_argument("--recv-timeout", type=float, default=10.0, help="Receive timeout in seconds")
-    p.add_argument("--max-size", type=int, default=2_000_000, help="Max inbound frame size in bytes")
+    p = argparse.ArgumentParser(
+        description="Run a WebSocket alert ingestion load test."
+    )
+    p.add_argument(
+        "--url", default="ws://127.0.0.1:8000/ws/alerts", help="WebSocket endpoint URL"
+    )
+    p.add_argument(
+        "--clients",
+        type=int,
+        default=50,
+        help="Number of concurrent client connections",
+    )
+    p.add_argument(
+        "--messages-per-client",
+        type=int,
+        default=10,
+        help="Messages sent by each client",
+    )
+    p.add_argument(
+        "--stagger-ms",
+        type=int,
+        default=0,
+        help="Delay between client starts in milliseconds",
+    )
+    p.add_argument(
+        "--connect-timeout", type=float, default=10.0, help="Connect timeout in seconds"
+    )
+    p.add_argument(
+        "--recv-timeout", type=float, default=10.0, help="Receive timeout in seconds"
+    )
+    p.add_argument(
+        "--max-size",
+        type=int,
+        default=2_000_000,
+        help="Max inbound frame size in bytes",
+    )
     return p
 
 
@@ -164,7 +192,9 @@ def main() -> int:
         return asyncio.run(_run(args))
     except ModuleNotFoundError as exc:
         if exc.name == "websockets":
-            print("Missing dependency: websockets. Install with `pip install websockets`.")
+            print(
+                "Missing dependency: websockets. Install with `pip install websockets`."
+            )
             return 2
         raise
     except ValueError as exc:
@@ -174,4 +204,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

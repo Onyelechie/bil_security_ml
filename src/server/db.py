@@ -1,19 +1,22 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 import logging
 
-from .config import settings
-from sqlalchemy import event, inspect, text
-from .models.base import Base
+from sqlalchemy import create_engine, event, inspect, text
+from sqlalchemy.orm import sessionmaker
 
+from .config import settings
 # Import model modules so they are registered on Base.metadata
 from .models import alert as _m_alert  # noqa: F401
 from .models import edge_pc as _m_edge_pc  # noqa: F401
 from .models import model_version as _m_model_version  # noqa: F401
+from .models.base import Base
 
 engine = create_engine(
     settings.database_url,
-    connect_args=({"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}),
+    connect_args=(
+        {"check_same_thread": False}
+        if settings.database_url.startswith("sqlite")
+        else {}
+    ),
 )
 
 # Ensure SQLite enforces foreign key constraints at the connection level.
@@ -29,7 +32,9 @@ if settings.database_url.startswith("sqlite"):
             # Log a warning rather than silently swallowing the exception so
             # static analysis tools (Bandit) do not flag a bare pass and
             # operators have visibility into the failure.
-            logging.getLogger(__name__).warning("Could not enable SQLite foreign_keys PRAGMA on connect: %s", exc)
+            logging.getLogger(__name__).warning(
+                "Could not enable SQLite foreign_keys PRAGMA on connect: %s", exc
+            )
 
     event.listen(engine, "connect", _enable_sqlite_foreign_keys)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -57,7 +62,9 @@ def init_db():
                 # development where alembic migrations haven't been applied.
                 try:
                     Base.metadata.create_all(bind=engine)
-                    logging.getLogger(__name__).info("Created missing tables via SQLAlchemy metadata")
+                    logging.getLogger(__name__).info(
+                        "Created missing tables via SQLAlchemy metadata"
+                    )
                 except Exception:
                     logging.getLogger(__name__).exception(
                         "Failed to create tables via SQLAlchemy metadata; Run `alembic upgrade head`"
@@ -72,4 +79,6 @@ def init_db():
                 )
             )
     except Exception:
-        logging.getLogger(__name__).exception("Failed to ensure sentinel 'edge-001' exists in database")
+        logging.getLogger(__name__).exception(
+            "Failed to ensure sentinel 'edge-001' exists in database"
+        )

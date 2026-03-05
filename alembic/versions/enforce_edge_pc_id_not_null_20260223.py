@@ -13,8 +13,9 @@ This migration:
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "enforce_edge_pc_id_not_null_20260223"

@@ -25,7 +25,9 @@ def _alert_payload(edge_pc_id: str, site_id: str, camera_id: str) -> dict:
 def _alert_meta_frame(edge_pc_id: str, site_id: str, camera_id: str) -> dict:
     return {
         "type": "alert_meta",
-        "alert": _alert_payload(edge_pc_id=edge_pc_id, site_id=site_id, camera_id=camera_id),
+        "alert": _alert_payload(
+            edge_pc_id=edge_pc_id, site_id=site_id, camera_id=camera_id
+        ),
     }
 
 
@@ -59,7 +61,9 @@ def test_websocket_alert_validation_error():
 
 def test_websocket_handles_multiple_connections():
     with TestClient(app) as client:
-        with client.websocket_connect("/ws/alerts") as ws1, client.websocket_connect("/ws/alerts") as ws2:
+        with client.websocket_connect("/ws/alerts") as ws1, client.websocket_connect(
+            "/ws/alerts"
+        ) as ws2:
             ws1.receive_json()
             ws2.receive_json()
 
@@ -94,7 +98,9 @@ def test_websocket_alert_meta_then_binary_ingestion_ack(tmp_path):
         try:
             with client.websocket_connect("/ws/alerts") as websocket:
                 websocket.receive_json()
-                websocket.send_json(_alert_meta_frame("edge-ws-bin-1", "site_ws_bin_1", "cam_ws_bin_1"))
+                websocket.send_json(
+                    _alert_meta_frame("edge-ws-bin-1", "site_ws_bin_1", "cam_ws_bin_1")
+                )
                 meta_ack = websocket.receive_json()
                 assert meta_ack["type"] == "meta_received"
                 assert meta_ack["status"] == "ok"
@@ -132,7 +138,9 @@ def test_websocket_binary_too_large_returns_error():
         try:
             with client.websocket_connect("/ws/alerts") as websocket:
                 websocket.receive_json()
-                websocket.send_json(_alert_meta_frame("edge-ws-bin-2", "site_ws_bin_2", "cam_ws_bin_2"))
+                websocket.send_json(
+                    _alert_meta_frame("edge-ws-bin-2", "site_ws_bin_2", "cam_ws_bin_2")
+                )
                 websocket.receive_json()
                 websocket.send_bytes(b"\x01\x02\x03\x04\x05")
                 err = websocket.receive_json()

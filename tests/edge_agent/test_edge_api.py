@@ -1,5 +1,6 @@
-import pytest
 from datetime import datetime
+
+import pytest
 from fastapi.testclient import TestClient
 
 from edge_agent.config import EdgeSettings
@@ -35,7 +36,9 @@ def test_health_endpoint(client):
     try:
         _parse_iso_z(data["time_utc"])
     except (ValueError, TypeError) as e:
-        pytest.fail(f"time_utc is not a valid ISO 8601 timestamp: {data.get('time_utc')} ({e})")
+        pytest.fail(
+            f"time_utc is not a valid ISO 8601 timestamp: {data.get('time_utc')} ({e})"
+        )
 
 
 def test_heartbeat_endpoint(client):

@@ -1,13 +1,15 @@
-import time
-import os
-import psutil
+import argparse
 import gc
-import cv2
 import glob
 import torch
 import pandas as pd
 import argparse
 import sys
+
+import cv2
+import pandas as pd
+import psutil
+import torch
 
 # Constants (Defaults)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))

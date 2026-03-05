@@ -74,6 +74,7 @@ def test_ml_evaluator_mocked_detection(mock_evaluator):
     assert result["detection"]["label"] == "person"
     assert result["detection"]["confidence"] == 0.9
     assert result["detection"]["bbox"] == [10, 10, 100, 100]
+    assert result["frame_index"] == 1  # Detected on second frame
     # Check that it drew a box (annotated frame should be different from original)
     assert not np.array_equal(result["frame"], clip[1])
 
@@ -87,6 +88,7 @@ def test_ml_evaluator_grayscale_mocked(mock_evaluator):
 
     assert result is not None
     assert result["detection"]["label"] == "car"
+    assert result["frame_index"] == 0
     # Ensure it converted to 3-channel for the mock's 'inference'
     call_args = mock_evaluator.model_mock.predict.call_args[0][0]
     assert len(call_args.shape) == 3

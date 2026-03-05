@@ -43,9 +43,9 @@ class MLEvaluator:
         """
         best_detection = None
         best_conf = 0.0
-        best_frame = None
+        best_frame_index = -1
 
-        for frame in frames:
+        for idx, frame in enumerate(frames):
             if frame is None:
                 continue
 
@@ -77,6 +77,7 @@ class MLEvaluator:
                             "bbox": [x1, y1, x2, y2],
                         }
                         best_frame = frame_bgr  # Use the BGR version for annotation
+                        best_frame_index = idx
 
         if best_detection and best_frame is not None:
             annotated = self._draw_bbox(
@@ -85,7 +86,11 @@ class MLEvaluator:
                 best_detection["label"],
                 best_detection["confidence"],
             )
-            return {"detection": best_detection, "frame": annotated}
+            return {
+                "detection": best_detection,
+                "frame": annotated,
+                "frame_index": best_frame_index,
+            }
 
         return None
 

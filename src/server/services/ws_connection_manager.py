@@ -18,7 +18,9 @@ class WebSocketConnectionManager:
         await websocket.accept()
         async with self._lock:
             if len(self._active_connections) >= self._max_connections:
-                await websocket.close(code=1013, reason="Too many active WebSocket connections")
+                await websocket.close(
+                    code=1013, reason="Too many active WebSocket connections"
+                )
                 return False
             self._active_connections.add(websocket)
             return True

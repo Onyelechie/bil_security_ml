@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from defusedxml import ElementTree as ET
 from typing import Any
+
+from defusedxml import ElementTree as ET
 
 
 def parse_motion_xml(xml_text: str) -> dict[str, Any]:

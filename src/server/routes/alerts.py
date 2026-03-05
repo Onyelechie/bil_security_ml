@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from ..db import SessionLocal
 from ..models.alert import Alert
 from ..schemas import AlertCreate, AlertOut
-from ..services.alert_ingestion import AlertIngestionService, AlertPersistenceError
+from ..services.alert_ingestion import (AlertIngestionService,
+                                        AlertPersistenceError)
 
 # This router handles all endpoints related to alerts sent from edge PCs.
 # Prefix: /api/alerts

@@ -5,8 +5,8 @@ import logging
 from datetime import datetime, timezone
 
 from ..config import EdgeSettings
-from .types import MotionEvent
 from .tcp_parse import parse_motion_xml
+from .types import MotionEvent
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,9 @@ class TcpMotionTrigger:
 
         logger.info("TCP motion listener stopped")
 
-    async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+    async def _handle_client(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
         peer = writer.get_extra_info("peername")
         try:
             # Read up to a sane limit; motion payloads should be small.

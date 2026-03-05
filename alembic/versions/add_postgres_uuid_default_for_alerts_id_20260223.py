@@ -28,7 +28,9 @@ def upgrade() -> None:
         # Ensure uuid-ossp extension is available (may require superuser on some hosts)
         op.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp";')
         # Set default to uuid_generate_v4() cast to text (alerts.id is a text column)
-        op.execute("ALTER TABLE alerts ALTER COLUMN id SET DEFAULT (uuid_generate_v4())::text;")
+        op.execute(
+            "ALTER TABLE alerts ALTER COLUMN id SET DEFAULT (uuid_generate_v4())::text;"
+        )
 
 
 def downgrade() -> None:

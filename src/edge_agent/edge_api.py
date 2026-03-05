@@ -13,7 +13,11 @@ class HealthOut(BaseModel):
     status: str
     time_utc: datetime
 
-    model_config = {"json_schema_extra": {"examples": [{"status": "ok", "time_utc": "2026-02-18T12:00:00Z"}]}}
+    model_config = {
+        "json_schema_extra": {
+            "examples": [{"status": "ok", "time_utc": "2026-02-18T12:00:00Z"}]
+        }
+    }
 
 
 class HeartbeatOut(BaseModel):

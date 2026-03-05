@@ -51,3 +51,24 @@ def test_heartbeat_missing_fields():
     }
     response = client.post("/api/heartbeat", json=payload)
     assert response.status_code == 422
+
+
+def test_list_edge_pcs():
+    import uuid
+
+    edge_pc_id = f"edge-{uuid.uuid4()}"
+    payload = {
+        "edge_pc_id": edge_pc_id,
+        "site_name": "Site List",
+        "status": "online",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    create_response = client.post("/api/heartbeat", json=payload)
+    assert create_response.status_code == 201
+
+    response = client.get("/api/heartbeat")
+    assert response.status_code == 200
+    data = response.json()
+    assert "edges" in data
+    assert isinstance(data["edges"], list)
+    assert any(edge["edge_pc_id"] == edge_pc_id for edge in data["edges"])

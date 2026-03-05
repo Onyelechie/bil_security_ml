@@ -36,3 +36,8 @@ def test_ws_image_retention_hours_must_be_positive():
 def test_ws_image_cleanup_interval_hours_must_be_positive():
     with pytest.raises(ValueError, match="WS_IMAGE_CLEANUP_INTERVAL_HOURS"):
         Settings(ws_image_cleanup_interval_hours=0)
+
+
+def test_log_buffer_max_entries_must_be_positive():
+    with pytest.raises(ValueError, match="LOG_BUFFER_MAX_ENTRIES"):
+        Settings(log_buffer_max_entries=0)

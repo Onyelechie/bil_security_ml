@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BIL Server Console</title>
+  <link rel="stylesheet" href="/static/dashboard/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <h1 class="brand">BIL Server Console</h1>
+      <p class="subtitle">Multi-port edge monitoring preview</p>
+
+      <section class="panel">
+        <h2>Add Target</h2>
+        <form id="target-form" class="target-form">
+          <label>
+            Name
+            <input id="target-name" type="text" placeholder="HQ Server 8000" required>
+          </label>
+          <div class="row">
+            <label>
+              Protocol
+              <select id="target-protocol">
+                <option value="http">http</option>
+                <option value="https">https</option>
+              </select>
+            </label>
+            <label>
+              Port
+              <input id="target-port" type="number" min="1" max="65535" value="8000" required>
+            </label>
+          </div>
+          <label>
+            Host
+            <input id="target-host" type="text" value="127.0.0.1" required>
+          </label>
+          <label>
+            Notes
+            <input id="target-notes" type="text" placeholder="Site A / Warehouse">
+          </label>
+          <button type="submit" class="btn primary">Add Target</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="row title-row">
+          <h2>Targets</h2>
+          <button id="refresh-all-btn" class="btn ghost" type="button">Refresh All</button>
+        </div>
+        <div id="target-list" class="target-list"></div>
+      </section>
+    </aside>
+
+    <main class="content">
+      <section class="hero">
+        <div>
+          <h2 id="active-target-title">No target selected</h2>
+          <p id="active-target-meta" class="muted">Add a target to begin monitoring.</p>
+        </div>
+        <div class="hero-actions">
+          <button id="refresh-selected-btn" class="btn primary" type="button">Refresh</button>
+          <span id="live-status" class="tag err">Live disconnected</span>
+          <span id="last-updated" class="muted">Not updated yet</span>
+        </div>
+      </section>
+
+      <section class="stats-grid">
+        <article class="stat-card">
+          <h3>Health</h3>
+          <p id="health-value">Unknown</p>
+        </article>
+        <article class="stat-card">
+          <h3>Alerts</h3>
+          <p id="alerts-count">0</p>
+        </article>
+        <article class="stat-card">
+          <h3>Edge PCs</h3>
+          <p id="edge-count">0</p>
+        </article>
+        <article class="stat-card">
+          <h3>Logs</h3>
+          <p id="logs-count">0</p>
+        </article>
+      </section>
+
+      <section class="data-grid">
+        <article class="panel alerts-panel">
+          <h2>Recent Alerts</h2>
+          <div id="alerts-list" class="alerts-list"></div>
+        </article>
+
+        <article class="panel edge-panel">
+          <h2>Edge PCs</h2>
+          <div id="edge-list" class="edge-list"></div>
+        </article>
+
+        <article class="panel logs-panel">
+          <h2>Server Logs</h2>
+          <div id="logs-list" class="logs-list"></div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <script src="/static/dashboard/app.js"></script>
+</body>
+</html>

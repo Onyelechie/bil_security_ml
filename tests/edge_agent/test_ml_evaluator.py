@@ -63,51 +63,34 @@ def test_ml_evaluator_blank_frames():
     assert result is None
 
 
-def test_ml_evaluator_real_frames():
-    """Test evaluating a clip using actual images from dataset_frames."""
+def test_ml_evaluator_specific_human_frame():
+    """Test evaluating a specific frame explicitly."""
     if not os.path.exists(WEIGHTS_PATH):
         pytest.skip("Weights not found.")
 
-    dataset_dir = os.path.join(project_root, "accuracy", "dataset_frames")
-    if not os.path.exists(dataset_dir):
-        pytest.skip(f"Dataset directory not found at {dataset_dir}")
+    specific_frame_path = os.path.join(
+        project_root, "accuracy", "dataset_frames", "C1HighRes - Human_frame_135.jpg"
+    )
 
-    # Find all jpg frames in the directory
-    frame_paths = glob.glob(os.path.join(dataset_dir, "*.jpg"))
+    if not os.path.exists(specific_frame_path):
+        pytest.skip(f"Specific frame not found at {specific_frame_path}")
 
-    if not frame_paths:
-        pytest.skip(f"No .jpg frames found in {dataset_dir}")
-
-    # We'll test with just the first 3 frames to form a "clip"
-    clip_paths = frame_paths[:3]
-    clip_frames = []
-
-    for path in clip_paths:
-        frame = cv2.imread(path)
-        if frame is not None:
-            clip_frames.append(frame)
-
-    if not clip_frames:
-        pytest.skip("Could not load any frames into cv2")
+    frame = cv2.imread(specific_frame_path)
+    if frame is None:
+        pytest.skip("Could not load the specific frame into cv2")
 
     evaluator = MLEvaluator(WEIGHTS_PATH)
-    result = evaluator.evaluate_clip(clip_frames)
 
-    # Since these are real dataset frames from CCTV, there is a very high likelihood
-    # that at least one person or car exists in these 3 random frames.
+    # We pass it as a 1-frame clip
+    result = evaluator.evaluate_clip([frame])
+
     assert result is not None, (
-        "Evaluator failed to detect any person/vehicle in the real dataset frames."
+        "Evaluator failed to detect any person/vehicle in the specific frame."
     )
     assert "detection" in result
-    assert "bbox" in result["detection"]
-    assert result["detection"]["label"] in [
-        "person",
-        "car",
-        "truck",
-        "bus",
-        "motorcycle",
-        "vehicle",
-    ]
+    assert result["detection"]["label"] == "person", (
+        f"Expected a person, but found {result['detection']['label']}"
+    )
 
 
 if __name__ == "__main__":

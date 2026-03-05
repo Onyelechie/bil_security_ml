@@ -1,4 +1,3 @@
-!src/server/models/
 support_files/Industrial_Project_Proposal.pdf
 
 # Python
@@ -85,3 +84,7 @@ benchmark/benchmark_summary.txt
 
 # Others
 docs/self_assessment_ebere.tex
+
+# Whitelists (Must be at the end to override broad ignores)
+!src/server/models/
+!src/edge_agent/models/

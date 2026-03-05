@@ -1,9 +1,7 @@
 import argparse
 import gc
 import glob
-import torch
-import pandas as pd
-import argparse
+import os
 import sys
 
 import cv2

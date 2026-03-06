@@ -12,8 +12,6 @@ idempotent and contains no schema operations.
 
 from typing import Sequence, Union
 
-from alembic import op
-
 # revision identifiers, used by Alembic.
 revision: str = "merge_heads_20260223"
 down_revision: Union[str, Sequence[str], None] = (

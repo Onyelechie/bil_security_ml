@@ -1,13 +1,14 @@
-import time
-import os
-import psutil
-import gc
-import cv2
-import glob
-import torch
-import pandas as pd
 import argparse
+import gc
+import glob
+import os
+import time
 from abc import ABC, abstractmethod
+
+import cv2
+import pandas as pd
+import psutil
+import torch
 
 # Constants (Defaults)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -98,7 +99,9 @@ class EfficientDetWrapper(ModelWrapper):
         # EfficientDet-D0 has strict architecture constraints (512x512 recommended)
         # We force 512 for D0 to avoid 'stack expects each tensor to be equal size' errors
         if model_name == "efficientdet_d0" and input_size != 512:
-            print(f"Note: EfficientDet-D0 requires 512x512. Ignoring --input-size {input_size}.")
+            print(
+                f"Note: EfficientDet-D0 requires 512x512. Ignoring --input-size {input_size}."
+            )
             input_size = 512
         super().__init__("EfficientDet-D0", input_size)
         self.model_name = model_name
@@ -107,13 +110,17 @@ class EfficientDetWrapper(ModelWrapper):
         print(f"Loading {self.name}...")
         from effdet import create_model
 
-        self.model = create_model(self.model_name, bench_task="predict", pretrained=True)
+        self.model = create_model(
+            self.model_name, bench_task="predict", pretrained=True
+        )
         self.model.eval()
 
     def predict(self, frame):
         img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         img = cv2.resize(img, (self.input_size, self.input_size))
-        img_tensor = torch.from_numpy(img).to(dtype=torch.float32).permute(2, 0, 1).unsqueeze(0)
+        img_tensor = (
+            torch.from_numpy(img).to(dtype=torch.float32).permute(2, 0, 1).unsqueeze(0)
+        )
         img_tensor = img_tensor / 255.0
         with torch.no_grad():
             output = self.model(img_tensor)
@@ -132,16 +139,17 @@ class TorchvisionSSDWrapper(ModelWrapper):
     def __init__(self, name="SSD-MobileNet", input_size=320):
         # ssdlite320_mobilenet_v3_large is hardcoded to 320 in torchvision's default weights
         if input_size != 320:
-            print(f"Note: SSD-MobileNet (SSDLite320) using native 320x320. Ignoring --input-size {input_size}.")
+            print(
+                f"Note: SSD-MobileNet (SSDLite320) using native 320x320. Ignoring --input-size {input_size}."
+            )
             input_size = 320
         super().__init__(name, input_size)
 
     def load(self):
         print(f"Loading {self.name}...")
         from torchvision.models.detection import (
-            ssdlite320_mobilenet_v3_large,
             SSDLite320_MobileNet_V3_Large_Weights,
-        )
+            ssdlite320_mobilenet_v3_large)
 
         self.weights = SSDLite320_MobileNet_V3_Large_Weights.DEFAULT
         self.model = ssdlite320_mobilenet_v3_large(weights=self.weights)
@@ -173,14 +181,24 @@ def run_benchmark(args):
 
     # 1. Setup Models
     available_models = {
-        "YOLOv8-Nano": YOLOWrapper("YOLOv8-Nano", os.path.join(SCRIPT_DIR, "yolov8n.pt"), args.input_size),
-        "YOLOv8-Small": YOLOWrapper("YOLOv8-Small", os.path.join(SCRIPT_DIR, "yolov8s.pt"), args.input_size),
-        "YOLOv5-Nano": YOLOWrapper("YOLOv5-Nano", os.path.join(SCRIPT_DIR, "yolov5n.pt"), args.input_size),
+        "YOLOv8-Nano": YOLOWrapper(
+            "YOLOv8-Nano", os.path.join(SCRIPT_DIR, "yolov8n.pt"), args.input_size
+        ),
+        "YOLOv8-Small": YOLOWrapper(
+            "YOLOv8-Small", os.path.join(SCRIPT_DIR, "yolov8s.pt"), args.input_size
+        ),
+        "YOLOv5-Nano": YOLOWrapper(
+            "YOLOv5-Nano", os.path.join(SCRIPT_DIR, "yolov5n.pt"), args.input_size
+        ),
         "EfficientDet-D0": EfficientDetWrapper("efficientdet_d0", args.input_size),
         "SSD-MobileNet": TorchvisionSSDWrapper("SSD-MobileNet", args.input_size),
     }
 
-    selected_model_names = args.models.split(",") if args.models != "all" else list(available_models.keys())
+    selected_model_names = (
+        args.models.split(",")
+        if args.models != "all"
+        else list(available_models.keys())
+    )
     models_to_run = []
     for m_name in selected_model_names:
         if m_name in available_models:
@@ -244,7 +262,11 @@ def run_benchmark(args):
                 detections = model_wrapper.predict(frame)
                 end_frame_time = time.time()
                 latency_ms = (end_frame_time - start_frame_time) * 1000
-                fps = 1.0 / (end_frame_time - start_frame_time) if (end_frame_time - start_frame_time) > 0 else 0
+                fps = (
+                    1.0 / (end_frame_time - start_frame_time)
+                    if (end_frame_time - start_frame_time) > 0
+                    else 0
+                )
 
                 ram_mb = process.memory_info().rss / (1024 * 1024)
                 cpu_pct = process.cpu_percent() / num_cpus
@@ -260,7 +282,10 @@ def run_benchmark(args):
                     label_lower = label.lower()
                     if label_lower == "person":
                         detection_counts["person"] += 1
-                    elif any(v in label_lower for v in ["car", "truck", "bus", "motorcycle", "vehicle"]):
+                    elif any(
+                        v in label_lower
+                        for v in ["car", "truck", "bus", "motorcycle", "vehicle"]
+                    ):
                         detection_counts["vehicle"] += 1
                     else:
                         detection_counts["other"] += 1
@@ -283,7 +308,9 @@ def run_benchmark(args):
                         "Person_Detections": detection_counts["person"],
                         "Vehicle_Detections": detection_counts["vehicle"],
                         "Resolution": (
-                            "High" if "HighRes" in video_path else "Low" if "LowRes" in video_path else "Unknown"
+                            "High"
+                            if "HighRes" in video_path
+                            else "Low" if "LowRes" in video_path else "Unknown"
                         ),
                     }
                 )
@@ -300,7 +327,9 @@ def run_benchmark(args):
         with open(OUTPUT_SUMMARY, "w") as f:
             f.write("Multi-Model Benchmark Summary\n")
             f.write("=============================\n")
-            f.write(f"Threads: {args.threads} | Input Size: {args.input_size} | Conf: {args.confidence}\n\n")
+            f.write(
+                f"Threads: {args.threads} | Input Size: {args.input_size} | Conf: {args.confidence}\n\n"
+            )
 
             for res in ["High", "Low"]:
                 f.write(f"{res.upper()} RESOLUTION SUMMARY\n")
@@ -339,11 +368,19 @@ if __name__ == "__main__":
         default="all",
         help="Comma-separated models (e.g. YOLOv8-Nano,YOLOv8-Small).",
     )
-    parser.add_argument("--threads", type=int, default=DEFAULT_THREADS, help="Torch threads.")
-    parser.add_argument("--input-size", type=int, default=640, help="Input resolution (imgsz).")
+    parser.add_argument(
+        "--threads", type=int, default=DEFAULT_THREADS, help="Torch threads."
+    )
+    parser.add_argument(
+        "--input-size", type=int, default=640, help="Input resolution (imgsz)."
+    )
     parser.add_argument("--warmup", type=int, default=DEFAULT_WARMUP, help="Warmup.")
-    parser.add_argument("--max-frames", type=int, default=DEFAULT_MAX_FRAMES, help="Max frames.")
-    parser.add_argument("--confidence", type=float, default=DEFAULT_CONF, help="Conf threshold.")
+    parser.add_argument(
+        "--max-frames", type=int, default=DEFAULT_MAX_FRAMES, help="Max frames."
+    )
+    parser.add_argument(
+        "--confidence", type=float, default=DEFAULT_CONF, help="Conf threshold."
+    )
 
     args = parser.parse_args()
     run_benchmark(args)

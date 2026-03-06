@@ -1,8 +1,9 @@
-from fastapi.testclient import TestClient
 from datetime import datetime, timezone
 
-from server.main import app
+from fastapi.testclient import TestClient
+
 from server.db import init_db
+from server.main import app
 
 # Initialize database tables before tests
 init_db()

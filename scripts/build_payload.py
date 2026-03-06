@@ -4,6 +4,7 @@
 This helper is used by the GitHub Actions workflow to avoid fragile
 YAML heredocs and quoting issues when building JSON payloads for curl.
 """
+
 import json
 import sys
 

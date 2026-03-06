@@ -1,5 +1,6 @@
-from sqlalchemy import Column, String, DateTime, JSON, ForeignKey
 import uuid
+
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, String
 
 from .base import Base
 

@@ -3,12 +3,26 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import threading
+import time
+
+from .sender import ServerSender
 from datetime import datetime, timezone
 
 from .config import EdgeSettings
 from .logging import configure_logging
 
 logger = logging.getLogger(__name__)
+
+
+def heartbeat_loop(sender: ServerSender, interval_sec: int):
+    """
+    Thread target for sending heartbeats at regular intervals.
+    """
+    started_monotonic = time.monotonic()
+    while True:
+        sender.send_heartbeat(started_monotonic)
+        time.sleep(interval_sec)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -66,6 +80,15 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
         if args.print_config:
             print(cfg.model_dump())
             return 0
+
+        # Start heartbeat thread (runs regardless of mode to ensure server knows we're alive)
+        sender = ServerSender(cfg)
+        heartbeat_thread = threading.Thread(
+            target=heartbeat_loop,
+            args=(sender, cfg.heartbeat_interval_sec),
+            daemon=True
+        )
+        heartbeat_thread.start()
 
         if args.http_serve:
             import uvicorn

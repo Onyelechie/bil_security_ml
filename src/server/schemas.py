@@ -42,3 +42,29 @@ class HeartbeatOut(BaseModel):
     status: str
     last_heartbeat: datetime
     message: str
+
+
+class EdgePCStatusOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    edge_pc_id: str
+    site_name: str
+    status: str
+    last_heartbeat: Optional[datetime] = None
+
+
+class EdgePCStatusListOut(BaseModel):
+    edges: List[EdgePCStatusOut]
+
+
+class ServerLogEntryOut(BaseModel):
+    id: int
+    timestamp: datetime
+    level: str
+    logger: str
+    message: str
+
+
+class ServerLogListOut(BaseModel):
+    logs: List[ServerLogEntryOut]
+    latest_id: int

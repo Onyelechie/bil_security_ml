@@ -1,2 +1,6 @@
+.PHONY: test
+
+PYTHON ?= python
+
 test:
-	PYTHONPATH=src:. pytest -v
+	$(PYTHON) scripts/run_tests.py

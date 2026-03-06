@@ -1,16 +1,18 @@
 import os
 import sys
-import cv2
-import pytest
-import numpy as np
-
 from unittest.mock import MagicMock, patch
+
+import cv2
+import numpy as np
+import pytest
+
 from src.edge_agent.ml_evaluator import MLEvaluator
 from src.edge_agent.models import YOLOWrapper
 
 # We need a path to the weights
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 WEIGHTS_PATH = os.path.join(project_root, "benchmark", "yolov8n.pt")
+WEIGHTS_EXIST = os.path.exists(WEIGHTS_PATH)
 
 
 @pytest.fixture
@@ -96,6 +98,10 @@ def test_ml_evaluator_grayscale_mocked(mock_evaluator):
 
 
 @pytest.mark.integration
+@pytest.mark.skipif(
+    not WEIGHTS_EXIST,
+    reason="Weights not found at benchmark/yolov8n.pt. Run benchmark_suite.py to download.",
+)
 @pytest.mark.parametrize(
     "filename, expected_label, custom_person_conf, custom_vehicle_conf, expected_to_pass",
     [
@@ -113,16 +119,44 @@ def test_ml_evaluator_specific_frames_integration(
     """Real inference test using actual weights. Only runs if --integration is specified or weights found."""
     if not os.path.exists(WEIGHTS_PATH):
         pytest.skip(
-            "Weights not found at benchark/yolov8n.pt. Skipping integration test."
+            "Weights not found at benchmark/yolov8n.pt. Skipping integration test."
         )
 
     specific_frame_path = os.path.join(
         project_root, "tests", "edge_agent", "test_data", filename
     )
-    if not os.path.exists(specific_frame_path):
-        pytest.skip(f"Specific frame not found at {specific_frame_path}")
 
-    frame = cv2.imread(specific_frame_path)
+    frame = None
+    if os.path.exists(specific_frame_path):
+        frame = cv2.imread(specific_frame_path)
+
+    # Fallback: Try to extract from benchmark video if image is missing
+    if frame is None:
+        try:
+            # Expected format: "VideoName_frame_123.jpg"
+            parts = filename.split("_frame_")
+            if len(parts) == 2:
+                video_name = parts[0] + ".mp4"
+                frame_idx = int(parts[1].split(".")[0])
+
+                video_path = os.path.join(
+                    project_root, "benchmark", "cctv_samples", video_name
+                )
+                if os.path.exists(video_path):
+                    cap = cv2.VideoCapture(video_path)
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+                    ret, extracted = cap.read()
+                    cap.release()
+                    if ret:
+                        frame = extracted
+        except Exception:
+            pass
+
+    if frame is None:
+        pytest.skip(
+            f"Frame not found at {specific_frame_path} and could not extract from video."
+        )
+
     evaluator = MLEvaluator(
         WEIGHTS_PATH, person_conf=custom_person_conf, vehicle_conf=custom_vehicle_conf
     )

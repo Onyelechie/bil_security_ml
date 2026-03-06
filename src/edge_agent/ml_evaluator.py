@@ -34,7 +34,7 @@ class MLEvaluator:
         )
         logger.info(f"MLEvaluator initialized with model from {weights_path}")
 
-    def evaluate_frames(self, frames: list) -> dict | None:
+    def evaluate_frames(self, frames: list[np.ndarray]) -> dict | None:
         """
         Runs YOLOv8-Nano on a list of frames (BGR or Grayscale, up to 40 from RingBuffer).
         If frames are grayscale, they are converted to BGR for YOLO compatibility.
@@ -44,6 +44,7 @@ class MLEvaluator:
         best_detection = None
         best_conf = 0.0
         best_frame_index = -1
+        best_frame = None
 
         for idx, frame in enumerate(frames):
             if frame is None:
@@ -117,16 +118,32 @@ class MLEvaluator:
         # Draw label background + text
         text = f"{label} {confidence:.0%}"
         (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)
-        cv2.rectangle(annotated, (x1, y1 - th - 8), (x1 + tw + 4, y1), color, -1)
-        cv2.putText(
-            annotated,
-            text,
-            (x1 + 2, y1 - 4),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
-            (255, 255, 255),
-            1,
-            cv2.LINE_AA,
-        )
+
+        # Ensure label is visible (handle top edge)
+        if y1 - th - 8 < 0:
+            # Draw inside/below top edge
+            cv2.rectangle(annotated, (x1, y1), (x1 + tw + 4, y1 + th + 8), color, -1)
+            cv2.putText(
+                annotated,
+                text,
+                (x1 + 2, y1 + th + 4),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (255, 255, 255),
+                1,
+                cv2.LINE_AA,
+            )
+        else:
+            cv2.rectangle(annotated, (x1, y1 - th - 8), (x1 + tw + 4, y1), color, -1)
+            cv2.putText(
+                annotated,
+                text,
+                (x1 + 2, y1 - 4),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (255, 255, 255),
+                1,
+                cv2.LINE_AA,
+            )
 
         return annotated

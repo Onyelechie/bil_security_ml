@@ -2,8 +2,8 @@ import argparse
 import gc
 import glob
 import os
+import sys
 import time
-from abc import ABC, abstractmethod
 
 import cv2
 import pandas as pd
@@ -12,6 +12,14 @@ import torch
 
 # Constants (Defaults)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from src.edge_agent.models import YOLOWrapper
+from src.edge_agent.models.efficientdet import EfficientDetWrapper
+from src.edge_agent.models.ssd import TorchvisionSSDWrapper
+
 VIDEO_EXTENSIONS = ["cctv_samples/*.mp4"]
 OUTPUT_CSV = os.path.join(SCRIPT_DIR, "benchmark_results.csv")
 OUTPUT_SUMMARY = os.path.join(SCRIPT_DIR, "benchmark_summary.txt")
@@ -19,156 +27,6 @@ DEFAULT_WARMUP = 10
 DEFAULT_MAX_FRAMES = 100
 DEFAULT_THREADS = 4
 DEFAULT_CONF = 0.25
-
-# COCO Class Mapping (Standard IDs)
-COCO_CLASSES = {
-    1: "person",
-    2: "bicycle",
-    3: "car",
-    4: "motorcycle",
-    6: "bus",
-    8: "truck",
-}
-
-
-class ModelWrapper(ABC):
-    """
-    Abstract Base Class for all object detection models.
-    """
-
-    def __init__(self, name, input_size=None):
-        self.name = name
-        self.model = None
-        self.input_size = input_size
-
-    @abstractmethod
-    def load(self):
-        pass
-
-    @abstractmethod
-    def predict(self, frame):
-        pass
-
-    def unload(self):
-        if self.model:
-            del self.model
-            self.model = None
-        gc.collect()
-
-
-class YOLOWrapper(ModelWrapper):
-    def __init__(self, model_name, weights_path, input_size=640):
-        super().__init__(model_name, input_size)
-        self.weights_path = weights_path
-
-    def load(self):
-        print(f"Loading {self.name} ({self.weights_path})...")
-        from ultralytics import YOLO
-
-        if not os.path.exists(self.weights_path):
-            weights_name = os.path.basename(self.weights_path)
-            print(f"Warning: {self.weights_path} not found.")
-            print(f"Attempting to download {weights_name} automatically...")
-            self.model = YOLO(weights_name)
-            if os.path.exists(weights_name) and not os.path.exists(self.weights_path):
-                try:
-                    import shutil
-
-                    shutil.move(weights_name, self.weights_path)
-                    print(f"Moved downloaded weights to {self.weights_path}")
-                except Exception as e:
-                    print(f"Note: Could not move weights to {self.weights_path}: {e}")
-        else:
-            self.model = YOLO(self.weights_path)
-
-    def predict(self, frame):
-        # Ultralytics YOLO supports imgsz parameter directly
-        results = self.model(frame, verbose=False, imgsz=self.input_size)
-        detections = []
-        for r in results:
-            for box in r.boxes:
-                cls_id = int(box.cls[0])
-                conf = float(box.conf[0])
-                label = self.model.names[cls_id]
-                detections.append((label, conf))
-        return detections
-
-
-class EfficientDetWrapper(ModelWrapper):
-    def __init__(self, model_name="efficientdet_d0", input_size=512):
-        # EfficientDet-D0 has strict architecture constraints (512x512 recommended)
-        # We force 512 for D0 to avoid 'stack expects each tensor to be equal size' errors
-        if model_name == "efficientdet_d0" and input_size != 512:
-            print(
-                f"Note: EfficientDet-D0 requires 512x512. Ignoring --input-size {input_size}."
-            )
-            input_size = 512
-        super().__init__("EfficientDet-D0", input_size)
-        self.model_name = model_name
-
-    def load(self):
-        print(f"Loading {self.name}...")
-        from effdet import create_model
-
-        self.model = create_model(
-            self.model_name, bench_task="predict", pretrained=True
-        )
-        self.model.eval()
-
-    def predict(self, frame):
-        img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        img = cv2.resize(img, (self.input_size, self.input_size))
-        img_tensor = (
-            torch.from_numpy(img).to(dtype=torch.float32).permute(2, 0, 1).unsqueeze(0)
-        )
-        img_tensor = img_tensor / 255.0
-        with torch.no_grad():
-            output = self.model(img_tensor)
-        detections = []
-        if output is not None and len(output) > 0:
-            for detection in output[0]:
-                score = float(detection[4])
-                # Note: confidence filter is applied in the main loop
-                cls_id = int(detection[5])
-                label = COCO_CLASSES.get(cls_id, f"Class_{cls_id}")
-                detections.append((label, score))
-        return detections
-
-
-class TorchvisionSSDWrapper(ModelWrapper):
-    def __init__(self, name="SSD-MobileNet", input_size=320):
-        # ssdlite320_mobilenet_v3_large is hardcoded to 320 in torchvision's default weights
-        if input_size != 320:
-            print(
-                f"Note: SSD-MobileNet (SSDLite320) using native 320x320. Ignoring --input-size {input_size}."
-            )
-            input_size = 320
-        super().__init__(name, input_size)
-
-    def load(self):
-        print(f"Loading {self.name}...")
-        from torchvision.models.detection import (
-            SSDLite320_MobileNet_V3_Large_Weights,
-            ssdlite320_mobilenet_v3_large)
-
-        self.weights = SSDLite320_MobileNet_V3_Large_Weights.DEFAULT
-        self.model = ssdlite320_mobilenet_v3_large(weights=self.weights)
-        self.model.eval()
-        self.preprocess = self.weights.transforms()
-
-    def predict(self, frame):
-        from PIL import Image
-
-        img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        batch = self.preprocess(img).unsqueeze(0)
-        with torch.no_grad():
-            prediction = self.model(batch)[0]
-        detections = []
-        for label, score in zip(prediction["labels"], prediction["scores"]):
-            cls_id = label.item()
-            label_str = COCO_CLASSES.get(cls_id, f"class_{cls_id}")
-            detections.append((label_str, float(score)))
-        return detections
 
 
 def run_benchmark(args):
@@ -276,7 +134,7 @@ def run_benchmark(args):
                 ram_usages.append(ram_mb)
                 cpu_usages.append(cpu_pct)
 
-                for label, conf in detections:
+                for _, _, _, _, conf, label in detections:
                     if conf < args.confidence:
                         continue
                     label_lower = label.lower()
@@ -310,7 +168,9 @@ def run_benchmark(args):
                         "Resolution": (
                             "High"
                             if "HighRes" in video_path
-                            else "Low" if "LowRes" in video_path else "Unknown"
+                            else "Low"
+                            if "LowRes" in video_path
+                            else "Unknown"
                         ),
                     }
                 )

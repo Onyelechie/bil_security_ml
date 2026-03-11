@@ -82,6 +82,7 @@ camera*/
 benchmark/cctv_samples/*.mp4
 benchmark/benchmark_results.csv
 benchmark/benchmark_summary.txt
+benchmark/system_info.txt
 
 # Others
 docs/self_assessment_ebere.tex

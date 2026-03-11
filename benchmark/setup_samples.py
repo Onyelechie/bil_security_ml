@@ -3,7 +3,8 @@ import os
 # Script to help setup benchmark CCTV samples.
 # Note: SharePoint links require manual download via browser.
 
-SAMPLES_DIR = "cctv_samples"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SAMPLES_DIR = os.path.join(SCRIPT_DIR, "cctv_samples")
 SAMPLES = {
     "C1HighRes - Human.mp4": "https://drive.google.com/file/d/1rUlnJr5g4Tj6WsLfKStRAJq2_P96b6Uj/view?usp=drive_link",
     "C1LowRes - Human.mp4": "https://drive.google.com/file/d/1UjZv3yxt-28pmyIy2W9N4TAfLYpRZqqQ/view?usp=drive_link",

@@ -201,14 +201,27 @@ def run_accuracy_evaluation(args):
     all_results = []
 
     # We maintain a crude class ID mapping for torchmetrics.
-    # We will hash string labels (e.g. "person") into stable ints.
+    # We map known labels directly and maintain an explicit registry
+    # for unexpected labels encountered during evaluation.
+    _label_registry = {}
+    _next_available_id = 10
+
     def str_to_cls_id(label_str):
+        nonlocal _next_available_id
         name = label_str.lower()
-        if name == "person" or name == "0":  # YOLO export usually makes person 0
+        
+        # Standard COCO/YOLO mapping for our primary targets
+        if name in ["person", "0"]:
             return 0
-        if "car" in name or "vehicle" in name or name == "2":
+        if name in ["car", "vehicle", "2"]:
             return 2
-        return hash(name) % 100 + 10  # offset unknown classes
+            
+        # Deterministic mapping for other unexpected labels
+        if name not in _label_registry:
+            _label_registry[name] = _next_available_id
+            _next_available_id += 1
+            
+        return _label_registry[name]
 
     for model_wrapper in models_to_run:
         print(f"\n{'=' * 30}\nEvaluating: {model_wrapper.name}\n{'=' * 30}")

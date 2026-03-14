@@ -55,7 +55,9 @@ def read_mapping_csv(path: Path) -> Dict[Tuple[str, str], str]:
 
 
 def dry_run_report(conn: sa.engine.Connection) -> int:
-    res = conn.execute(sa.text("SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = 'edge-001'"))
+    res = conn.execute(
+        sa.text("SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = 'edge-001'")
+    )
     row = res.mappings().first()
     count = row["c"] if row else 0
     print(f"Alerts with edge_pc_id='edge-001': {count}")
@@ -79,35 +81,49 @@ def apply_mappings(
         if cnt == 0:
             print(f"No matching sentinel alerts for site={site} camera={camera}")
             continue
-        print(f"Mapping {cnt} alerts for site={site} camera={camera} -> edge_pc_id={edge}")
+        print(
+            f"Mapping {cnt} alerts for site={site} camera={camera} -> edge_pc_id={edge}"
+        )
         if not dry_run:
             update_sql = (
                 "UPDATE alerts SET edge_pc_id = :edge WHERE edge_pc_id = 'edge-001' "
                 "AND site_id = :site AND camera_id = :camera"
             )
-            conn.execute(sa.text(update_sql), {"edge": edge, "site": site, "camera": camera})
+            conn.execute(
+                sa.text(update_sql), {"edge": edge, "site": site, "camera": camera}
+            )
         updated += cnt
     return updated
 
 
-def assign_default(conn: sa.engine.Connection, default_edge: str, dry_run: bool = True) -> int:
-    res = conn.execute(sa.text("SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = 'edge-001'"))
+def assign_default(
+    conn: sa.engine.Connection, default_edge: str, dry_run: bool = True
+) -> int:
+    res = conn.execute(
+        sa.text("SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = 'edge-001'")
+    )
     cnt = res.mappings().first()["c"]
     print(f"Assigning default edge_pc_id={default_edge} to {cnt} alerts")
     if cnt and not dry_run:
-        update_sql = "UPDATE alerts SET edge_pc_id = :edge " "WHERE edge_pc_id = 'edge-001'"
+        update_sql = (
+            "UPDATE alerts SET edge_pc_id = :edge " "WHERE edge_pc_id = 'edge-001'"
+        )
         conn.execute(sa.text(update_sql), {"edge": default_edge})
     return cnt
 
 
 def cleanup_sentinel(conn: sa.engine.Connection, dry_run: bool = True) -> bool:
     # Delete sentinel if not referenced
-    res = conn.execute(sa.text("SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = 'edge-001'"))
+    res = conn.execute(
+        sa.text("SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = 'edge-001'")
+    )
     cnt = res.mappings().first()["c"]
     if cnt:
         print(f"Cannot remove sentinel: {cnt} alerts still reference 'edge-001'")
         return False
-    print("No alerts reference 'edge-001'. Removing sentinel row from edge_pcs (if present)")
+    print(
+        "No alerts reference 'edge-001'. Removing sentinel row from edge_pcs (if present)"
+    )
     if not dry_run:
         conn.execute(sa.text("DELETE FROM edge_pcs WHERE edge_pc_id = 'edge-001'"))
     return True
@@ -115,7 +131,9 @@ def cleanup_sentinel(conn: sa.engine.Connection, dry_run: bool = True) -> bool:
 
 def main() -> None:
     p = argparse.ArgumentParser()
-    p.add_argument("--mapping", type=Path, help="CSV file mapping (site_id,camera_id,edge_pc_id)")
+    p.add_argument(
+        "--mapping", type=Path, help="CSV file mapping (site_id,camera_id,edge_pc_id)"
+    )
     p.add_argument(
         "--assign-default",
         type=str,

@@ -3,42 +3,155 @@
 on:
   pull_request:
     types: [opened, reopened, ready_for_review, closed]
-    branches: [main, Server, '**']
+  pull_request_review:
+    types: [submitted]  # <- keep only submitted to avoid repeats/spam
 
 jobs:
   notify:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read   # needed to fetch inline review comments via GitHub API
+
     steps:
-      - name: Notify Discord (created vs merged channels)
+      - name: Notify Discord
         env:
-          DISCORD_WEBHOOK_PR_CREATED: ${{ secrets.DISCORD_WEBHOOK_PR_CREATED }}
-          DISCORD_WEBHOOK_PR_MERGED: ${{ secrets.DISCORD_WEBHOOK_PR_MERGED }}
+          # built-in token (no new secrets needed)
+          GITHUB_TOKEN: ${{ github.token }}
+
+          # reuse your existing webhooks (no new Discord webhooks needed)
+          DISCORD_WEBHOOK_PR_CREATED:  ${{ secrets.DISCORD_WEBHOOK_PR_CREATED }}
+          DISCORD_WEBHOOK_PR_MERGED:   ${{ secrets.DISCORD_WEBHOOK_PR_MERGED }}
+          DISCORD_WEBHOOK_PR_REVIEWS:  ${{ secrets.DISCORD_WEBHOOK_PR_CREATED }}
         run: |
           set -euo pipefail
 
+          EVENT_NAME='${{ github.event_name }}'
           ACTION='${{ github.event.action }}'
-          IS_MERGED='${{ github.event.pull_request.merged }}'
 
-          PR_TITLE='${{ github.event.pull_request.title }}'
-          PR_URL='${{ github.event.pull_request.html_url }}'
-          PR_NUMBER='${{ github.event.pull_request.number }}'
-          PR_AUTHOR='${{ github.event.pull_request.user.login }}'
-          PR_MERGER='${{ github.actor }}'
-          PR_BRANCH='${{ github.event.pull_request.head.ref }}'
-          PR_BASE='${{ github.event.pull_request.base.ref }}'
+          JQ="jq -r"
+          PAYLOAD_FILE="$GITHUB_EVENT_PATH"
 
-          if [ "$ACTION" = "opened" ] || [ "$ACTION" = "reopened" ] || [ "$ACTION" = "ready_for_review" ]; then
-            MSG=$'🚀 **PR Created** (#'"${PR_NUMBER}"$')\n**'"${PR_TITLE}"$'**\n👤 '"${PR_AUTHOR}"$'\n🌿 '"${PR_BRANCH}"$' → '"${PR_BASE}"$'\n🔗 '"${PR_URL}"
-            PAYLOAD="$(jq -n --arg content "$MSG" '{content: $content}')"
-            curl -sS -H "Content-Type: application/json" -X POST -d "$PAYLOAD" "$DISCORD_WEBHOOK_PR_CREATED"
+          truncate() {
+            local s="$1"
+            local max="${2:-500}"
+            if [ "${#s}" -gt "$max" ]; then
+              echo "${s:0:$max}…"
+            else
+              echo "$s"
+            fi
+          }
+
+          sanitize_body() {
+            # Remove GitHub-rendered image tags and collapse whitespace/newlines
+            echo "$1" \
+              | sed -E 's/<img[^>]*>//g' \
+              | tr '\r' ' ' \
+              | sed -E 's/[[:space:]]+/ /g' \
+              | sed -E 's/^ +| +$//g'
+          }
+
+          post_discord() {
+            local webhook="$1"
+            local msg="$2"
+            [ -z "$webhook" ] && { echo "Webhook missing, skipping."; return 0; }
+
+            # flags:4 => suppress link embeds so it doesn't look "duplicated"
+            local json
+            json="$(jq -n --arg content "$msg" '{content:$content, flags:4, allowed_mentions:{parse:[]}}')"
+            curl -sS -H "Content-Type: application/json" -X POST -d "$json" "$webhook" >/dev/null
+          }
+
+          # --- pull_request events (created / merged / closed) ---
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            PR_TITLE="$($JQ '.pull_request.title' "$PAYLOAD_FILE")"
+            PR_URL="$($JQ '.pull_request.html_url' "$PAYLOAD_FILE")"
+            PR_NUMBER="$($JQ '.pull_request.number' "$PAYLOAD_FILE")"
+            PR_AUTHOR="$($JQ '.pull_request.user.login' "$PAYLOAD_FILE")"
+            PR_BRANCH="$($JQ '.pull_request.head.ref' "$PAYLOAD_FILE")"
+            PR_BASE="$($JQ '.pull_request.base.ref' "$PAYLOAD_FILE")"
+            IS_MERGED="$($JQ '.pull_request.merged' "$PAYLOAD_FILE")"
+            ACTOR='${{ github.actor }}'
+
+            if [ "$ACTION" = "opened" ] || [ "$ACTION" = "reopened" ] || [ "$ACTION" = "ready_for_review" ]; then
+              MSG=$'🚀 **PR Created** (#'"${PR_NUMBER}"$')\n**'"${PR_TITLE}"$'**\n👤 '"${PR_AUTHOR}"$'\n🌿 '"${PR_BRANCH}"$' → '"${PR_BASE}"$'\n🔗 '"${PR_URL}"
+              post_discord "$DISCORD_WEBHOOK_PR_CREATED" "$MSG"
+              exit 0
+            fi
+
+            if [ "$ACTION" = "closed" ] && [ "$IS_MERGED" = "true" ]; then
+              MSG=$'✅ **PR Merged** (#'"${PR_NUMBER}"$')\n**'"${PR_TITLE}"$'**\n👤 Author: '"${PR_AUTHOR}"$'\n🧑‍💻 Merged by: '"${ACTOR}"$'\n🌿 '"${PR_BRANCH}"$' → '"${PR_BASE}"$'\n🔗 '"${PR_URL}"
+              post_discord "$DISCORD_WEBHOOK_PR_MERGED" "$MSG"
+              exit 0
+            fi
+
+            if [ "$ACTION" = "closed" ] && [ "$IS_MERGED" = "false" ]; then
+              MSG=$'🚫 **PR Closed (not merged)** (#'"${PR_NUMBER}"$')\n**'"${PR_TITLE}"$'**\n👤 '"${PR_AUTHOR}"$'\n🔗 '"${PR_URL}"
+              post_discord "$DISCORD_WEBHOOK_PR_MERGED" "$MSG"
+              exit 0
+            fi
+
+            echo "No notification for this pull_request action."
             exit 0
           fi
 
-          if [ "$ACTION" = "closed" ] && [ "$IS_MERGED" = "true" ]; then
-            MSG=$'✅ **PR Merged** (#'"${PR_NUMBER}"$')\n**'"${PR_TITLE}"$'**\n👤 Author: '"${PR_AUTHOR}"$'\n🧑‍💻 Merged by: '"${PR_MERGER}"$'\n🌿 '"${PR_BRANCH}"$' → '"${PR_BASE}"$'\n🔗 '"${PR_URL}"
-            PAYLOAD="$(jq -n --arg content "$MSG" '{content: $content}')"
-            curl -sS -H "Content-Type: application/json" -X POST -d "$PAYLOAD" "$DISCORD_WEBHOOK_PR_MERGED"
+          # --- pull_request_review events (ONE message, includes inline comments from that review) ---
+          if [ "$EVENT_NAME" = "pull_request_review" ]; then
+            PR_TITLE="$($JQ '.pull_request.title' "$PAYLOAD_FILE")"
+            PR_URL="$($JQ '.pull_request.html_url' "$PAYLOAD_FILE")"
+            PR_NUMBER="$($JQ '.pull_request.number' "$PAYLOAD_FILE")"
+
+            REVIEW_ID="$($JQ '.review.id' "$PAYLOAD_FILE")"
+            REVIEW_URL="$($JQ '.review.html_url // ""' "$PAYLOAD_FILE")"
+            REVIEWER="$($JQ '.review.user.login' "$PAYLOAD_FILE")"
+
+            STATE="$($JQ '.review.state // "" | ascii_downcase' "$PAYLOAD_FILE")"  # approved|changes_requested|commented
+            BODY_RAW="$($JQ '.review.body // ""' "$PAYLOAD_FILE")"
+            BODY="$(truncate "$(sanitize_body "$BODY_RAW")" 700)"
+
+            ICON="📝"
+            if [ "$STATE" = "approved" ]; then ICON="✅"; fi
+            if [ "$STATE" = "changes_requested" ]; then ICON="❌"; fi
+
+            # Fetch inline comments that belong to THIS review
+            COMMENTS_JSON="$(curl -sS \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews/${REVIEW_ID}/comments?per_page=100")"
+
+            COUNT="$(echo "$COMMENTS_JSON" | jq 'length')"
+
+            # Build bullet list (limit to first 8 to avoid Discord 2000 char limit)
+            LIST="$(echo "$COMMENTS_JSON" | jq -r '
+              .[0:8][] |
+              "• \(.path):\((.line // .original_line // "?")) — " +
+              (.body
+                | gsub("<img[^>]*>";"")
+                | gsub("\r";" ")
+                | gsub("\n+";" ")
+                | gsub("[[:space:]]+";" ")
+                | if length>160 then .[0:160] + "…" else . end
+              )
+            ')"
+
+            INLINE_SECTION=""
+            if [ "$COUNT" -gt 0 ]; then
+              INLINE_SECTION=$'\n\n**Inline comments ('"${COUNT}"$')**\n'"${LIST}"
+              if [ "$COUNT" -gt 8 ]; then
+                INLINE_SECTION+=$'\n… +'"$((COUNT-8))"$' more (see PR).'
+              fi
+            fi
+
+            # Prefer linking the review if present
+            LINK="$PR_URL"
+            if [ -n "$REVIEW_URL" ] && [ "$REVIEW_URL" != "null" ]; then
+              LINK="$REVIEW_URL"
+            fi
+
+            MSG=$''"${ICON}"$' **Review '"${STATE}"$'** — PR #'"${PR_NUMBER}"$'\n**'"${PR_TITLE}"$'**\n👤 Reviewer: '"${REVIEWER}"$'\n💬 '"${BODY}"$''"${INLINE_SECTION}"$'\n🔗 '"${LINK}"
+
+            post_discord "$DISCORD_WEBHOOK_PR_REVIEWS" "$MSG"
             exit 0
           fi
 
-          echo "No notification for this event."
+          echo "No handler for EVENT_NAME=$EVENT_NAME ACTION=$ACTION"

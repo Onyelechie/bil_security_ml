@@ -1,6 +1,8 @@
 import os
+
 import pandas as pd
-from benchmark.benchmark_suite import run_benchmark, create_dummy_video
+
+from benchmark.benchmark_suite import create_dummy_video, run_benchmark
 
 
 def test_benchmark_smoke(tmp_path, monkeypatch):
@@ -44,7 +46,9 @@ def test_benchmark_smoke(tmp_path, monkeypatch):
     monkeypatch.setattr("benchmark.benchmark_suite.VIDEO_EXTENSIONS", ["*.mp4"])
 
     # Use args[0] to capture the actual model name (e.g., YOLOv8-Nano)
-    monkeypatch.setattr("benchmark.benchmark_suite.YOLOWrapper", lambda *args: MockWrapper(args[0]))
+    monkeypatch.setattr(
+        "benchmark.benchmark_suite.YOLOWrapper", lambda *args: MockWrapper(args[0])
+    )
     monkeypatch.setattr(
         "benchmark.benchmark_suite.EfficientDetWrapper",
         lambda *args: MockWrapper("MockEffDet"),

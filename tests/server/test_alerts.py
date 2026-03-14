@@ -1,8 +1,9 @@
-from fastapi.testclient import TestClient
 from datetime import datetime, timezone
 
-from server.main import app
+from fastapi.testclient import TestClient
+
 from server.db import init_db
+from server.main import app
 
 # Initialize database tables before tests
 init_db()
@@ -33,7 +34,12 @@ def test_receive_alert():
 
 
 def test_list_alerts():
-    # First create an alert
+    # Get existing alerts (if any)
+    initial_response = client.get("/api/alerts")
+    assert initial_response.status_code == 200
+    initial_count = len(initial_response.json().get("alerts", []))
+
+    # Create a new alert
     payload = {
         "site_id": "site_002",
         "camera_id": "cam_02",
@@ -49,7 +55,10 @@ def test_list_alerts():
     assert response.status_code == 200
     data = response.json()
     assert "alerts" in data
-    assert len(data["alerts"]) >= 1  # At least one alert should exist
+    assert len(data["alerts"]) == initial_count + 1  # At least one more than before
+    assert (
+        data["alerts"][-1]["site_id"] == payload["site_id"]
+    )  # The last alert should be the one we just added
 
 
 def test_health_check():

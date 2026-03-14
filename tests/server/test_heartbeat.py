@@ -1,16 +1,20 @@
-from fastapi.testclient import TestClient
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
-from server.main import app
+from fastapi.testclient import TestClient
+
 from server.db import init_db
+from server.main import app
 
 init_db()
 client = TestClient(app)
 
 
 def test_heartbeat_create_and_update():
+    import uuid
+
+    edge_pc_id = f"edge-{uuid.uuid4()}"
     payload = {
-        "edge_pc_id": "edge-001",
+        "edge_pc_id": edge_pc_id,
         "site_name": "Site A",
         "status": "online",
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -27,7 +31,9 @@ def test_heartbeat_create_and_update():
 
     # Update heartbeat (change status)
     payload["status"] = "idle"
-    payload["timestamp"] = (datetime.now(timezone.utc) + timedelta(seconds=10)).isoformat()
+    payload["timestamp"] = (
+        datetime.now(timezone.utc) + timedelta(seconds=10)
+    ).isoformat()
     response = client.post("/api/heartbeat", json=payload)
     assert response.status_code == 201
     data2 = response.json()

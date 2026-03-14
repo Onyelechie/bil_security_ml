@@ -13,6 +13,7 @@ from .logging import configure_logging
 
 logger = logging.getLogger(__name__)
 
+
 def heartbeat_loop(sender: ServerSender, interval_sec: int):
     """
     Thread target for sending heartbeats at regular intervals.
@@ -78,7 +79,7 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
         if args.print_config:
             print(cfg.model_dump())
             return 0
-        
+
         # Start heartbeat thread (runs regardless of mode to ensure server knows we're alive)
         sender = ServerSender(cfg)
         heartbeat_thread = threading.Thread(

@@ -41,16 +41,24 @@ def test_ml_evaluator_initialization():
 
 def test_ml_evaluator_caching():
     """Test that multiple evaluators share the same model instance via registry."""
-    # This confirms the registry is used, without loading real weights
-    with patch("src.edge_agent.ml_evaluator.ModelRegistry.get_model") as mock_get:
-        mock_model = MagicMock()
-        mock_get.return_value = mock_model
+    from src.edge_agent.models.registry import ModelRegistry
 
-        eval1 = MLEvaluator("mock.pt")
-        eval2 = MLEvaluator("mock.pt")
+    # Clear the registry to ensure a clean state
+    ModelRegistry.clear()
 
+    # Instead of mocking get_model (which bypasses the registry logic),
+    # we mock the underlying model's load() method to count how many times
+    # the weights are actually fetched from disk.
+    with patch("src.edge_agent.models.YOLOWrapper.load") as mock_load:
+        # First evaluator should trigger load()
+        eval1 = MLEvaluator("mock_cache_test.pt")
+        # Second evaluator should get the cached instance
+        eval2 = MLEvaluator("mock_cache_test.pt")
+
+        # Prove they share the exact same object in memory
         assert eval1.model is eval2.model
-        assert mock_get.call_count == 2
+        # Prove the heavy 'load' operation only happened once
+        assert mock_load.call_count == 1
 
 
 def test_ml_evaluator_empty_clip(mock_evaluator):

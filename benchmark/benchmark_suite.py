@@ -16,9 +16,9 @@ PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from src.edge_agent.models import YOLOWrapper
-from src.edge_agent.models.efficientdet import EfficientDetWrapper
-from src.edge_agent.models.ssd import TorchvisionSSDWrapper
+from src.edge_agent.models import YOLOWrapper  # noqa: E402
+from src.edge_agent.models.efficientdet import EfficientDetWrapper  # noqa: E402
+from src.edge_agent.models.ssd import TorchvisionSSDWrapper  # noqa: E402
 
 VIDEO_EXTENSIONS = ["cctv_samples/*.mp4"]
 OUTPUT_CSV = os.path.join(SCRIPT_DIR, "benchmark_results.csv")

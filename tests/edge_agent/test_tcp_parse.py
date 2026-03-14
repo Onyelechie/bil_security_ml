@@ -1,4 +1,5 @@
 import pytest
+
 from edge_agent.triggers.tcp_parse import parse_motion_xml
 
 

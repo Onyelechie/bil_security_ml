@@ -4,6 +4,7 @@ import asyncio
 import logging
 from contextlib import suppress
 from datetime import datetime, timezone
+from typing import Callable
 
 import numpy as np
 
@@ -14,6 +15,8 @@ from .types import MotionEvent
 
 logger = logging.getLogger(__name__)
 
+OnMotionFn = Callable[[MotionEvent, bool], None]
+
 
 def motion_score(prev: np.ndarray, curr: np.ndarray, *, pixel_delta: int) -> float:
     """
@@ -23,7 +26,6 @@ def motion_score(prev: np.ndarray, curr: np.ndarray, *, pixel_delta: int) -> flo
     if prev.shape != curr.shape:
         raise ValueError("prev and curr must have the same shape")
 
-    # Use int16 to avoid uint8 wraparound on subtraction
     diff = np.abs(curr.astype(np.int16) - prev.astype(np.int16))
     changed = (diff > int(pixel_delta)).mean()
     return float(changed)
@@ -31,8 +33,8 @@ def motion_score(prev: np.ndarray, curr: np.ndarray, *, pixel_delta: int) -> flo
 
 class LocalMotionTrigger:
     """
-    Lightweight motion trigger: compares frames from RingBuffer.latest().
-    Emits MotionEvent(source="local") through TriggerManager when motion is detected.
+    Lightweight motion trigger. Emits accepted MotionEvent through TriggerManager.
+    Also can call on_motion(evt, accepted) for BOTH accepted and dropped events.
     """
 
     def __init__(
@@ -42,11 +44,14 @@ class LocalMotionTrigger:
         mgr: TriggerManager,
         *,
         queue_max: int = 1000,
+        on_motion: OnMotionFn | None = None,
     ) -> None:
         self._cfg = cfg
         self._ring = ring
         self._mgr = mgr
         self._prev: np.ndarray | None = None
+
+        self._on_motion = on_motion
 
         self._stop = asyncio.Event()
         self._task: asyncio.Task | None = None
@@ -57,10 +62,8 @@ class LocalMotionTrigger:
         return self._queue
 
     async def start(self) -> None:
-        # Prevent double-start
         if self._task and not self._task.done():
             return
-
         self._stop.clear()
         self._task = asyncio.create_task(self.run(), name="local-motion-trigger")
         logger.info("Local motion trigger started")
@@ -89,9 +92,10 @@ class LocalMotionTrigger:
 
             if self._prev is not None:
                 try:
-                    score = motion_score(self._prev, curr, pixel_delta=self._cfg.motion_pixel_delta)
+                    score = motion_score(
+                        self._prev, curr, pixel_delta=self._cfg.motion_pixel_delta
+                    )
                 except ValueError:
-                    # frame shape mismatch (shouldn't happen if reader is stable)
                     self._prev = curr
                     await asyncio.sleep(period)
                     continue
@@ -106,6 +110,10 @@ class LocalMotionTrigger:
                     )
 
                     accepted = self._mgr.accept(evt)
+
+                    if self._on_motion:
+                        with suppress(Exception):
+                            self._on_motion(evt, accepted)
 
                     if accepted:
                         logger.info(

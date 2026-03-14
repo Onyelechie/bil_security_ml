@@ -1,5 +1,5 @@
-from datetime import datetime, timedelta, timezone
 import os
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -49,7 +49,7 @@ def test_save_alert_image_sanitizes_filename_parts(tmp_path):
         storage.save_alert_image(
             site_id="../../site a",
             camera_id="cam\\x/../id",
-            image_bytes=b"\xFF\xD8\xFFjpeg",
+            image_bytes=b"\xff\xd8\xffjpeg",
         )
     )
 

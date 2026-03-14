@@ -6,17 +6,15 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, WebSocket
+from pydantic import ValidationError
 
 from ..schemas import AlertCreate
 from ..services.image_storage import ImageStorageError, ImageStorageService
-from ..services.ws_alert_dispatcher import (
-    AlertDispatchFailure,
-    AlertQueueFullError,
-    AlertValidationFailure,
-    WebSocketAlertDispatcher,
-)
+from ..services.ws_alert_dispatcher import (AlertDispatchFailure,
+                                            AlertQueueFullError,
+                                            AlertValidationFailure,
+                                            WebSocketAlertDispatcher)
 from ..services.ws_connection_manager import WebSocketConnectionManager
-from pydantic import ValidationError
 
 router = APIRouter(tags=["alerts-websocket"])
 
@@ -39,13 +37,23 @@ def _extract_alert_payload(message: Any, *, strip_type: bool = False) -> dict[st
 
 @router.websocket("/ws/alerts")
 async def alerts_websocket(websocket: WebSocket) -> None:
-    manager: WebSocketConnectionManager | None = getattr(websocket.app.state, "ws_connection_manager", None)
-    dispatcher: WebSocketAlertDispatcher | None = getattr(websocket.app.state, "ws_alert_dispatcher", None)
-    image_storage: ImageStorageService | None = getattr(websocket.app.state, "ws_image_storage", None)
-    max_image_bytes: int = int(getattr(websocket.app.state, "ws_max_image_bytes", 5_000_000))
+    manager: WebSocketConnectionManager | None = getattr(
+        websocket.app.state, "ws_connection_manager", None
+    )
+    dispatcher: WebSocketAlertDispatcher | None = getattr(
+        websocket.app.state, "ws_alert_dispatcher", None
+    )
+    image_storage: ImageStorageService | None = getattr(
+        websocket.app.state, "ws_image_storage", None
+    )
+    max_image_bytes: int = int(
+        getattr(websocket.app.state, "ws_max_image_bytes", 5_000_000)
+    )
 
     if manager is None or dispatcher is None or image_storage is None:
-        await websocket.close(code=1011, reason="WebSocket alert subsystem not initialized")
+        await websocket.close(
+            code=1011, reason="WebSocket alert subsystem not initialized"
+        )
         return
 
     accepted = await manager.connect(websocket)
@@ -124,7 +132,11 @@ async def alerts_websocket(websocket: WebSocket) -> None:
                 except ImageStorageError as exc:
                     await manager.send_json(
                         websocket,
-                        {"type": "error", "code": "image_store_failed", "message": str(exc)},
+                        {
+                            "type": "error",
+                            "code": "image_store_failed",
+                            "message": str(exc),
+                        },
                     )
                     continue
 
@@ -134,7 +146,11 @@ async def alerts_websocket(websocket: WebSocket) -> None:
                 except AlertValidationFailure as exc:
                     await manager.send_json(
                         websocket,
-                        {"type": "error", "code": "validation_error", "errors": exc.errors},
+                        {
+                            "type": "error",
+                            "code": "validation_error",
+                            "errors": exc.errors,
+                        },
                     )
                     continue
                 except AlertQueueFullError as exc:
@@ -146,7 +162,11 @@ async def alerts_websocket(websocket: WebSocket) -> None:
                 except AlertDispatchFailure as exc:
                     await manager.send_json(
                         websocket,
-                        {"type": "error", "code": "ingestion_error", "message": str(exc)},
+                        {
+                            "type": "error",
+                            "code": "ingestion_error",
+                            "message": str(exc),
+                        },
                     )
                     continue
 
@@ -181,7 +201,10 @@ async def alerts_websocket(websocket: WebSocket) -> None:
                 continue
 
             try:
-                if isinstance(incoming_json, dict) and incoming_json.get("type") == "alert_meta":
+                if (
+                    isinstance(incoming_json, dict)
+                    and incoming_json.get("type") == "alert_meta"
+                ):
                     if pending_alert_payload is not None:
                         await manager.send_json(
                             websocket,
@@ -192,9 +215,13 @@ async def alerts_websocket(websocket: WebSocket) -> None:
                             },
                         )
                         continue
-                    candidate_payload = _extract_alert_payload(incoming_json, strip_type=True)
+                    candidate_payload = _extract_alert_payload(
+                        incoming_json, strip_type=True
+                    )
                     try:
-                        pending_alert_payload = AlertCreate.model_validate(candidate_payload).model_dump(
+                        pending_alert_payload = AlertCreate.model_validate(
+                            candidate_payload
+                        ).model_dump(
                             mode="json",
                             by_alias=True,
                             exclude_none=True,

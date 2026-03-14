@@ -1,7 +1,8 @@
 import os
+
 import pandas as pd
 
-from benchmark.benchmark_suite import run_benchmark, create_dummy_video
+from benchmark.benchmark_suite import create_dummy_video, run_benchmark
 
 
 def test_benchmark_smoke(tmp_path, monkeypatch):

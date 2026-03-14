@@ -46,7 +46,9 @@ class WebSocketAlertDispatcher:
         ingestion_service: AlertIngestionService | None = None,
     ) -> None:
         self._worker_count = worker_count
-        self._queue: asyncio.Queue[_AlertJob | object] = asyncio.Queue(maxsize=queue_size)
+        self._queue: asyncio.Queue[_AlertJob | object] = asyncio.Queue(
+            maxsize=queue_size
+        )
         self._workers: list[asyncio.Task] = []
         self._ingestion_service = ingestion_service or AlertIngestionService()
         self._running = False
@@ -115,4 +117,6 @@ class WebSocketAlertDispatcher:
         finally:
             db.close()
 
-        return AlertOut.model_validate(created_alert).model_dump(mode="json", by_alias=True)
+        return AlertOut.model_validate(created_alert).model_dump(
+            mode="json", by_alias=True
+        )

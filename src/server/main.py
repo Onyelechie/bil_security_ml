@@ -1,8 +1,9 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager, suppress
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import logging
 
 from .config import settings
 from .db import init_db
@@ -55,7 +56,10 @@ async def lifespan(app: FastAPI):
         # Avoid embedding a literal default secret in source (Bandit B105).
         # Warn if running in non-debug mode with an empty or placeholder secret.
         insecure_secret_values = {"", "your-secret-key-here"}
-        if not settings.debug and settings.secret_key.strip().lower() in insecure_secret_values:
+        if (
+            not settings.debug
+            and settings.secret_key.strip().lower() in insecure_secret_values
+        ):
             logger.warning(
                 "SECRET_KEY is empty or set to a development placeholder while DEBUG is False. "
                 "Set a strong SECRET_KEY in environment or .env before production."
@@ -68,7 +72,9 @@ async def lifespan(app: FastAPI):
     init_db()
     logger.info("Database initialized successfully")
 
-    app.state.ws_connection_manager = WebSocketConnectionManager(max_connections=settings.ws_max_connections)
+    app.state.ws_connection_manager = WebSocketConnectionManager(
+        max_connections=settings.ws_max_connections
+    )
     app.state.ws_alert_dispatcher = WebSocketAlertDispatcher(
         worker_count=settings.ws_alert_worker_count,
         queue_size=settings.ws_alert_queue_size,

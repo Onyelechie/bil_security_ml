@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-import re
 
 
 class ImageStorageError(RuntimeError):
@@ -42,7 +42,9 @@ class ImageStorageService:
         try:
             path.write_bytes(image_bytes)
         except OSError as exc:
-            raise ImageStorageError("Failed to persist websocket image payload") from exc
+            raise ImageStorageError(
+                "Failed to persist websocket image payload"
+            ) from exc
 
         return path.as_posix()
 
@@ -83,7 +85,7 @@ class ImageStorageService:
 
     @staticmethod
     def _guess_extension(image_bytes: bytes) -> str:
-        if image_bytes.startswith(b"\xFF\xD8\xFF"):
+        if image_bytes.startswith(b"\xff\xd8\xff"):
             return ".jpg"
         if image_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
             return ".png"

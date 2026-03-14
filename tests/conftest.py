@@ -1,10 +1,11 @@
 # tests/conftest.py
 import os
 import sys
-from pathlib import Path
 import uuid
+from pathlib import Path
 
 import pytest
+
 from alembic import command
 from alembic.config import Config
 

@@ -14,11 +14,12 @@ If alerts continue to reference the sentinel the migration will log a
 message and be a no-op.
 """
 
+import os
 from typing import Sequence, Union
 
-import os
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "remove_unknown_sentinel_20260223"
@@ -37,15 +38,21 @@ def upgrade() -> None:
     # the migration. This keeps the default upgrade path safe.
 
     if os.environ.get("ALLOW_REMOVE_EDGE_SENTINEL") != "1":
-        print("Skipping sentinel removal: set ALLOW_REMOVE_EDGE_SENTINEL=1 to enable manual sentinel cleanup")
+        print(
+            "Skipping sentinel removal: set ALLOW_REMOVE_EDGE_SENTINEL=1 to enable manual sentinel cleanup"
+        )
         return
 
     # Check whether any alerts still reference the sentinel
-    res = conn.execute(sa.text("SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = 'edge-001'"))
+    res = conn.execute(
+        sa.text("SELECT COUNT(*) as c FROM alerts WHERE edge_pc_id = 'edge-001'")
+    )
     row = res.mappings().first()
     cnt = row["c"] if row else 0
     if cnt:
-        print(f"Found {cnt} alerts still referencing 'edge-001'; skipping sentinel removal")
+        print(
+            f"Found {cnt} alerts still referencing 'edge-001'; skipping sentinel removal"
+        )
         return
 
     # No references remain; remove sentinel row if present

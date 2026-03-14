@@ -20,6 +20,10 @@ class RingBuffer:
         self._items: deque[FrameItem] = deque()
         self._lock = Lock()
 
+    @property
+    def seconds(self) -> int:
+        return self._seconds
+
     def push(self, ts: datetime, frame: np.ndarray) -> None:
         cutoff = ts - timedelta(seconds=self._seconds)
         with self._lock:
@@ -34,6 +38,14 @@ class RingBuffer:
     def latest(self) -> np.ndarray | None:
         with self._lock:
             return self._items[-1].frame if self._items else None
+
+    def latest_item(self) -> FrameItem | None:
+        with self._lock:
+            return self._items[-1] if self._items else None
+
+    def latest_ts(self) -> datetime | None:
+        it = self.latest_item()
+        return it.ts if it else None
 
     def window(self, start: datetime, end: datetime) -> list[FrameItem]:
         with self._lock:

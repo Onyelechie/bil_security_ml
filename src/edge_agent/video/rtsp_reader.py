@@ -68,7 +68,9 @@ class RtspReader:
             try:
                 self._start_ffmpeg(w=w, h=h, fps=fps)
                 if self._proc is None or self._proc.stdout is None:
-                    raise RuntimeError("ffmpeg process failed to start (stdout missing)")
+                    raise RuntimeError(
+                        "ffmpeg process failed to start (stdout missing)"
+                    )
 
                 logger.info("RTSP connect attempt=%d stream=%s", attempt, stream)
 
@@ -84,8 +86,12 @@ class RtspReader:
                     except asyncio.TimeoutError:
                         # More user-friendly classification
                         if first_frame:
-                            raise RuntimeError(f"STARTUP_TIMEOUT: no first frame within {timeout_s:.0f}s")
-                        raise RuntimeError(f"STALL: no frame bytes for {timeout_s:.0f}s")
+                            raise RuntimeError(
+                                f"STARTUP_TIMEOUT: no first frame within {timeout_s:.0f}s"
+                            )
+                        raise RuntimeError(
+                            f"STALL: no frame bytes for {timeout_s:.0f}s"
+                        )
 
                     if not buf or len(buf) < frame_bytes:
                         raise RuntimeError("DISCONNECT: ffmpeg stream ended")
@@ -152,7 +158,9 @@ class RtspReader:
             "pipe:1",
         ]
         logger.debug("Starting ffmpeg: %s", " ".join(cmd))
-        self._proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)  # nosec B603
+        self._proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )  # nosec B603
 
     def _kill_proc(self) -> None:
         if self._proc is None:

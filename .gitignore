@@ -85,4 +85,5 @@ benchmark/benchmark_summary.txt
 
 # Others
 docs/self_assessment_ebere.tex
-dataset_frames/
+accuracy/dataset_frames/
+accuracy/labeled_data/

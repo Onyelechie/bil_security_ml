@@ -147,6 +147,15 @@ def load_yolo_labels(txt_path: Path, img_w: int, img_h: int) -> List[List[float]
 
 def run_accuracy_evaluation(args):
     dataset_dir = Path(args.dataset)
+
+    if not dataset_dir.exists():
+        print(f"\nOops! The dataset directory '{dataset_dir}' does not exist.")
+        print("To run the accuracy evaluation, you first need to:")
+        print("  1. Generate frames using the window extractor (creating 'accuracy/dataset_frames').")
+        print("  2. Label those frames and export them in YOLO format to 'accuracy/labeled_data'.")
+        print("Please ensure your labeled data is present and try again.\n")
+        return
+
     images_dir = dataset_dir / "images"
     labels_dir = dataset_dir / "labels"
 
@@ -304,7 +313,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset",
         type=str,
-        required=True,
+        default="accuracy/labeled_data",
         help="Path to the YOLO-formatted dataset (must contain 'images' and 'labels' subfolders).",
     )
     parser.add_argument(

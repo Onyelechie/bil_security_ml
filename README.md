@@ -183,7 +183,7 @@ $env:PORT = "8000"
 # On Windows PowerShell:
 $bindHost = if ($env:HOST) { $env:HOST } else { "127.0.0.1" }
 $bindPort = if ($env:PORT) { $env:PORT } else { "8000" }
-python -m uvicorn server.main:app --reload --host $bindHost --port $bindPort
+python -m uvicorn src.server.main:app --reload --host $bindHost --port $bindPort
 # On Unix/Mac:
 # python -m uvicorn server.main:app --reload --host "${HOST:-127.0.0.1}" --port "${PORT:-8000}"
 ```

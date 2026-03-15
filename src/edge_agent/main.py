@@ -7,21 +7,23 @@ import threading
 import time
 from datetime import datetime, timezone
 
-from .sender import ServerSender
 from .config import EdgeSettings
 from .logging import configure_logging
+from .sender import ServerSender
 
 logger = logging.getLogger(__name__)
 
 
-def heartbeat_loop(sender: ServerSender, interval_sec: int):
+def heartbeat_loop(
+    sender: ServerSender, interval_sec: int, stop_event: threading.Event
+):
     """
     Thread target for sending heartbeats at regular intervals.
     """
     started_monotonic = time.monotonic()
-    while True:
+    while not stop_event.is_set():
         sender.send_heartbeat(started_monotonic)
-        time.sleep(interval_sec)
+        stop_event.wait(interval_sec)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -82,19 +84,26 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
 
         # Start heartbeat thread (runs regardless of mode to ensure server knows we're alive)
         sender = ServerSender(cfg)
+        stop_event = threading.Event()
         heartbeat_thread = threading.Thread(
             target=heartbeat_loop,
-            args=(sender, cfg.heartbeat_interval_sec),
-            daemon=True
+            args=(sender, cfg.heartbeat_interval_sec, stop_event),
+            daemon=True,
         )
         heartbeat_thread.start()
+
+        def _shutdown(code: int) -> int:
+            stop_event.set()
+            heartbeat_thread.join(timeout=1)
+            return code
 
         if args.http_serve:
             import uvicorn
 
             from .edge_api import create_app
 
-            app = create_app(cfg)
+            app = create_app(cfg, sender)
+            sender.set_status("online")
             logger.info(
                 "Starting Edge HTTP API at http://%s:%s",
                 cfg.edge_http_host,
@@ -106,9 +115,10 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 port=cfg.edge_http_port,
                 log_level=cfg.log_level.lower(),
             )
-            return 0
+            return _shutdown(0)
 
         if args.tcp_listen:
+            from .triggers.tcp_trigger import TcpMotionTrigger
             from .triggers.trigger_manager import TriggerManager
 
             mgr = TriggerManager(
@@ -119,6 +129,7 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
             async def _main() -> None:
                 trigger = TcpMotionTrigger(cfg)
                 await trigger.start()
+                sender.set_status("online")
                 try:
                     while True:
                         evt = await trigger.queue.get()
@@ -145,14 +156,17 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 asyncio.run(_main())
             except KeyboardInterrupt:
                 logger.info("TCP listener stopped (Ctrl+C).")
-            return 0
+            return _shutdown(0)
 
         if args.rtsp_test:
+            from .video.ring_buffer import RingBuffer
+            from .video.rtsp_reader import RtspReader
 
             async def _rtsp_main() -> None:
                 ring = RingBuffer(seconds=cfg.ring_buffer_seconds)
                 reader = RtspReader(cfg, ring)
                 await reader.start()
+                sender.set_status("online")
                 try:
                     while True:
                         logger.info("RingBuffer frames=%d", ring.size())
@@ -164,17 +178,21 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 asyncio.run(_rtsp_main())
             except KeyboardInterrupt:
                 logger.info("RTSP test stopped (Ctrl+C).")
-            return 0
+            return _shutdown(0)
 
         if args.motion_test:
+            from .triggers.incident_manager import IncidentManager
             from .triggers.local_motion_trigger import LocalMotionTrigger
             from .triggers.trigger_manager import TriggerManager
+            from .video.extraction_worker import ExtractionWorker
+            from .video.ring_buffer import RingBuffer
+            from .video.rtsp_reader import RtspReader
 
             if not cfg.rtsp_url_low:
                 logger.warning(
                     "Motion test requires RTSP_URL_LOW. Set it in env/.env and retry."
                 )
-                return 0
+                return _shutdown(0)
 
             async def _motion_main() -> None:
                 ring = RingBuffer(seconds=cfg.ring_buffer_seconds)
@@ -210,6 +228,7 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 await reader.start()
                 await worker.start()
                 await motion.start()
+                sender.set_status("online")
 
                 try:
                     last_tick = datetime.now(timezone.utc)
@@ -242,7 +261,7 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 asyncio.run(_motion_main())
             except KeyboardInterrupt:
                 logger.info("Motion test stopped (Ctrl+C).")
-            return 0
+            return _shutdown(0)
 
         if args.run:
             from .triggers.incident_manager import IncidentManager
@@ -288,6 +307,7 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 await reader.start()
                 await trigger.start()
                 await worker.start()
+                sender.set_status("online")
 
                 # Warn if window could exceed ring size
                 max_window_s = (
@@ -352,15 +372,18 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 asyncio.run(_run_main())
             except KeyboardInterrupt:
                 logger.info("--run stopped (Ctrl+C).")
-            return 0
+            return _shutdown(0)
 
         logger.info(
             "Nothing to do. Use --print-config, --http-serve, --tcp-listen, --run, --motion-test."
         )
-        return 0
+        return _shutdown(0)
 
     except Exception:
         logger.exception("Edge Agent crashed due to an unexpected error")
+        if "stop_event" in locals():
+            stop_event.set()
+            heartbeat_thread.join(timeout=1)
         debug_mode = bool(getattr(cfg, "debug", False)) or (
             getattr(cfg, "log_level", "").upper() == "DEBUG"
         )

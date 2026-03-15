@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from pydantic import BaseModel
 
 from .config import EdgeSettings
+from .sender import ServerSender
 
 
 class HealthOut(BaseModel):
@@ -42,15 +44,28 @@ class HeartbeatOut(BaseModel):
     }
 
 
-def create_app(cfg: EdgeSettings) -> FastAPI:
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Set agent status to online on startup and shutting_down on shutdown."""
+    sender: ServerSender = app.state.sender
+    sender.set_status("online")
+    yield
+    sender.set_status("shutting_down")
+
+
+def create_app(cfg: EdgeSettings, sender: ServerSender) -> FastAPI:
     """
     Create the Edge Agent HTTP API app.
     """
     app = FastAPI(
         title="BIL Security ML - Edge Agent API",
         version="0.2.0",
-        description="Edge-side health endpoints for install/debug and office connectivity checks.",
+        description=(
+            "Edge-side health endpoints for install/debug and office connectivity checks."
+        ),
+        lifespan=lifespan,
     )
+    app.state.sender = sender
 
     @app.get("/")
     def root():

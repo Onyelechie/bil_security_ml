@@ -37,6 +37,54 @@ def test_run_http_serve_calls_uvicorn(monkeypatch):
     assert called["log_level"] == "info"
 
 
+def test_run_http_serve_sets_status_online(monkeypatch):
+    """
+    Test that when --http-serve is used,
+    the ServerSender's set_status is called with 'online'.
+    """
+
+    class DummyThread:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            return None
+
+        def join(self, timeout=None):
+            return None
+
+    class FakeSender:
+        last_instance = None
+
+        def __init__(self, settings):
+            self.settings = settings
+            self.statuses = []
+            FakeSender.last_instance = self
+
+        def set_status(self, status: str) -> None:
+            self.statuses.append(status)
+
+        def send_heartbeat(self, *args, **kwargs):
+            return True
+
+    def fake_run(app, **kwargs):
+        return None
+
+    monkeypatch.setattr(uvicorn, "run", fake_run)
+    monkeypatch.setattr("edge_agent.main.threading.Thread", DummyThread)
+    monkeypatch.setattr("edge_agent.main.ServerSender", FakeSender)
+    monkeypatch.setattr("edge_agent.edge_api.create_app", lambda cfg, sender: object())
+
+    cfg = EdgeSettings(
+        edge_http_host="127.0.0.1", edge_http_port=9999, log_level="INFO"
+    )
+    code = run(argv=["--http-serve"], cfg=cfg)
+
+    assert code == 0
+    assert FakeSender.last_instance is not None
+    assert "online" in FakeSender.last_instance.statuses
+
+
 def test_run_returns_1_on_unexpected_exception(monkeypatch):
     import edge_agent.main as m
 

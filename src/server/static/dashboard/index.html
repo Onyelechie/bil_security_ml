@@ -7,13 +7,56 @@
   <link rel="stylesheet" href="/static/dashboard/styles.css">
 </head>
 <body>
-  <div class="app-shell">
+  <div class="dashboard-shell">
     <aside class="sidebar">
-      <h1 class="brand">BIL Server Console</h1>
-      <p class="subtitle">Multi-port edge monitoring preview</p>
+      <div class="brand-block">
+        <p class="eyebrow">Security Operations</p>
+        <h1 class="brand">BIL Server Console</h1>
+        <p class="subtitle">Dark-mode monitoring board for live edge alerts and evidence review.</p>
+      </div>
 
       <section class="panel">
-        <h2>Add Target</h2>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Active Target</p>
+            <h2 id="active-target-title">No target selected</h2>
+          </div>
+          <span id="live-status" class="status-pill err">Live disconnected</span>
+        </div>
+        <p id="active-target-meta" class="muted">Add a target to begin monitoring.</p>
+        <div class="action-row">
+          <button id="refresh-selected-btn" class="btn primary" type="button">Refresh Current</button>
+          <button id="refresh-all-btn" class="btn ghost" type="button">Refresh All</button>
+        </div>
+        <p id="last-updated" class="muted">Not updated yet</p>
+
+        <div class="stats-grid compact">
+          <article class="stat-card">
+            <span class="stat-label">Health</span>
+            <strong id="health-value">Unknown</strong>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Alerts</span>
+            <strong id="alerts-count">0</strong>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Edge PCs</span>
+            <strong id="edge-count">0</strong>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Logs</span>
+            <strong id="logs-count">0</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Connections</p>
+            <h2>Add Target</h2>
+          </div>
+        </div>
         <form id="target-form" class="target-form">
           <label>
             Name
@@ -44,64 +87,78 @@
         </form>
       </section>
 
-      <section class="panel">
-        <div class="row title-row">
-          <h2>Targets</h2>
-          <button id="refresh-all-btn" class="btn ghost" type="button">Refresh All</button>
+      <section class="panel targets-panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Targets</p>
+            <h2>Watch List</h2>
+          </div>
         </div>
         <div id="target-list" class="target-list"></div>
       </section>
     </aside>
 
-    <main class="content">
-      <section class="hero">
-        <div>
-          <h2 id="active-target-title">No target selected</h2>
-          <p id="active-target-meta" class="muted">Add a target to begin monitoring.</p>
+    <main class="console">
+      <section class="panel viewer-panel">
+        <div class="section-heading viewer-heading">
+          <div>
+            <p class="eyebrow">Alert Viewer</p>
+            <h2 id="selected-alert-title">No alert selected</h2>
+          </div>
+          <span id="selected-alert-visit-state" class="status-pill pending">Awaiting review</span>
         </div>
-        <div class="hero-actions">
-          <button id="refresh-selected-btn" class="btn primary" type="button">Refresh</button>
-          <span id="live-status" class="tag err">Live disconnected</span>
-          <span id="last-updated" class="muted">Not updated yet</span>
+        <p id="selected-alert-summary" class="muted">
+          Select an alert from the right rail to inspect the image and details below.
+        </p>
+        <div id="selected-alert-stage" class="viewer-stage empty">
+          <div class="viewer-placeholder">
+            <span class="viewer-placeholder-label">No image loaded</span>
+            <p>Choose an alert from the right rail to inspect it here.</p>
+          </div>
         </div>
+        <div id="selected-alert-details" class="detail-grid"></div>
       </section>
 
-      <section class="stats-grid">
-        <article class="stat-card">
-          <h3>Health</h3>
-          <p id="health-value">Unknown</p>
-        </article>
-        <article class="stat-card">
-          <h3>Alerts</h3>
-          <p id="alerts-count">0</p>
-        </article>
-        <article class="stat-card">
-          <h3>Edge PCs</h3>
-          <p id="edge-count">0</p>
-        </article>
-        <article class="stat-card">
-          <h3>Logs</h3>
-          <p id="logs-count">0</p>
-        </article>
-      </section>
-
-      <section class="data-grid">
-        <article class="panel alerts-panel">
-          <h2>Recent Alerts</h2>
-          <div id="alerts-list" class="alerts-list"></div>
-        </article>
-
+      <section class="support-grid">
         <article class="panel edge-panel">
-          <h2>Edge PCs</h2>
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Heartbeat</p>
+              <h2>Edge PCs</h2>
+            </div>
+          </div>
           <div id="edge-list" class="edge-list"></div>
         </article>
 
         <article class="panel logs-panel">
-          <h2>Server Logs</h2>
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Operations</p>
+              <h2>Server Logs</h2>
+            </div>
+          </div>
           <div id="logs-list" class="logs-list"></div>
         </article>
       </section>
     </main>
+
+    <aside class="panel alerts-rail">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Alert Feed</p>
+          <h2>Recent Alerts</h2>
+        </div>
+        <span id="alert-feed-count" class="status-pill neutral">0 total</span>
+      </div>
+      <p class="muted">
+        Click an alert to bring its image into the center console, open the detail view, and mark it as visited.
+      </p>
+      <div class="view-switcher" role="group" aria-label="Alert list view">
+        <button id="alerts-view-compact" class="view-switch is-active" type="button">Compact</button>
+        <button id="alerts-view-list" class="view-switch" type="button">List</button>
+      </div>
+      <div id="alerts-list" class="alerts-list"></div>
+    </aside>
   </div>
 
   <script src="/static/dashboard/app.js"></script>

@@ -118,15 +118,14 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
             return _shutdown(0)
 
         if args.tcp_listen:
-            from .triggers.tcp_trigger import TcpMotionTrigger
-            from .triggers.trigger_manager import TriggerManager
-
-            mgr = TriggerManager(
-                cooldown_sec=cfg.trigger_cooldown_sec,
-                merge_window_sec=cfg.trigger_merge_window_sec,
-            )
-
             async def _main() -> None:
+                from .triggers.tcp_trigger import TcpMotionTrigger
+                from .triggers.trigger_manager import TriggerManager
+
+                mgr = TriggerManager(
+                    cooldown_sec=cfg.trigger_cooldown_sec,
+                    merge_window_sec=cfg.trigger_merge_window_sec,
+                )
                 trigger = TcpMotionTrigger(cfg)
                 await trigger.start()
                 sender.set_status("online")
@@ -159,10 +158,10 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
             return _shutdown(0)
 
         if args.rtsp_test:
-            from .video.ring_buffer import RingBuffer
-            from .video.rtsp_reader import RtspReader
-
             async def _rtsp_main() -> None:
+                from .video.ring_buffer import RingBuffer
+                from .video.rtsp_reader import RtspReader
+
                 ring = RingBuffer(seconds=cfg.ring_buffer_seconds)
                 reader = RtspReader(cfg, ring)
                 await reader.start()
@@ -181,13 +180,6 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
             return _shutdown(0)
 
         if args.motion_test:
-            from .triggers.incident_manager import IncidentManager
-            from .triggers.local_motion_trigger import LocalMotionTrigger
-            from .triggers.trigger_manager import TriggerManager
-            from .video.extraction_worker import ExtractionWorker
-            from .video.ring_buffer import RingBuffer
-            from .video.rtsp_reader import RtspReader
-
             if not cfg.rtsp_url_low:
                 logger.warning(
                     "Motion test requires RTSP_URL_LOW. Set it in env/.env and retry."
@@ -195,6 +187,13 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 return _shutdown(0)
 
             async def _motion_main() -> None:
+                from .triggers.incident_manager import IncidentManager
+                from .triggers.local_motion_trigger import LocalMotionTrigger
+                from .triggers.trigger_manager import TriggerManager
+                from .video.extraction_worker import ExtractionWorker
+                from .video.ring_buffer import RingBuffer
+                from .video.rtsp_reader import RtspReader
+
                 ring = RingBuffer(seconds=cfg.ring_buffer_seconds)
                 reader = RtspReader(cfg, ring)
 
@@ -264,14 +263,14 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
             return _shutdown(0)
 
         if args.run:
-            from .triggers.incident_manager import IncidentManager
-            from .triggers.tcp_trigger import TcpMotionTrigger
-            from .triggers.trigger_manager import TriggerManager
-            from .video.extraction_worker import ExtractionWorker
-            from .video.ring_buffer import RingBuffer
-            from .video.rtsp_reader import RtspReader
-
             async def _run_main() -> None:
+                from .triggers.incident_manager import IncidentManager
+                from .triggers.tcp_trigger import TcpMotionTrigger
+                from .triggers.trigger_manager import TriggerManager
+                from .video.extraction_worker import ExtractionWorker
+                from .video.ring_buffer import RingBuffer
+                from .video.rtsp_reader import RtspReader
+
                 ring = RingBuffer(seconds=cfg.ring_buffer_seconds)
                 reader = RtspReader(cfg, ring)
 

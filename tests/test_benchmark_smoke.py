@@ -47,14 +47,14 @@ def test_benchmark_smoke(tmp_path, monkeypatch):
 
     # Use args[0] to capture the actual model name (e.g., YOLOv8-Nano)
     monkeypatch.setattr(
-        "benchmark.benchmark_suite.YOLOWrapper", lambda *args: MockWrapper(args[0])
+        "src.edge_agent.models.YOLOWrapper", lambda *args: MockWrapper(args[0])
     )
     monkeypatch.setattr(
-        "benchmark.benchmark_suite.EfficientDetWrapper",
+        "src.edge_agent.models.efficientdet.EfficientDetWrapper",
         lambda *args: MockWrapper("MockEffDet"),
     )
     monkeypatch.setattr(
-        "benchmark.benchmark_suite.TorchvisionSSDWrapper",
+        "src.edge_agent.models.ssd.TorchvisionSSDWrapper",
         lambda *args: MockWrapper("MockSSD"),
     )
 

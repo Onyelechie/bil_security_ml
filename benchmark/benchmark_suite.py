@@ -13,12 +13,6 @@ import torch
 # Constants (Defaults)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
-
-from src.edge_agent.models import YOLOWrapper  # noqa: E402
-from src.edge_agent.models.efficientdet import EfficientDetWrapper  # noqa: E402
-from src.edge_agent.models.ssd import TorchvisionSSDWrapper  # noqa: E402
 
 VIDEO_EXTENSIONS = ["cctv_samples/*.mp4"]
 OUTPUT_CSV = os.path.join(SCRIPT_DIR, "benchmark_results.csv")
@@ -33,9 +27,16 @@ def run_benchmark(args):
     """
     Main benchmark execution.
     """
-    # 0. Hardware / Reproduction consistency
     print(f"Setting torch threads to {args.threads}")
     torch.set_num_threads(args.threads)
+
+    # 1. Ensure project root is in sys.path for local imports
+    if PROJECT_ROOT not in sys.path:
+        sys.path.insert(0, PROJECT_ROOT)
+
+    from src.edge_agent.models import YOLOWrapper
+    from src.edge_agent.models.efficientdet import EfficientDetWrapper
+    from src.edge_agent.models.ssd import TorchvisionSSDWrapper
 
     # 1. Setup Models
     available_models = {

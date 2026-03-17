@@ -138,6 +138,7 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
             return _shutdown(0)
 
         if args.tcp_listen:
+
             async def _main() -> None:
                 from .triggers.tcp_trigger import TcpMotionTrigger
                 from .triggers.trigger_manager import TriggerManager
@@ -178,6 +179,7 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
             return _shutdown(0)
 
         if args.rtsp_test:
+
             async def _rtsp_main() -> None:
                 from .video.ring_buffer import RingBuffer
                 from .video.rtsp_reader import RtspReader
@@ -283,6 +285,7 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
             return _shutdown(0)
 
         if args.run:
+
             async def _run_main() -> None:
                 from .triggers.incident_manager import IncidentManager
                 from .triggers.tcp_trigger import TcpMotionTrigger

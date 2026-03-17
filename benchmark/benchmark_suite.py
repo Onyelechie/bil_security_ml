@@ -16,7 +16,7 @@ VIDEO_EXTENSIONS = ["cctv_samples/*.mp4"]
 OUTPUT_CSV = os.path.join(SCRIPT_DIR, "benchmark_results.csv")
 OUTPUT_SUMMARY = os.path.join(SCRIPT_DIR, "benchmark_summary.txt")
 DEFAULT_WARMUP = 10
-DEFAULT_MAX_FRAMES = 100
+DEFAULT_MAX_FRAMES = 0
 DEFAULT_THREADS = 4
 DEFAULT_CONF = 0.25
 
@@ -253,7 +253,7 @@ def run_benchmark(args):
 
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
-            while cap.isOpened() and frame_count < args.max_frames:
+            while cap.isOpened() and (args.max_frames <= 0 or frame_count < args.max_frames):
                 start_frame_time = time.time()
                 ret, frame = cap.read()
                 if not ret:
@@ -292,7 +292,8 @@ def run_benchmark(args):
 
                 frame_count += 1
                 if frame_count % 20 == 0:
-                    print(f"Frame {frame_count}/{args.max_frames}...")
+                    limit_str = args.max_frames if args.max_frames > 0 else "All"
+                    print(f"Frame {frame_count}/{limit_str}...")
 
             cap.release()
 
@@ -376,7 +377,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--warmup", type=int, default=DEFAULT_WARMUP, help="Warmup.")
     parser.add_argument(
-        "--max-frames", type=int, default=DEFAULT_MAX_FRAMES, help="Max frames."
+        "--max-frames", type=int, default=DEFAULT_MAX_FRAMES, help="Max frames (0 or less for all)."
     )
     parser.add_argument(
         "--confidence", type=float, default=DEFAULT_CONF, help="Conf threshold."

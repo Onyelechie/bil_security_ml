@@ -67,7 +67,7 @@ python3 benchmark/benchmark_suite.py
 ```
 
 ```bash
-export PYTHONPATH="$PWD/src:$PWD" && .venv/bin/python3 -m pytest tests/test_benchmark_smoke.py
+export PYTHONPATH="$PWD/src:$PWD" && python3 -m pytest tests/test_benchmark_smoke.py
 ```
 
 ## How to Reproduce Exactly
@@ -79,7 +79,6 @@ python3 benchmark/benchmark_suite.py \
   --models YOLOv8-Nano,YOLOv8-Small,YOLOv5-Nano,EfficientDet-D0,SSD-MobileNet \
   --threads 4 \
   --input-size 640 \
-  --max-frames 100 \
   --confidence 0.25
 ```
 
@@ -87,7 +86,7 @@ python3 benchmark/benchmark_suite.py \
 
 - **`--threads 4`**: Limits PyTorch to 4 CPU threads. This prevents the benchmark from hogging the entire system and provides more consistent latency results across different multi-core CPUs.
 - **`--input-size 640`**: Sets the image resolution for the models. Higher values improve accuracy but decrease FPS.
-- **`--max-frames 100`**: Ensures every model evaluates the exact same number of frames.
+- **`--max-frames`**: (Optional) Defaults to `0` (unlimited, processes whole video). Use a specific number like `100` if you want a faster test.
 - **`--confidence 0.25`**: Standardizes the filtering threshold for detections.
 
 > [!NOTE]

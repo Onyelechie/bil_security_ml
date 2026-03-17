@@ -122,8 +122,21 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
             server_thread = threading.Thread(target=_run_server, daemon=True)
             server_thread.start()
 
-            while not server.started and not server.should_exit:
-                time.sleep(0.05)
+            startup_deadline = time.monotonic() + 10.0
+            try:
+                while not server.started and not server.should_exit:
+                    if time.monotonic() >= startup_deadline:
+                        logger.error(
+                            "Edge HTTP API failed to start within 10s; exiting."
+                        )
+                        server.should_exit = True
+                        server_thread.join(timeout=1)
+                        return _shutdown(1)
+                    time.sleep(0.05)
+            except KeyboardInterrupt:
+                server.should_exit = True
+                server_thread.join(timeout=1)
+                return _shutdown(0)
 
             if server.started:
                 sender.set_status("online")

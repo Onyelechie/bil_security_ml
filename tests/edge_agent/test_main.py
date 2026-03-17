@@ -115,6 +115,50 @@ def test_run_http_serve_does_not_set_status_before_startup(monkeypatch):
     assert FakeSender.last_instance.statuses == []
 
 
+def test_run_http_serve_times_out_when_not_started(monkeypatch):
+    class DummyThread:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            return None
+
+        def join(self, timeout=None):
+            return None
+
+    class FakeServer:
+        last_instance = None
+
+        def __init__(self, config):
+            self.config = config
+            self.started = False
+            self.should_exit = False
+            FakeServer.last_instance = self
+
+        def run(self):
+            return None
+
+    ticks = iter([0.0, 0.1, 10.1, 10.2])
+
+    def fake_monotonic():
+        return next(ticks)
+
+    monkeypatch.setattr(uvicorn, "Server", FakeServer)
+    monkeypatch.setattr("edge_agent.main.threading.Thread", DummyThread)
+    monkeypatch.setattr("edge_agent.edge_api.create_app", lambda cfg, sender: object())
+    monkeypatch.setattr("edge_agent.main.time.monotonic", fake_monotonic)
+    monkeypatch.setattr("edge_agent.main.time.sleep", lambda _s: None)
+
+    cfg = EdgeSettings(
+        edge_http_host="127.0.0.1", edge_http_port=9999, log_level="INFO"
+    )
+    code = run(argv=["--http-serve"], cfg=cfg)
+
+    assert code == 1
+    assert FakeServer.last_instance is not None
+    assert FakeServer.last_instance.should_exit is True
+
+
 def test_run_returns_1_on_unexpected_exception(monkeypatch):
     import edge_agent.main as m
 

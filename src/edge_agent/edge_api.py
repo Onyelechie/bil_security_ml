@@ -46,11 +46,7 @@ class HeartbeatOut(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Set agent status to online on startup and shutting_down on shutdown."""
-    sender: ServerSender = app.state.sender
-    sender.set_status("online")
     yield
-    sender.set_status("shutting_down")
 
 
 def create_app(cfg: EdgeSettings, sender: ServerSender) -> FastAPI:

@@ -103,18 +103,38 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
             from .edge_api import create_app
 
             app = create_app(cfg, sender)
-            sender.set_status("online")
             logger.info(
                 "Starting Edge HTTP API at http://%s:%s",
                 cfg.edge_http_host,
                 cfg.edge_http_port,
             )
-            uvicorn.run(
+            config = uvicorn.Config(
                 app,
                 host=cfg.edge_http_host,
                 port=cfg.edge_http_port,
                 log_level=cfg.log_level.lower(),
             )
+            server = uvicorn.Server(config)
+
+            def _run_server() -> None:
+                server.run()
+
+            server_thread = threading.Thread(target=_run_server, daemon=True)
+            server_thread.start()
+
+            while not server.started and not server.should_exit:
+                time.sleep(0.05)
+
+            if server.started:
+                sender.set_status("online")
+
+            try:
+                server_thread.join()
+            except KeyboardInterrupt:
+                server.should_exit = True
+                server_thread.join(timeout=1)
+            if server.started:
+                sender.set_status("shutting_down")
             return _shutdown(0)
 
         if args.tcp_listen:

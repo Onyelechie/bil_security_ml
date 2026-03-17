@@ -23,6 +23,7 @@ class ServerSender:
         self._session = requests.Session()
         self._status = "starting"
         self._status_lock = threading.Lock()
+        self._session_lock = threading.Lock()
 
     def set_status(self, status: str) -> None:
         """Set the agent's status for heartbeats. This is thread-safe."""
@@ -69,7 +70,8 @@ class ServerSender:
             payload["image_path"] = image_path
 
         try:
-            resp = self._session.post(url, json=payload, timeout=5)
+            with self._session_lock:
+                resp = self._session.post(url, json=payload, timeout=5)
             resp.raise_for_status()
             logger.info(
                 "Sent alert to server: camera_id=%s detections=%d",
@@ -115,7 +117,8 @@ class ServerSender:
             payload["uptime_seconds"] = int(time.monotonic() - started_monotonic)
 
         try:
-            resp = self._session.post(url, json=payload, timeout=5)
+            with self._session_lock:
+                resp = self._session.post(url, json=payload, timeout=5)
             resp.raise_for_status()
             logger.info("Sent heartbeat to server (status: %s).", current_status)
             return True

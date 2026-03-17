@@ -17,14 +17,31 @@ def test_run_print_config_does_not_crash(capfd):
     assert "edge_pc_id" in out
 
 
-def test_run_http_serve_calls_uvicorn(monkeypatch):
-    called = {}
+def test_run_http_serve_uses_uvicorn_config(monkeypatch):
+    captured = {}
 
-    def fake_run(app, **kwargs):
-        called.update(kwargs)
-        return None
+    class DummyThread:
+        def __init__(self, *args, **kwargs):
+            pass
 
-    monkeypatch.setattr(uvicorn, "run", fake_run)
+        def start(self):
+            return None
+
+        def join(self, timeout=None):
+            return None
+
+    class FakeServer:
+        def __init__(self, config):
+            captured["config"] = config
+            self.started = False
+            self.should_exit = True
+
+        def run(self):
+            return None
+
+    monkeypatch.setattr(uvicorn, "Server", FakeServer)
+    monkeypatch.setattr("edge_agent.main.threading.Thread", DummyThread)
+    monkeypatch.setattr("edge_agent.edge_api.create_app", lambda cfg, sender: object())
 
     cfg = EdgeSettings(
         edge_http_host="127.0.0.1", edge_http_port=9999, log_level="INFO"
@@ -32,22 +49,25 @@ def test_run_http_serve_calls_uvicorn(monkeypatch):
     code = run(argv=["--http-serve"], cfg=cfg)
 
     assert code == 0
-    assert called["host"] == "127.0.0.1"
-    assert called["port"] == 9999
-    assert called["log_level"] == "info"
+    config = captured["config"]
+    assert config.host == "127.0.0.1"
+    assert config.port == 9999
+    assert config.log_level == "info"
 
 
-def test_run_http_serve_sets_status_online(monkeypatch):
+def test_run_http_serve_does_not_set_status_before_startup(monkeypatch):
     """
-    Test that when --http-serve is used,
-    the ServerSender's set_status is called with 'online'.
+    Test that --http-serve does not set status before app startup.
     """
 
     class DummyThread:
         def __init__(self, *args, **kwargs):
-            pass
+            self._target = kwargs.get("target")
+            self._run_target = self._target and self._target.__name__ == "_run_server"
 
         def start(self):
+            if self._run_target:
+                self._target()
             return None
 
         def join(self, timeout=None):
@@ -70,7 +90,17 @@ def test_run_http_serve_sets_status_online(monkeypatch):
     def fake_run(app, **kwargs):
         return None
 
+    class FakeServer:
+        def __init__(self, config):
+            self.config = config
+            self.started = False
+            self.should_exit = True
+
+        def run(self):
+            return None
+
     monkeypatch.setattr(uvicorn, "run", fake_run)
+    monkeypatch.setattr(uvicorn, "Server", FakeServer)
     monkeypatch.setattr("edge_agent.main.threading.Thread", DummyThread)
     monkeypatch.setattr("edge_agent.main.ServerSender", FakeSender)
     monkeypatch.setattr("edge_agent.edge_api.create_app", lambda cfg, sender: object())
@@ -82,7 +112,7 @@ def test_run_http_serve_sets_status_online(monkeypatch):
 
     assert code == 0
     assert FakeSender.last_instance is not None
-    assert "online" in FakeSender.last_instance.statuses
+    assert FakeSender.last_instance.statuses == []
 
 
 def test_run_returns_1_on_unexpected_exception(monkeypatch):

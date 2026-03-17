@@ -1,16 +1,22 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager, suppress
-
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .db import init_db
 from .routes.alerts import router as alerts_router
+from .routes.dashboard import router as dashboard_router
 from .routes.heartbeat import router as heartbeat_router
+from .routes.logs import router as logs_router
 from .routes.ws_alerts import router as ws_alerts_router
+from .routes.ws_dashboard import router as ws_dashboard_router
+from .services.dashboard_events import DashboardEventManager
 from .services.image_storage import ImageStorageService
+from .services.log_buffer import InMemoryLogBuffer, InMemoryLogHandler
 from .services.ws_alert_dispatcher import WebSocketAlertDispatcher
 from .services.ws_connection_manager import WebSocketConnectionManager
 
@@ -71,6 +77,13 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing database...")
     init_db()
     logger.info("Database initialized successfully")
+    app.state.main_event_loop = asyncio.get_running_loop()
+    app.state.dashboard_event_manager = DashboardEventManager()
+
+    app.state.log_buffer = InMemoryLogBuffer(max_entries=settings.log_buffer_max_entries)
+    app.state.log_handler = InMemoryLogHandler(app.state.log_buffer)
+    app.state.log_handler._is_bil_log_buffer_handler = True  # type: ignore[attr-defined]
+    logging.getLogger().addHandler(app.state.log_handler)
 
     app.state.ws_connection_manager = WebSocketConnectionManager(
         max_connections=settings.ws_max_connections
@@ -111,6 +124,9 @@ async def lifespan(app: FastAPI):
         with suppress(asyncio.CancelledError):
             await app.state.ws_image_cleanup_task
         await app.state.ws_alert_dispatcher.stop()
+        logging.getLogger().removeHandler(app.state.log_handler)
+        with suppress(Exception):
+            app.state.log_handler.close()
         logger.info("Shutting down application")
 
 
@@ -120,6 +136,9 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+_STATIC_DIR = Path(__file__).resolve().parent / "static"
+app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
 # CORS middleware for web clients
 app.add_middleware(
@@ -132,7 +151,10 @@ app.add_middleware(
 
 app.include_router(alerts_router)
 app.include_router(heartbeat_router)
+app.include_router(logs_router)
 app.include_router(ws_alerts_router)
+app.include_router(ws_dashboard_router)
+app.include_router(dashboard_router)
 
 
 @app.get("/")

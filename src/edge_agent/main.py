@@ -151,7 +151,6 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
             except KeyboardInterrupt:
                 server.should_exit = True
                 _join_interruptible(server_thread)
-                
             if server.started:
                 sender.set_status("shutting_down")
             return _shutdown(0)

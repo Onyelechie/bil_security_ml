@@ -141,11 +141,17 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
             if server.started:
                 sender.set_status("online")
 
+            def _join_interruptible(t: threading.Thread, poll: float = 0.2) -> None:
+                # Keep main thread responsive to Ctrl+C
+                while t.is_alive():
+                    t.join(timeout=poll)
+
             try:
-                server_thread.join()
+                _join_interruptible(server_thread)
             except KeyboardInterrupt:
                 server.should_exit = True
-                server_thread.join(timeout=1)
+                _join_interruptible(server_thread)
+                
             if server.started:
                 sender.set_status("shutting_down")
             return _shutdown(0)

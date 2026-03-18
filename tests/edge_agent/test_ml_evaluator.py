@@ -214,4 +214,3 @@ if __name__ == "__main__":
         print("Success! No persons or vehicles detected in blank images.")
     else:
         print(f"Failed! Unexpectedly detected: {result['detection']['label']}")
-

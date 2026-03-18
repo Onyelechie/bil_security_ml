@@ -105,6 +105,21 @@ def test_ml_evaluator_grayscale_mocked(mock_evaluator):
     assert call_args.shape[2] == 3
 
 
+def test_ml_evaluator_grayscale_3d_mocked(mock_evaluator):
+    """Test that (H, W, 1) grayscale frames are converted and processed (mocked)."""
+    frame_gray = np.zeros((100, 100, 1), dtype=np.uint8)
+    mock_evaluator.model_mock.predict.return_value = [(0, 0, 50, 50, 0.8, "car")]
+
+    result = mock_evaluator.evaluate_frames([frame_gray])
+
+    assert result is not None
+    assert result["detection"]["label"] == "car"
+    assert result["frame_index"] == 0
+    call_args = mock_evaluator.model_mock.predict.call_args[0][0]
+    assert len(call_args.shape) == 3
+    assert call_args.shape[2] == 3
+
+
 @pytest.mark.integration
 @pytest.mark.skipif(
     not WEIGHTS_EXIST,
@@ -125,11 +140,6 @@ def test_ml_evaluator_specific_frames_integration(
     filename, expected_label, custom_person_conf, custom_vehicle_conf, expected_to_pass
 ):
     """Real inference test using actual weights. Only runs if --integration is specified or weights found."""
-    if not os.path.exists(WEIGHTS_PATH):
-        pytest.skip(
-            "Weights not found at benchmark/yolov8n.pt. Skipping integration test."
-        )
-
     specific_frame_path = os.path.join(
         project_root, "tests", "edge_agent", "test_data", filename
     )
@@ -204,3 +214,4 @@ if __name__ == "__main__":
         print("Success! No persons or vehicles detected in blank images.")
     else:
         print(f"Failed! Unexpectedly detected: {result['detection']['label']}")
+

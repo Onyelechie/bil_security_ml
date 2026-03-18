@@ -30,6 +30,9 @@ def test_run_http_serve_uses_uvicorn_config(monkeypatch):
         def join(self, timeout=None):
             return None
 
+        def is_alive(self):
+            return False
+
     class FakeServer:
         def __init__(self, config):
             captured["config"] = config
@@ -62,16 +65,16 @@ def test_run_http_serve_does_not_set_status_before_startup(monkeypatch):
 
     class DummyThread:
         def __init__(self, *args, **kwargs):
-            self._target = kwargs.get("target")
-            self._run_target = self._target and self._target.__name__ == "_run_server"
+            pass
 
         def start(self):
-            if self._run_target:
-                self._target()
             return None
 
         def join(self, timeout=None):
             return None
+
+        def is_alive(self):
+            return False
 
     class FakeSender:
         last_instance = None

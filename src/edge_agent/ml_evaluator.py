@@ -2,7 +2,8 @@ import logging
 
 import cv2
 import numpy as np
-from .models import YOLOWrapper, ModelRegistry
+
+from .models import ModelRegistry, YOLOWrapper
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ class MLEvaluator:
                 continue
 
             # Handle grayscale to BGR conversion at inference time
-            if len(frame.shape) == 2:
+            if frame.ndim == 2 or (frame.ndim == 3 and frame.shape[2] == 1):
                 frame_bgr = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
             else:
                 frame_bgr = frame
@@ -65,8 +66,7 @@ class MLEvaluator:
 
                 is_person = label_lower == "person" and conf >= self.person_conf
                 is_vehicle = (
-                    any(v in label_lower for v in self.VEHICLE_LABELS)
-                    and conf >= self.vehicle_conf
+                    label_lower in self.VEHICLE_LABELS and conf >= self.vehicle_conf
                 )
 
                 if is_person or is_vehicle:

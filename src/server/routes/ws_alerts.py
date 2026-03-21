@@ -9,6 +9,7 @@ from fastapi import APIRouter, WebSocket
 from pydantic import ValidationError
 
 from ..schemas import AlertCreate
+from ..services.dashboard_events import publish_dashboard_event
 from ..services.image_storage import ImageStorageError, ImageStorageService
 from ..services.ws_alert_dispatcher import (AlertDispatchFailure,
                                             AlertQueueFullError,
@@ -174,6 +175,17 @@ async def alerts_websocket(websocket: WebSocket) -> None:
                     websocket,
                     {"type": "ack", "status": "ok", "alert": alert_out},
                 )
+                publish_dashboard_event(
+                    websocket.app,
+                    "alert_received",
+                    {
+                        "id": alert_out.get("id"),
+                        "site_id": alert_out.get("site_id"),
+                        "camera_id": alert_out.get("camera_id"),
+                        "edge_pc_id": alert_out.get("edge_pc_id"),
+                        "timestamp": alert_out.get("timestamp"),
+                    },
+                )
                 continue
 
             if text_payload is None:
@@ -287,6 +299,17 @@ async def alerts_websocket(websocket: WebSocket) -> None:
             await manager.send_json(
                 websocket,
                 {"type": "ack", "status": "ok", "alert": alert_out},
+            )
+            publish_dashboard_event(
+                websocket.app,
+                "alert_received",
+                {
+                    "id": alert_out.get("id"),
+                    "site_id": alert_out.get("site_id"),
+                    "camera_id": alert_out.get("camera_id"),
+                    "edge_pc_id": alert_out.get("edge_pc_id"),
+                    "timestamp": alert_out.get("timestamp"),
+                },
             )
     finally:
         await manager.disconnect(websocket)

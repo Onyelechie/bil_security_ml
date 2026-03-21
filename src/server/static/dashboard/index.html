@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BIL Server Console</title>
+  <link rel="stylesheet" href="/static/dashboard/styles.css">
+</head>
+<body>
+  <div class="dashboard-shell">
+    <aside class="sidebar">
+      <div class="brand-block">
+        <p class="eyebrow">Security Operations</p>
+        <h1 class="brand">BIL Server Console</h1>
+        <p class="subtitle">Dark-mode monitoring board for live edge alerts and evidence review.</p>
+      </div>
+
+      <section class="panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Active Target</p>
+            <h2 id="active-target-title">No target selected</h2>
+          </div>
+          <span id="live-status" class="status-pill err">Live disconnected</span>
+        </div>
+        <p id="active-target-meta" class="muted">Add a target to begin monitoring.</p>
+        <div class="action-row">
+          <button id="refresh-selected-btn" class="btn primary" type="button">Refresh Current</button>
+          <button id="refresh-all-btn" class="btn ghost" type="button">Refresh All</button>
+        </div>
+        <p id="last-updated" class="muted">Not updated yet</p>
+
+        <div class="stats-grid compact">
+          <article class="stat-card">
+            <span class="stat-label">Health</span>
+            <strong id="health-value">Unknown</strong>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Alerts</span>
+            <strong id="alerts-count">0</strong>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Edge PCs</span>
+            <strong id="edge-count">0</strong>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Logs</span>
+            <strong id="logs-count">0</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Connections</p>
+            <h2>Add Target</h2>
+          </div>
+        </div>
+        <form id="target-form" class="target-form">
+          <label>
+            Name
+            <input id="target-name" type="text" placeholder="HQ Server 8000" required>
+          </label>
+          <div class="row">
+            <label>
+              Protocol
+              <select id="target-protocol">
+                <option value="http">http</option>
+                <option value="https">https</option>
+              </select>
+            </label>
+            <label>
+              Port
+              <input id="target-port" type="number" min="1" max="65535" value="8000" required>
+            </label>
+          </div>
+          <label>
+            Host
+            <input id="target-host" type="text" value="127.0.0.1" required>
+          </label>
+          <label>
+            Notes
+            <input id="target-notes" type="text" placeholder="Site A / Warehouse">
+          </label>
+          <button type="submit" class="btn primary">Add Target</button>
+        </form>
+      </section>
+
+      <section class="panel targets-panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Targets</p>
+            <h2>Watch List</h2>
+          </div>
+        </div>
+        <div id="target-list" class="target-list"></div>
+      </section>
+    </aside>
+
+    <main class="console">
+      <section class="panel viewer-panel">
+        <div class="section-heading viewer-heading">
+          <div>
+            <p class="eyebrow">Alert Viewer</p>
+            <h2 id="selected-alert-title">No alert selected</h2>
+          </div>
+          <span id="selected-alert-visit-state" class="status-pill pending">Awaiting review</span>
+        </div>
+        <p id="selected-alert-summary" class="muted">
+          Select an alert from the right rail to inspect the image and details below.
+        </p>
+        <div id="selected-alert-stage" class="viewer-stage empty">
+          <div class="viewer-placeholder">
+            <span class="viewer-placeholder-label">No image loaded</span>
+            <p>Choose an alert from the right rail to inspect it here.</p>
+          </div>
+        </div>
+        <div id="selected-alert-details" class="detail-grid"></div>
+      </section>
+
+      <section class="support-grid">
+        <article class="panel edge-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Heartbeat</p>
+              <h2>Edge PCs</h2>
+            </div>
+          </div>
+          <div id="edge-list" class="edge-list"></div>
+        </article>
+
+        <article class="panel logs-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Operations</p>
+              <h2>Server Logs</h2>
+            </div>
+          </div>
+          <div id="logs-list" class="logs-list"></div>
+        </article>
+      </section>
+    </main>
+
+    <aside class="panel alerts-rail">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Alert Feed</p>
+          <h2>Recent Alerts</h2>
+        </div>
+        <span id="alert-feed-count" class="status-pill neutral">0 total</span>
+      </div>
+      <p class="muted">
+        Click an alert to bring its image into the center console, open the detail view, and mark it as visited.
+      </p>
+      <div class="view-switcher" role="group" aria-label="Alert list view">
+        <button id="alerts-view-compact" class="view-switch is-active" type="button">Compact</button>
+        <button id="alerts-view-list" class="view-switch" type="button">List</button>
+      </div>
+      <div id="alerts-list" class="alerts-list"></div>
+    </aside>
+  </div>
+
+  <script src="/static/dashboard/app.js"></script>
+</body>
+</html>

@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from edge_agent.config import EdgeSettings
 from edge_agent.edge_api import create_app
+from edge_agent.sender import ServerSender
 
 
 def _parse_iso_z(ts: str) -> datetime:
@@ -20,7 +21,8 @@ def _parse_iso_z(ts: str) -> datetime:
 @pytest.fixture
 def client():
     cfg = EdgeSettings(edge_pc_id="edge-001", site_name="Site A")
-    app = create_app(cfg)
+    sender = ServerSender(cfg)
+    app = create_app(cfg, sender)
     return TestClient(app)
 
 

@@ -20,14 +20,14 @@ def test_benchmark_smoke(tmp_path, monkeypatch):
     monkeypatch.setattr("benchmark.benchmark_suite.OUTPUT_SUMMARY", str(output_sum))
 
     # 2. Mock model list and arguments
-    from benchmark.benchmark_suite import ModelWrapper
+    from src.edge_agent.models import ModelWrapper
 
     class MockWrapper(ModelWrapper):
         def load(self):
             pass
 
         def predict(self, frame):
-            return [("person", 0.9)]
+            return [(0, 0, 0, 0, 0.9, "person")]
 
     class MockArgs:
         def __init__(self):
@@ -47,14 +47,14 @@ def test_benchmark_smoke(tmp_path, monkeypatch):
 
     # Use args[0] to capture the actual model name (e.g., YOLOv8-Nano)
     monkeypatch.setattr(
-        "benchmark.benchmark_suite.YOLOWrapper", lambda *args: MockWrapper(args[0])
+        "src.edge_agent.models.YOLOWrapper", lambda *args: MockWrapper(args[0])
     )
     monkeypatch.setattr(
-        "benchmark.benchmark_suite.EfficientDetWrapper",
+        "src.edge_agent.models.efficientdet.EfficientDetWrapper",
         lambda *args: MockWrapper("MockEffDet"),
     )
     monkeypatch.setattr(
-        "benchmark.benchmark_suite.TorchvisionSSDWrapper",
+        "src.edge_agent.models.ssd.TorchvisionSSDWrapper",
         lambda *args: MockWrapper("MockSSD"),
     )
 

@@ -28,11 +28,11 @@ The system operates on constrained hardware (Windows PCs with i5/i7 processors a
 
 The project follows a structured approach:
 
-1. **Research and Setup** (Jan 6 – Jan 24, 2026): Initial research on intrusion detection techniques, setup development environment
-2. **Research (continued)** (Jan 25 – Feb 7, 2026): Evaluate AI models and finalize architecture
-3. **Prototype Development** (Feb 8 – Feb 28, 2026): Implement detection pipeline and performance profiling
-4. **Evaluation and Refinement** (Mar 1 – Mar 21, 2026): Test with real data and optimize
-5. **Finishing Touches** (Mar 22 – Apr 6, 2026): Finalize documentation and presentation
+1. **Research and Setup** (Jan 6 - Jan 24, 2026): Initial research on intrusion detection techniques, setup development environment
+2. **Research (continued)** (Jan 25 - Feb 7, 2026): Evaluate AI models and finalize architecture
+3. **Prototype Development** (Feb 8 - Feb 28, 2026): Implement detection pipeline and performance profiling
+4. **Evaluation and Refinement** (Mar 1 - Mar 21, 2026): Test with real data and optimize
+5. **Finishing Touches** (Mar 22 - Apr 6, 2026): Finalize documentation and presentation
 
 ### Deliverables
 
@@ -59,7 +59,7 @@ copy .env.example .env
 # On Unix/macOS: cp .env.example .env
 ```
 
-Important variables (see `.env.example`): `DATABASE_URL`, `HOST`, `PORT`, `DEBUG`, `SECRET_KEY`, `CORS_ORIGINS` (comma-separated), `WS_MAX_CONNECTIONS`, `WS_ALERT_QUEUE_SIZE`, `WS_ALERT_WORKER_COUNT`, `WS_MAX_IMAGE_BYTES`, `WS_IMAGE_STORAGE_DIR`, `WS_IMAGE_RETENTION_HOURS`, `WS_IMAGE_CLEANUP_INTERVAL_HOURS`.
+Important variables (see `.env.example`): `DATABASE_URL`, `HOST`, `PORT`, `DEBUG`, `SECRET_KEY`, `CORS_ORIGINS` (comma-separated), `WS_MAX_CONNECTIONS`, `WS_ALERT_QUEUE_SIZE`, `WS_ALERT_WORKER_COUNT`, `WS_MAX_IMAGE_BYTES`, `WS_IMAGE_STORAGE_DIR`, `WS_IMAGE_RETENTION_HOURS`, `WS_IMAGE_CLEANUP_INTERVAL_HOURS`, `LOG_BUFFER_MAX_ENTRIES`.
 
 Note: Edge agents SHOULD provide `edge_pc_id` when sending alerts. The server accepts
 alerts that omit `edge_pc_id` for backward compatibility: when missing the server will
@@ -90,8 +90,8 @@ Edge Agent key variables (see `.env.example`):
 
 **Local motion trigger (lightweight)**
 - `MOTION_FPS` (e.g., 2)
-- `MOTION_PIXEL_DELTA` (e.g., 25–45)
-- `MOTION_THRESHOLD` (e.g., 0.02–0.08)
+- `MOTION_PIXEL_DELTA` (e.g., 25-45)
+- `MOTION_THRESHOLD` (e.g., 0.02-0.08)
 - `DEFAULT_CAMERA_ID` (used for local motion labeling in single-camera mode)
 
 FFmpeg note:
@@ -120,7 +120,7 @@ committed before opening a PR.
 ### Notes about databases and migrations
 
 - SQLite is used as the default development database for convenience. It is NOT recommended for production deployments where durability, concurrency, and advanced SQL features are required. For production, prefer PostgreSQL or another production-grade RDBMS and set `DATABASE_URL` accordingly.
-- The `detections` column uses SQLAlchemy's `JSON` type; behavior differs by database. On SQLite it will be stored as text — JSON operators are available on PostgreSQL but not on SQLite.
+- The `detections` column uses SQLAlchemy's `JSON` type; behavior differs by database. On SQLite it will be stored as text - JSON operators are available on PostgreSQL but not on SQLite.
 - If you are migrating an existing database into Alembic-managed migrations, follow these steps:
   1. **Backup your DB** (copy the SQLite file or take a dump for other DBs).
   2. If the existing schema already matches models and you don't need to run migrations, mark the DB as up-to-date with:
@@ -199,9 +199,13 @@ $env:PYTHONPATH="$PWD\src"; python -m uvicorn server.main:app --reload --host 12
 |---|---|---|
 | GET | `/` | Health check |
 | POST | `/api/heartbeat` | Upsert edge heartbeat/status |
+| GET | `/api/heartbeat` | List known edge PCs with latest status/heartbeat |
 | POST | `/api/alerts` | Ingest alert over HTTP |
 | GET | `/api/alerts` | List alerts |
+| GET | `/api/alerts/{alert_id}/image` | Serve stored alert image bytes |
+| GET | `/api/logs` | Read recent bounded server logs |
 | WS | `/ws/alerts` | Ingest alerts over WebSocket (`connected` / `meta_received` / `ack` / `error`) |
+| GET | `/dashboard` | Web monitoring UI (multi-target, alerts, logs, edge details) |
 
 Apply migrations before first run:
 ```bash
@@ -213,6 +217,11 @@ python -m alembic -c alembic.ini upgrade head
 HTTP health check:
 ```powershell
 curl.exe http://127.0.0.1:8000/
+```
+
+Open the monitoring UI:
+```powershell
+start http://127.0.0.1:8000/dashboard
 ```
 
 HTTP alert ingestion from PowerShell (recommended):
@@ -316,8 +325,11 @@ The script exits with code `1` if all expected messages are not ACKed.
 ### Endpoint Purpose
 
 - **Heartbeat** (`POST /api/heartbeat`): Used by edge PCs to report their own status and last-seen time to the server. This lets the server track which devices are online and their current state.
+- **Edge Status List** (`GET /api/heartbeat`): Returns known edge PCs and their current status/last heartbeat for dashboard-style monitoring.
 - **Healthcheck** (`GET /`): Used by anyone (user, monitoring system, load balancer) to check if the server itself is running and responsive. Returns a simple status message.
+- **Server Logs** (`GET /api/logs`): Returns recent in-memory server logs for operations visibility in the web dashboard.
 - **WebSocket Alert Ingestion** (`WS /ws/alerts`): Used by edge clients or UI clients to stream alert payloads in real time and receive immediate ACK or error responses. Supports metadata-first + binary image frames.
+- **Dashboard** (`GET /dashboard`): Built-in web UI to monitor multiple server targets (host/port), view alerts/images, edge status, and logs.
 
 ---
 
@@ -369,7 +381,24 @@ Used by edge PCs to report their status. The server records the time it receives
 #### Alerts Endpoint
 - **POST /api/alerts**: Ingests alerts from edge PCs (see code for schema).
 - **GET /api/alerts**: Lists alerts (filtering to be implemented).
+- **GET /api/alerts/{alert_id}/image**: Returns the stored image bytes for that alert if `image_path` exists and is within configured storage.
 - **WS /ws/alerts**: Accepts alert JSON messages (backward compatible) and metadata + binary image frames. Returns `connected`, `meta_received`, `ack`, or `error` frames.
+
+#### Logs Endpoint
+- **GET /api/logs**: Returns bounded, structured server logs.
+  - Query params:
+    - `limit` (default `200`, max `1000`)
+    - `after_id` (optional incremental polling cursor)
+    - `level` (optional filter, e.g. `INFO`, `WARNING`, `ERROR`)
+
+#### Monitoring Dashboard
+- **GET /dashboard**: Built-in web UI for multi-port monitoring.
+- Add one or many targets by host/port (for example `127.0.0.1:8000`, `127.0.0.1:8001`).
+- For each selected target, the dashboard shows:
+  - health status
+  - recent alerts + image previews (when available)
+  - known edge PCs from heartbeat data
+  - recent server logs
 
 Note: `alerts.edge_pc_id` is now a required foreign key referencing `edge_pcs.edge_pc_id`.
 When upgrading older databases, a migration will insert a sentinel `edge_pcs` row with `edge_pc_id='edge-001'`
@@ -456,12 +485,12 @@ python -m edge_agent --http-serve
 #### Endpoints
 
 * **GET** `http://localhost:8128/health`
-  Returns a simple “ok” response if the edge agent is running.
+  Returns a simple "ok" response if the edge agent is running.
 * **GET** `http://localhost:8128/heartbeat`
   Returns edge identity (`edge_pc_id`, `site_name`), a basic status snapshot, and uptime.
 
-> Note: This is the Edge-side heartbeat (server/office → edge).
-> The Central Server heartbeat endpoint is separate (`POST /api/heartbeat`, edge → server).
+> Note: This is the Edge-side heartbeat (server/office -> edge).
+> The Central Server heartbeat endpoint is separate (`POST /api/heartbeat`, edge -> server).
 
 #### Run TCP motion listener (prints parsed motion events)
 
@@ -479,8 +508,8 @@ python -m edge_agent --motion-test
 
 This starts:
 
-* RTSP ingest (ffmpeg) → ring buffer
-* local frame-diff motion trigger → TriggerManager (cooldown/dedupe)
+* RTSP ingest (ffmpeg) -> ring buffer
+* local frame-diff motion trigger -> TriggerManager (cooldown/dedupe)
 
 Logs include RTSP recovery categories like `DISCONNECT`, `STALL`, and `STARTUP_TIMEOUT`, with automatic retry/backoff.
 
@@ -508,17 +537,23 @@ python -m pytest tests/server/test_heartbeat.py -v
 python -m pytest tests/edge_agent/test_edge_api.py -v
 ```
 
-### Testing with Makefile (recommended)
+### Testing Commands
 
-A `Makefile` is provided to simplify running the test suite. From the repository root run:
+Linux/macOS (with `make` installed):
 
 ```bash
 make test
 ```
 
-What `make test` does:
-- Ensures the `PYTHONPATH` includes the `src/` package layout and project root so tests import correctly.
-- Invokes `pytest -v` using the repository `pytest.ini` configuration (including coverage reporting).
+Windows PowerShell:
+
+```powershell
+python scripts/run_tests.py
+```
+
+What both commands do:
+- Run `pytest -v` using repository test configuration.
+- Ensure both `src/` and project root are injected into `PYTHONPATH`.
 
 Prerequisites:
 - Install project dependencies before running tests: `pip install -r requirements.txt`.
@@ -531,20 +566,19 @@ Troubleshooting:
 pip install pytest-cov
 ```
 
-- If tests fail due to missing DB tables (Alembic migrations not applied), the test suite will attempt to create tables via SQLAlchemy metadata for development. For stricter environments, run migrations before testing:
+- The test suite applies Alembic migrations to a dedicated test database in `tests/conftest.py`. If needed, you can still run migrations manually:
 
 ```bash
 alembic upgrade head
 ```
 
-- If you see import errors for top-level packages (for example `benchmark`), ensure you're running `make test` from the repository root so the `Makefile` sets `PYTHONPATH` correctly, or run:
+- If you see import errors for top-level packages (for example `benchmark`), run tests through the helper:
 
 ```bash
-PYTHONPATH=src:. pytest -v
+python scripts/run_tests.py
 ```
 
-If you'd like, I can add a `requirements-dev.txt` (lighter) and a small `scripts/run_tests.sh` wrapper — tell me which you'd prefer.
-I have added a `requirements-dev.txt` that excludes heavy machine-learning and CV packages so you can install dev/test dependencies quickly.
+`requirements-dev.txt` excludes heavy machine-learning and CV packages so you can install dev/test dependencies quickly.
 
 Quick start using the lightweight development dependencies:
 
@@ -552,8 +586,14 @@ Quick start using the lightweight development dependencies:
 # Install lightweight dev-only deps (fast)
 pip install -r requirements-dev.txt
 
-# Run the test suite via Makefile
+# Linux/macOS
 make test
+```
+
+On Windows:
+
+```powershell
+python scripts/run_tests.py
 ```
 
 When you need full ML capabilities (training, model benchmarks, CV tooling) install the full pinned `requirements.txt` or use the conda instructions provided earlier.
@@ -570,3 +610,4 @@ When you need full ML capabilities (training, model benchmarks, CV tooling) inst
 ### License
 
 This project is released as open source.
+

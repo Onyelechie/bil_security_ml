@@ -28,3 +28,9 @@ jobs:
           flake8 src/ tests/ \
             --statistics \
             --count
+
+      - name: Run flake8
+        run: |
+          flake8 src/ tests/ benchmark/ \
+            --statistics \
+            --count

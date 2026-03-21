@@ -1,4 +1,5 @@
 import os
+import sys
 import cv2
 import torch
 import warnings
@@ -6,21 +7,12 @@ import argparse
 import pandas as pd
 from pathlib import Path
 from typing import List
+from torchmetrics.detection.mean_ap import MeanAveragePrecision
 
 # Suppress specific pytorch warnings that might clutter the CLI output
 warnings.filterwarnings("ignore", category=UserWarning)
 
-try:
-    from torchmetrics.detection.mean_ap import MeanAveragePrecision
-except ImportError:
-    print(
-        "Error: torchmetrics is not installed. Please run: pip install torchmetrics torchvision"
-    )
-    exit(1)
-
 # Ensure benchmark models are importable
-import sys
-
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 

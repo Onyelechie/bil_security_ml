@@ -85,6 +85,8 @@ benchmark/system_info.txt
 
 # Others
 docs/self_assessment_ebere.tex
+accuracy/dataset_frames/
+accuracy/labeled_data/
 
 # Whitelists (Must be at the end to override broad ignores)
 !src/server/models/

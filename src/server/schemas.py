@@ -30,10 +30,14 @@ class AlertOut(AlertCreate):
 
 # Heartbeat schemas
 class HeartbeatIn(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     edge_pc_id: str
     site_name: str
     status: str
     timestamp: datetime
+    site_id: Optional[str] = None
+    uptime_seconds: Optional[int] = None
 
 
 class HeartbeatOut(BaseModel):

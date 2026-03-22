@@ -398,6 +398,20 @@ Used by edge PCs to report their status. The server records the time it receives
   - health status
   - recent alerts + image previews (when available)
   - known edge PCs from heartbeat data
+
+## Recent Changes (March 2026)
+
+Summary of notable updates made in the `Server` branch during March 2026:
+
+- Per-site image storage: images are stored in a configurable `IMAGE_STORAGE_DIR` with automatic creation of per-site folders on site registration. Filenames include site/camera IDs and a timestamp for easy tracing.
+- Multipart HTTP upload endpoint: `POST /api/alerts/upload` accepts multipart metadata + image upload for edges that prefer HTTP ingestion.
+- Ingestion normalization: server now copies local/absolute image paths referenced by incoming alerts into the configured storage root and persists a storage-relative path in the DB. This prevents serving arbitrary files from the host filesystem.
+- Per-site retention & cleanup: per-site image retention settings are exposed to the dashboard and a background cleanup task deletes images older than their configured retention.
+- Dashboard changes: added a full-width `Settings` view to configure per-site retention, Overview improvements (connections, registered PCs, ports), and fixed regressions in the alerts viewer.
+- Compatibility: existing WebSocket ingestion (`/ws/alerts`) is still supported for clients that prefer it; the server accepts both legacy `WS_*` image storage env names and the new `IMAGE_*` names for backward compatibility.
+- Helper scripts: `scripts/test_alert_upload.py` (multipart uploader) and `scripts/fix_alert_image.py` (copy legacy absolute-path images into storage and update DB rows) were added to assist testing and migration.
+
+See the `docs/` folder for the new Windows runbook and authentication/enrollment plan.
   - recent server logs
 
 Note: `alerts.edge_pc_id` is now a required foreign key referencing `edge_pcs.edge_pc_id`.

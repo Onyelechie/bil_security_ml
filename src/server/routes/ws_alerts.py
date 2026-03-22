@@ -123,13 +123,18 @@ async def alerts_websocket(websocket: WebSocket) -> None:
                 camera_id = str(alert_payload.get("camera_id", "unknown"))
                 received_at = datetime.now(timezone.utc)
                 try:
-                    image_path = await asyncio.to_thread(
+                    # Save image using the configured websocket image storage
+                    # instance. Prefix the returned path with a special scheme so
+                    # the ingestion pipeline can know this file was written by
+                    # the websocket storage and avoid copying it again.
+                    saved = await asyncio.to_thread(
                         image_storage.save_alert_image,
                         site_id=site_id,
                         camera_id=camera_id,
                         image_bytes=binary_payload,
                         received_at=received_at,
                     )
+                    image_path = f"ws://{saved}"
                 except ImageStorageError as exc:
                     await manager.send_json(
                         websocket,

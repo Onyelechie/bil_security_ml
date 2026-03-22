@@ -46,6 +46,20 @@ class AlertIngestionService:
                     # ignore URLs
                     if image_path_val.startswith("http://") or image_path_val.startswith("https://"):
                         pass
+                    # special-case websocket-saved images: they are prefixed with
+                    # `ws://` by the websocket route to indicate they were already
+                    # persisted by the websocket storage instance and should not be
+                    # copied into the main storage root again.
+                    elif image_path_val.startswith("ws://"):
+                        src = Path(image_path_val[len("ws://") :])
+                        if not src.is_absolute():
+                            # if a relative path was returned, resolve it against cwd
+                            src = src.resolve()
+                        if src.is_file():
+                            # store absolute path as-is (no copy)
+                            image_path_val = src.as_posix()
+                        else:
+                            image_path_val = None
                     else:
                         src = Path(image_path_val)
                         # if relative, resolve against repo root

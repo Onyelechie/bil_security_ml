@@ -52,7 +52,12 @@ class ImageStorageService:
         if received_at is None:
             received_at = datetime.now(timezone.utc)
 
-        site_dir = self.ensure_site_ready(site_id)
+        # Save images directly under the configured root directory. Tests and
+        # websocket storage expect a flat layout (files directly in root).
+        # Per-site folders are still created by `ensure_site_ready` when needed
+        # for settings, but image files themselves are placed in `root`.
+        self.ensure_ready()
+        site_dir = self._root_dir
 
         safe_site = self._sanitize_part(site_id)
         safe_camera = self._sanitize_part(camera_id)
@@ -117,6 +122,57 @@ class ImageStorageService:
                 if mtime < cutoff:
                     path.unlink()
                     removed += 1
+            except OSError:
+                continue
+
+        return removed
+
+    def cleanup_older_than(
+        self,
+        *,
+        hours: int,
+        now: datetime | None = None,
+    ) -> int:
+        """Remove files older than `hours` from the root storage and any
+        one-level site subfolders. Returns the number of removed files.
+
+        This helper exists for tests and simple cleanup cases where the image
+        files may live either directly in the root directory or inside site
+        subdirectories.
+        """
+        if hours < 1:
+            raise ValueError("hours must be >= 1")
+        if now is None:
+            now = datetime.now(timezone.utc)
+
+        cutoff = now - timedelta(hours=hours)
+        removed = 0
+        self.ensure_ready()
+
+        # Check files directly in root
+        for path in self._root_dir.iterdir():
+            try:
+                if path.is_file():
+                    if path.name == self._SITE_SETTINGS_NAME:
+                        continue
+                    mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+                    if mtime < cutoff:
+                        path.unlink()
+                        removed += 1
+                elif path.is_dir():
+                    # Check files one level deep in site directories
+                    for child in path.iterdir():
+                        if not child.is_file():
+                            continue
+                        if child.name == self._SITE_SETTINGS_NAME:
+                            continue
+                        try:
+                            mtime = datetime.fromtimestamp(child.stat().st_mtime, tz=timezone.utc)
+                            if mtime < cutoff:
+                                child.unlink()
+                                removed += 1
+                        except OSError:
+                            continue
             except OSError:
                 continue
 

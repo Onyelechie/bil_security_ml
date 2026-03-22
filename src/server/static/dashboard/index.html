@@ -7,8 +7,22 @@
   <link rel="stylesheet" href="/static/dashboard/styles.css">
 </head>
 <body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="topbar-left">
+        <p class="eyebrow top-eyebrow">Security Operations</p>
+        <h1 class="top-title">BIL Server Console</h1>
+      </div>
+      <nav class="top-nav">
+        <button class="nav-btn is-active" data-view="overview">Overview</button>
+        <button class="nav-btn" data-view="alerts">Alerts</button>
+        <button class="nav-btn" data-view="settings">Settings</button>
+      </nav>
+    </div>
+  </header>
+
   <div class="dashboard-shell">
-    <aside class="sidebar">
+    <aside class="sidebar" data-pages="overview settings">
       <div class="brand-block">
         <p class="eyebrow">Security Operations</p>
         <h1 class="brand">BIL Server Console</h1>
@@ -24,6 +38,7 @@
           <span id="live-status" class="status-pill err">Live disconnected</span>
         </div>
         <p id="active-target-meta" class="muted">Add a target to begin monitoring.</p>
+        <p id="server-info" class="muted"></p>
         <div class="action-row">
           <button id="refresh-selected-btn" class="btn primary" type="button">Refresh Current</button>
           <button id="refresh-all-btn" class="btn ghost" type="button">Refresh All</button>
@@ -98,7 +113,29 @@
       </section>
     </aside>
 
-    <main class="console">
+    <!-- Settings full-width hero shown when view=settings -->
+    <section class="panel settings-hero" data-pages="settings">
+      <div class="settings-hero-inner">
+        <div class="settings-hero-left">
+          <p class="eyebrow">Settings</p>
+          <h2>Connections and Cleanup</h2>
+          <p class="muted">This page is only for configuration work. Manage dashboard targets here and set each site's image cleanup window without mixing that work into live monitoring or review.</p>
+        </div>
+        <div class="settings-hero-right">
+          <label class="small">Active Target
+            <select id="settings-site-select"></select>
+          </label>
+          <label class="small">Retention (hours)
+            <input id="settings-retention-hours" type="number" min="1" value="24">
+          </label>
+          <div class="action-row">
+            <button id="settings-save-site" class="btn primary" type="button">Save Site Settings</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <main class="console" data-pages="overview alerts">
       <section class="panel viewer-panel">
         <div class="section-heading viewer-heading">
           <div>
@@ -142,7 +179,7 @@
       </section>
     </main>
 
-    <aside class="panel alerts-rail">
+    <aside class="panel alerts-rail" data-pages="overview alerts">
       <div class="section-heading">
         <div>
           <p class="eyebrow">Alert Feed</p>

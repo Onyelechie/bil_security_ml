@@ -40,6 +40,49 @@ body {
     linear-gradient(135deg, #07111d 0%, #081523 48%, #050d16 100%);
 }
 
+/* Topbar / header */
+.topbar {
+  padding: 22px 18px;
+  border-bottom: 1px solid rgba(138, 163, 187, 0.06);
+  backdrop-filter: blur(8px);
+}
+.topbar-inner {
+  max-width: 1680px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.topbar-left .top-eyebrow {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.top-title {
+  margin: 6px 0 0;
+  font-size: 1.6rem;
+}
+.top-nav {
+  display: flex;
+  gap: 10px;
+}
+.nav-btn {
+  background: rgba(12, 25, 40, 0.6);
+  color: var(--ink);
+  border: 1px solid rgba(138,163,187,0.06);
+  padding: 10px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.nav-btn.is-active {
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+  color: #04121c;
+  font-weight: 700;
+}
+
 button,
 input,
 select,
@@ -52,9 +95,24 @@ textarea {
   grid-template-columns: 320px minmax(0, 1fr) 360px;
   gap: 18px;
   max-width: 1680px;
-  margin: 0 auto;
+  margin: 18px auto 40px;
   padding: 18px;
 }
+
+/* View mode adjustments */
+body[data-view="overview"] .dashboard-shell {
+  grid-template-columns: 320px minmax(0, 1fr) 360px;
+}
+
+body[data-view="alerts"] .dashboard-shell {
+  grid-template-columns: minmax(0, 1fr) 360px;
+}
+
+body[data-view="settings"] .dashboard-shell {
+  grid-template-columns: 320px minmax(0, 1fr);
+}
+
+.hidden { display: none !important; }
 
 .sidebar,
 .console,

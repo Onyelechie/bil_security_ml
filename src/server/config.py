@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     )
     ws_image_retention_hours: int = int(os.getenv("WS_IMAGE_RETENTION_HOURS", 24))
     ws_image_cleanup_interval_hours: int = int(os.getenv("WS_IMAGE_CLEANUP_INTERVAL_HOURS", 24))
+
+    # New unified image storage settings (backwards-compatible with WS_* envs)
+    image_storage_dir: str = os.getenv(
+        "IMAGE_STORAGE_DIR", os.getenv("WS_IMAGE_STORAGE_DIR", "storage/alert_images")
+    )
+    image_retention_hours: int = int(os.getenv("IMAGE_RETENTION_HOURS", os.getenv("WS_IMAGE_RETENTION_HOURS", 24)))
+    image_cleanup_interval_hours: int = int(os.getenv("IMAGE_CLEANUP_INTERVAL_HOURS", os.getenv("WS_IMAGE_CLEANUP_INTERVAL_HOURS", 24)))
     log_buffer_max_entries: int = int(os.getenv("LOG_BUFFER_MAX_ENTRIES", 5000))
 
     def __init__(self, **values):
@@ -59,6 +66,12 @@ class Settings(BaseSettings):
             raise ValueError("WS_IMAGE_RETENTION_HOURS must be >= 1")
         if self.ws_image_cleanup_interval_hours < 1:
             raise ValueError("WS_IMAGE_CLEANUP_INTERVAL_HOURS must be >= 1")
+        if not self.image_storage_dir.strip():
+            raise ValueError("IMAGE_STORAGE_DIR must not be empty")
+        if self.image_retention_hours < 1:
+            raise ValueError("IMAGE_RETENTION_HOURS must be >= 1")
+        if self.image_cleanup_interval_hours < 1:
+            raise ValueError("IMAGE_CLEANUP_INTERVAL_HOURS must be >= 1")
         if self.log_buffer_max_entries < 1:
             raise ValueError("LOG_BUFFER_MAX_ENTRIES must be >= 1")
 

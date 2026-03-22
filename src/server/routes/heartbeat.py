@@ -40,6 +40,12 @@ def heartbeat(payload: HeartbeatIn, request: Request, db: Session = Depends(get_
         db.add(edge_pc)
     db.commit()
     db.refresh(edge_pc)
+    # Ensure a site folder exists for image storage when a new site is registered
+    try:
+        request.app.state.image_storage.ensure_site_ready(edge_pc.site_name)
+    except Exception:
+        # best-effort; do not fail heartbeat on storage errors
+        pass
     publish_dashboard_event(
         request.app,
         "heartbeat_received",

@@ -108,6 +108,9 @@
         alertListView: this._loadAlertListView(),
       };
       this.dom = this._getDom();
+      this.dom.settingsSiteSelect = document.getElementById("settings-site-select");
+      this.dom.settingsRetentionHours = document.getElementById("settings-retention-hours");
+      this.dom.settingsSaveSite = document.getElementById("settings-save-site");
     }
 
     start() {
@@ -151,6 +154,49 @@
       this.dom.refreshAllBtn.addEventListener("click", () => this.refreshAll());
       this.dom.alertsViewCompact.addEventListener("click", () => this._setAlertListView("compact"));
       this.dom.alertsViewList.addEventListener("click", () => this._setAlertListView("list"));
+      if (this.dom.settingsSaveSite) {
+        this.dom.settingsSaveSite.addEventListener("click", async () => {
+          const sel = this.dom.settingsSiteSelect;
+          const hoursEl = this.dom.settingsRetentionHours;
+          if (!sel || !hoursEl) return;
+          const site = sel.value;
+          const hours = Number(hoursEl.value) || null;
+          if (!site) return;
+          try {
+            const active = this.store.getActive();
+            const base = active ? this._baseUrl(active) : window.location.origin;
+            const resp = await fetch(`${base}/api/sites/${encodeURIComponent(site)}/settings`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ image_retention_hours: hours }),
+            });
+            if (!resp.ok) throw new Error("Failed to save site settings");
+            alert("Site settings saved");
+          } catch (err) {
+            console.error(err);
+            alert("Failed to save site settings");
+          }
+        });
+      }
+      if (this.dom.settingsSiteSelect) {
+        this.dom.settingsSiteSelect.addEventListener("change", async () => {
+          const sel = this.dom.settingsSiteSelect;
+          const hoursEl = this.dom.settingsRetentionHours;
+          if (!sel || !hoursEl) return;
+          const site = sel.value;
+          if (!site) return;
+          try {
+            const active = this.store.getActive();
+            const base = active ? this._baseUrl(active) : window.location.origin;
+            const resp = await fetch(`${base}/api/sites/${encodeURIComponent(site)}/settings`);
+            if (!resp.ok) throw new Error("Failed to fetch site settings");
+            const data = await resp.json();
+            hoursEl.value = data.image_retention_hours || hoursEl.value || 24;
+          } catch (err) {
+            console.error(err);
+          }
+        });
+      }
     }
 
     async refreshAll() {
@@ -255,11 +301,12 @@
 
     async _loadSnapshot(target) {
       const base = this._baseUrl(target);
-      const [healthResult, alertsResult, edgesResult, logsResult] = await Promise.allSettled([
+      const [healthResult, alertsResult, edgesResult, logsResult, serverInfoResult] = await Promise.allSettled([
         this._fetchJson(`${base}/`),
         this._fetchJson(`${base}/api/alerts?limit=60`),
         this._fetchJson(`${base}/api/heartbeat`),
         this._fetchJson(`${base}/api/logs?limit=200`),
+        this._fetchJson(`${base}/api/server-info`),
       ]);
 
       const snapshot = {
@@ -289,6 +336,11 @@
       }
 
       snapshot.ok = snapshot.health !== null;
+      if (serverInfoResult.status === "fulfilled") {
+        snapshot.serverInfo = serverInfoResult.value;
+      } else {
+        snapshot.serverInfo = null;
+      }
       this.state.snapshots.set(target.id, snapshot);
       this._pruneVisitedAlerts(target.id, snapshot.alerts);
     }
@@ -544,6 +596,18 @@
       this.dom.logsCount.textContent = String(snapshot.logs.length);
       this.dom.alertFeedCount.textContent = `${snapshot.alerts.length} total`;
 
+      // render server info if available
+      try {
+        if (snapshot.serverInfo) {
+          const si = snapshot.serverInfo;
+          this.dom.serverInfo.textContent = `Host: ${si.host}:${si.port} — edges: ${si.edge_count}`;
+        } else {
+          this.dom.serverInfo.textContent = "";
+        }
+      } catch (_err) {
+        this.dom.serverInfo.textContent = "";
+      }
+
       const selectedAlert = this._ensureSelectedAlert(target.id, snapshot);
       this._renderSelectedAlert(snapshot, target, selectedAlert);
       this._renderAlerts(snapshot, target, selectedAlert);
@@ -732,6 +796,37 @@
       }).join("");
     }
 
+    _populateSettingsSites() {
+      try {
+        const sel = this.dom.settingsSiteSelect;
+        if (!sel) return;
+        const sites = new Set();
+        for (const snapshot of this.state.snapshots.values()) {
+          if (Array.isArray(snapshot.edges)) {
+            snapshot.edges.forEach((e) => e && e.site_name && sites.add(e.site_name));
+          }
+          if (Array.isArray(snapshot.alerts)) {
+            snapshot.alerts.forEach((a) => a && a.site_id && sites.add(a.site_id));
+          }
+        }
+        const arr = Array.from(sites).filter(Boolean).sort();
+        sel.innerHTML = "";
+        arr.forEach((s) => {
+          const opt = document.createElement("option");
+          opt.value = s;
+          opt.textContent = s;
+          sel.appendChild(opt);
+        });
+        // trigger change to load settings for first site
+        if (arr.length > 0) {
+          sel.value = arr[0];
+          sel.dispatchEvent(new Event("change"));
+        }
+      } catch (_err) {
+        // ignore
+      }
+    }
+
     _alertLabel(alert) {
       const site = alert.site_id || "Unknown site";
       const camera = alert.camera_id || "unknown camera";
@@ -791,6 +886,7 @@
         refreshAllBtn: document.getElementById("refresh-all-btn"),
         activeTargetTitle: document.getElementById("active-target-title"),
         activeTargetMeta: document.getElementById("active-target-meta"),
+        serverInfo: document.getElementById("server-info"),
         liveStatus: document.getElementById("live-status"),
         lastUpdated: document.getElementById("last-updated"),
         healthValue: document.getElementById("health-value"),
@@ -815,5 +911,42 @@
   window.addEventListener("DOMContentLoaded", () => {
     const app = new DashboardApp();
     app.start();
+    // --- Simple client-side view routing (Overview / Alerts / Settings) ---
+    const NAV_KEY = "dashboard_view";
+    const navButtons = Array.from(document.querySelectorAll(".nav-btn[data-view]"));
+
+    function setView(view) {
+      const allowed = ["overview", "alerts", "settings"];
+      if (!allowed.includes(view)) view = "overview";
+      document.body.setAttribute("data-view", view);
+      // toggle nav active state
+      navButtons.forEach((btn) => {
+        btn.classList.toggle("is-active", btn.dataset.view === view);
+      });
+      // show/hide sections based on data-pages attribute
+      document.querySelectorAll("[data-pages]").forEach((el) => {
+        const pages = (el.dataset.pages || "").trim().split(/\s+/).filter(Boolean);
+        const show = pages.length === 0 ? true : pages.includes(view);
+        el.classList.toggle("hidden", !show);
+      });
+      localStorage.setItem(NAV_KEY, view);
+      // populate settings UI when opening settings
+      if (view === "settings") {
+        try {
+          app._populateSettingsSites();
+        } catch (_e) {
+          // ignore
+        }
+      }
+    }
+
+    navButtons.forEach((btn) => {
+      btn.addEventListener("click", () => setView(btn.dataset.view));
+    });
+
+    const saved = localStorage.getItem(NAV_KEY);
+    const defaultBtn = document.querySelector(".nav-btn.is-active[data-view]");
+    const initial = saved || (defaultBtn && defaultBtn.dataset.view) || "overview";
+    setView(initial);
   });
 })();

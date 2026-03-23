@@ -1,6 +1,7 @@
 import pytest
 
 from server.config import Settings
+from tests.temp_dirs import repo_temp_dir
 
 
 def test_debug_accepts_release_string():
@@ -46,3 +47,17 @@ def test_ws_image_cleanup_interval_hours_must_be_positive():
 def test_log_buffer_max_entries_must_be_positive():
     with pytest.raises(ValueError, match="LOG_BUFFER_MAX_ENTRIES"):
         Settings(log_buffer_max_entries=0)
+
+
+def test_env_file_loads_admin_password_and_secret_key():
+    with repo_temp_dir("settings-env-") as temp_dir:
+        env_file = temp_dir / ".env"
+        env_file.write_text(
+            "ADMIN_PASSWORD=test-admin-pass\nSECRET_KEY=test-secret-key\n",
+            encoding="utf-8",
+        )
+
+        cfg = Settings(_env_file=env_file)
+
+        assert cfg.admin_password == "test-admin-pass"
+        assert cfg.secret_key == "test-secret-key"

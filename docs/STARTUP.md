@@ -3,7 +3,7 @@
 Purpose: get the server running quickly on a fresh Windows machine without installing heavy ML packages.
 
 Prerequisites:
-- Python 3.11+ (the environment used here is Python 3.13; ensure `python` is on PATH)
+- Python 3.13 is the tested path for this repo right now. Python 3.11+ may work, but use 3.13 for the least friction.
 
 Recommended quick start (Windows PowerShell):
 
@@ -29,7 +29,8 @@ python -m uvicorn --app-dir src server.main:app --reload --host 127.0.0.1 --port
 
 Notes:
 - `requirements-server.txt` contains a minimal set of dependencies required to run the HTTP/WebSocket APIs and admin endpoints. The full `requirements.txt` contains heavy ML packages such as `torch` and `ultralytics` and is not installed by the quick-start script.
-- If you deploy behind nginx and depend on `ProxyHeadersMiddleware`, ensure `starlette==0.27.0` or later is installed; the quick-start pins `starlette==0.27.0` to avoid runtime incompatibilities.
+- `.env` values such as `ADMIN_PASSWORD` and `SECRET_KEY` are read at server startup through `src/server/config.py`. If you edit `.env`, restart uvicorn so the new values are loaded.
+- Forwarded/proxy headers are handled by Uvicorn's proxy middleware; no separate Starlette pin is required for that.
 
 ## Edge Agent Bring-Up
 

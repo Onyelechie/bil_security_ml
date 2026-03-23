@@ -1,7 +1,6 @@
 # Minimal requirements to run the server (no heavy ML packages)
 fastapi>=0.135.0
 uvicorn[standard]>=0.20.0
-starlette==0.27.0
 pydantic>=2.6.0
 pydantic-settings>=2.2.1
 sqlalchemy>=2.0.25

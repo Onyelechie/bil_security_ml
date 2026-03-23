@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 try:
-    from starlette.middleware.proxy_headers import ProxyHeadersMiddleware
+    from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 except Exception:  # pragma: no cover - runtime compatibility
     ProxyHeadersMiddleware = None
     # Delay logger access until after logging is configured
@@ -157,8 +157,8 @@ if ProxyHeadersMiddleware is not None:
     app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 else:  # pragma: no cover - runtime compatibility
     logger.warning(
-        "starlette.middleware.proxy_headers.ProxyHeadersMiddleware not available; "
-        "forwarded headers will not be applied. Install/upgrade 'starlette' "
+        "uvicorn.middleware.proxy_headers.ProxyHeadersMiddleware not available; "
+        "forwarded headers will not be applied. Install/upgrade 'uvicorn' "
         "to a newer version (or pip install -r requirements.txt)."
     )
 

@@ -61,6 +61,9 @@ copy .env.example .env
 
 Important variables (see `.env.example`): `DATABASE_URL`, `HOST`, `PORT`, `DEBUG`, `SECRET_KEY`, `ADMIN_PASSWORD`, `CORS_ORIGINS` (comma-separated), `WS_MAX_CONNECTIONS`, `WS_ALERT_QUEUE_SIZE`, `WS_ALERT_WORKER_COUNT`, `WS_MAX_IMAGE_BYTES`, `WS_IMAGE_STORAGE_DIR`, `WS_IMAGE_RETENTION_HOURS`, `WS_IMAGE_CLEANUP_INTERVAL_HOURS`, `LOG_BUFFER_MAX_ENTRIES`.
 
+Important startup note:
+- `.env` values are loaded when the server process starts. If you change `ADMIN_PASSWORD`, `SECRET_KEY`, or other env-backed settings, restart uvicorn before testing login or protected routes.
+
 Current edge auth model:
 - Edge heartbeat and HTTP alerts must be signed by an enrolled device.
 - `DEVICE_ID` must match `EDGE_PC_ID`.
@@ -141,7 +144,7 @@ Security note
 - Do not run the server in production with an empty or placeholder `SECRET_KEY` (for example, `your-secret-key-here`). The server warns at startup if `DEBUG` is `False` and `SECRET_KEY` is empty or still set to the placeholder value.
 
 #### Prerequisites
-- Python 3.9+
+- Python 3.13 is the tested path for this repo right now. Python 3.14 caused dependency-install friction during review.
 - Virtual environment (recommended)
 
 #### Installation

@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, Cookie, Form, HTTPException, Request, status
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
-from ..services.auth import verify_access_token
+from ..services.auth import TokenError, verify_access_token
 from .auth import authenticate_admin_password, issue_admin_token
 
 router = APIRouter(tags=["dashboard"])
@@ -25,7 +25,7 @@ def require_dashboard_session(
         )
     try:
         return verify_access_token(dashboard_session)
-    except Exception as exc:
+    except TokenError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Dashboard login required",
@@ -157,7 +157,7 @@ def dashboard_index(dashboard_session: str | None = Cookie(default=None, alias=_
         return RedirectResponse(url="/dashboard/login", status_code=status.HTTP_303_SEE_OTHER)
     try:
         verify_access_token(dashboard_session)
-    except Exception:
+    except TokenError:
         response = RedirectResponse(url="/dashboard/login", status_code=status.HTTP_303_SEE_OTHER)
         response.delete_cookie(_DASHBOARD_COOKIE)
         return response

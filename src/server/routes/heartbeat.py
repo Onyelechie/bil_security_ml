@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
+import logging
 
 from ..db import SessionLocal
 from ..models.edge_pc import EdgePC
@@ -10,6 +11,7 @@ from ..services.dashboard_events import publish_dashboard_event
 from ..services.device_auth import require_signed_device
 
 router = APIRouter(prefix="/api/heartbeat", tags=["heartbeat"])
+logger = logging.getLogger(__name__)
 
 
 def get_db():
@@ -57,7 +59,7 @@ async def heartbeat(payload: HeartbeatIn, request: Request, db: Session = Depend
         request.app.state.image_storage.ensure_site_ready(edge_pc.site_name)
     except Exception:
         # best-effort; do not fail heartbeat on storage errors
-        pass
+        logger.exception("Failed to ensure image storage directory for site '%s'", edge_pc.site_name)
     publish_dashboard_event(
         request.app,
         "heartbeat_received",

@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager, suppress
-from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 try:
@@ -138,7 +137,7 @@ async def lifespan(app: FastAPI):
             with suppress(asyncio.CancelledError):
                 await app.state.image_cleanup_task
         except Exception:
-            pass
+            logger.exception("Failed to stop image cleanup task cleanly during shutdown")
         await app.state.ws_alert_dispatcher.stop()
         logging.getLogger().removeHandler(app.state.log_handler)
         with suppress(Exception):
@@ -158,8 +157,9 @@ if ProxyHeadersMiddleware is not None:
     app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 else:  # pragma: no cover - runtime compatibility
     logger.warning(
-        "starlette.middleware.proxy_headers.ProxyHeadersMiddleware not available; forwarded headers will not be applied. "
-        "Install/upgrade 'starlette' to a newer version (or pip install -r requirements.txt)."
+        "starlette.middleware.proxy_headers.ProxyHeadersMiddleware not available; "
+        "forwarded headers will not be applied. Install/upgrade 'starlette' "
+        "to a newer version (or pip install -r requirements.txt)."
     )
 
 # CORS middleware for web clients

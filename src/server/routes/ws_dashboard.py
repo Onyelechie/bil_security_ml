@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, WebSocket
 
-from ..services.auth import verify_access_token
+from ..services.auth import TokenError, verify_access_token
 from ..services.dashboard_events import DashboardEventManager
 
 router = APIRouter(tags=["dashboard-events"])
@@ -17,7 +17,7 @@ async def dashboard_events_websocket(websocket: WebSocket) -> None:
         return
     try:
         verify_access_token(dashboard_session)
-    except Exception:
+    except TokenError:
         await websocket.close(code=4401, reason="Dashboard login required")
         return
 

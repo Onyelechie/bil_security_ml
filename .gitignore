@@ -9,6 +9,10 @@ infra/letsencrypt/
 .pytest_tmp*/
 .pytest-temp*/
 pytest-cache-files*/
+.pytest-db/
+.pytest-files/
+.tmp-pytest/
+.tmp-pytest-clean/
 tmp_ws_debug/
 .manual_site_retention_checks/
 .manual_ws_image_check/

@@ -243,7 +243,7 @@ def get_alert_image(alert_id: str, db: Session = Depends(get_db)):
             root = repo_root / root
         try:
             resolved_roots.append(root.resolve())
-        except Exception:
+        except OSError:
             # ignore invalid roots
             continue
 

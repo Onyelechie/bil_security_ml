@@ -10,15 +10,16 @@ from fastapi.security import (
 from pydantic import BaseModel
 
 from ..config import settings
-from ..services.auth import create_access_token, verify_access_token
+from ..services.auth import TokenError, create_access_token, verify_access_token
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 security = HTTPBearer()
+TOKEN_TYPE_BEARER = "bearer"  # nosec B105
 
 
 class TokenOut(BaseModel):
     access_token: str
-    token_type: str = "bearer"
+    token_type: str = TOKEN_TYPE_BEARER
 
 
 DASHBOARD_SESSION_SUBJECT = "dashboard-admin"
@@ -49,7 +50,7 @@ def token(form_data: OAuth2PasswordRequestForm = Depends()):
         )
 
     access_token = issue_admin_token(subject=form_data.username, hours=1)
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": TOKEN_TYPE_BEARER}
 
 
 def get_current_admin(
@@ -59,7 +60,7 @@ def get_current_admin(
     try:
         sub = verify_access_token(token)
         return sub
-    except Exception:
+    except TokenError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",

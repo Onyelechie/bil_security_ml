@@ -4,7 +4,11 @@ from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+try:
+    from starlette.middleware.proxy_headers import ProxyHeadersMiddleware
+except Exception:  # pragma: no cover - runtime compatibility
+    ProxyHeadersMiddleware = None
+    # Delay logger access until after logging is configured
 
 from .config import settings
 from .db import init_db
@@ -16,6 +20,8 @@ from .routes.ws_alerts import router as ws_alerts_router
 from .routes.ws_dashboard import router as ws_dashboard_router
 from .routes.sites import router as sites_router
 from .routes.info import router as info_router
+from .routes.auth import router as auth_router
+from .routes.devices import router as devices_router
 from .services.dashboard_events import DashboardEventManager
 from .services.image_storage import ImageStorageService
 from .services.log_buffer import InMemoryLogBuffer, InMemoryLogHandler
@@ -147,8 +153,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-_STATIC_DIR = Path(__file__).resolve().parent / "static"
-app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
+# Add ProxyHeadersMiddleware before other middlewares so forwarded headers are applied early.
+if ProxyHeadersMiddleware is not None:
+    app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+else:  # pragma: no cover - runtime compatibility
+    logger.warning(
+        "starlette.middleware.proxy_headers.ProxyHeadersMiddleware not available; forwarded headers will not be applied. "
+        "Install/upgrade 'starlette' to a newer version (or pip install -r requirements.txt)."
+    )
 
 # CORS middleware for web clients
 app.add_middleware(
@@ -168,6 +180,8 @@ app.include_router(ws_dashboard_router)
 app.include_router(dashboard_router)
 app.include_router(sites_router)
 app.include_router(info_router)
+app.include_router(auth_router)
+app.include_router(devices_router)
 
 
 @app.get("/")

@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from server.db import init_db
 from server.main import app
+from tests.server.device_auth_helpers import enroll_device, post_signed_json
 
 init_db()
 client = TestClient(app)
@@ -19,8 +20,15 @@ def test_heartbeat_create_and_update():
         "status": "online",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+    private_key_b64 = enroll_device(edge_pc_id)
     # First heartbeat (create)
-    response = client.post("/api/heartbeat", json=payload)
+    response = post_signed_json(
+        client,
+        "/api/heartbeat",
+        payload,
+        device_id=edge_pc_id,
+        private_key_b64=private_key_b64,
+    )
     assert response.status_code == 201
     data = response.json()
     assert data["edge_pc_id"] == payload["edge_pc_id"]
@@ -34,7 +42,13 @@ def test_heartbeat_create_and_update():
     payload["timestamp"] = (
         datetime.now(timezone.utc) + timedelta(seconds=10)
     ).isoformat()
-    response = client.post("/api/heartbeat", json=payload)
+    response = post_signed_json(
+        client,
+        "/api/heartbeat",
+        payload,
+        device_id=edge_pc_id,
+        private_key_b64=private_key_b64,
+    )
     assert response.status_code == 201
     data2 = response.json()
     assert data2["status"] == "idle"
@@ -63,7 +77,14 @@ def test_list_edge_pcs():
         "status": "online",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
-    create_response = client.post("/api/heartbeat", json=payload)
+    private_key_b64 = enroll_device(edge_pc_id)
+    create_response = post_signed_json(
+        client,
+        "/api/heartbeat",
+        payload,
+        device_id=edge_pc_id,
+        private_key_b64=private_key_b64,
+    )
     assert create_response.status_code == 201
 
     response = client.get("/api/heartbeat")
@@ -72,3 +93,16 @@ def test_list_edge_pcs():
     assert "edges" in data
     assert isinstance(data["edges"], list)
     assert any(edge["edge_pc_id"] == edge_pc_id for edge in data["edges"])
+
+
+def test_heartbeat_requires_signed_enrolled_device():
+    edge_pc_id = "edge-unsigned"
+    payload = {
+        "edge_pc_id": edge_pc_id,
+        "site_name": "Unsigned Site",
+        "status": "online",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    response = client.post("/api/heartbeat", json=payload)
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Missing device identity"

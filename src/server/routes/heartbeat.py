@@ -7,6 +7,7 @@ from ..db import SessionLocal
 from ..models.edge_pc import EdgePC
 from ..schemas import EdgePCStatusListOut, EdgePCStatusOut, HeartbeatIn, HeartbeatOut
 from ..services.dashboard_events import publish_dashboard_event
+from ..services.device_auth import require_signed_device
 
 router = APIRouter(prefix="/api/heartbeat", tags=["heartbeat"])
 
@@ -20,10 +21,21 @@ def get_db():
 
 
 @router.post("", response_model=HeartbeatOut, status_code=status.HTTP_201_CREATED)
-def heartbeat(payload: HeartbeatIn, request: Request, db: Session = Depends(get_db)):
+async def heartbeat(payload: HeartbeatIn, request: Request, db: Session = Depends(get_db)):
     """
     Upsert edge PC heartbeat info.
     """
+    device_id = request.headers.get("X-Device-Id")
+    signature = request.headers.get("X-Device-Signature")
+    body = await request.body()
+    require_signed_device(
+        db,
+        device_id=device_id,
+        signature_b64=signature,
+        message=body,
+        expected_edge_pc_id=payload.edge_pc_id,
+    )
+
     edge_pc = db.query(EdgePC).filter_by(edge_pc_id=payload.edge_pc_id).first()
     now = datetime.now(timezone.utc)
     if edge_pc:

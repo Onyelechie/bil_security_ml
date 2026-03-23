@@ -58,3 +58,4 @@ def test_save_alert_image_sanitizes_filename_parts(tmp_path):
     assert "/" not in saved_path.name
     assert "\\" not in saved_path.name
     assert saved_path.suffix == ".jpg"
+    assert saved_path.stem[-5:] in {"-0600", "-0500"}

@@ -69,7 +69,7 @@ Add-MpPreference -ExclusionPath "C:\srv\bil\db"
 - Daily backup of DB and `storage` to external location (retain 14 days). Use a signed PowerShell script and Task Scheduler.
 
 10) Retention & cleanup
-- Schedule the app's cleanup script (or `scripts/cleanup_images.py`) hourly/daily via Task Scheduler under `bil_service`.
+- The app already runs image cleanup in the background using the configured retention settings. If you need extra operational checks, schedule health monitoring rather than a separate cleanup script.
 
 11) Logging & monitoring
 - Ensure app writes logs to `C:\srv\bil\logs`. Configure rotation and retention, and forward to centralized collector where possible.

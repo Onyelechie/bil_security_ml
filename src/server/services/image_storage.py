@@ -4,6 +4,8 @@ import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from bil_time import filename_stamp_winnipeg, now_in_winnipeg
+
 
 class ImageStorageError(RuntimeError):
     """Raised when the server cannot persist an incoming image."""
@@ -50,7 +52,7 @@ class ImageStorageService:
         <site>_<camera>_<edge>_<timestamp>_<dets>.<ext>
         """
         if received_at is None:
-            received_at = datetime.now(timezone.utc)
+            received_at = now_in_winnipeg()
 
         # Save images directly under the configured root directory. Tests and
         # websocket storage expect a flat layout (files directly in root).
@@ -62,7 +64,7 @@ class ImageStorageService:
         safe_site = self._sanitize_part(site_id)
         safe_camera = self._sanitize_part(camera_id)
         safe_edge = self._sanitize_part(edge_pc_id or "unknown")
-        timestamp = received_at.strftime("%Y%m%dT%H%M%S%fZ")
+        timestamp = filename_stamp_winnipeg(received_at)
         ext = self._guess_extension(image_bytes)
 
         det_summary = ""

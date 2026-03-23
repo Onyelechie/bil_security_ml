@@ -2,6 +2,9 @@
   const STORAGE_KEY = "bil_server_dashboard_targets_v1";
   const VISITED_STORAGE_KEY = "bil_server_dashboard_alert_visits_v1";
   const ALERT_VIEW_STORAGE_KEY = "bil_server_dashboard_alert_view_v1";
+  const AUTH_STORAGE_KEY = "bil_server_dashboard_admin_tokens_v1";
+  const SETTINGS_VIEW_STORAGE_KEY = "bil_server_dashboard_settings_view_v1";
+  const ALERT_TIME_ZONE = "America/Winnipeg";
   const POLL_INTERVAL_MS = 15000;
   const WS_RECONNECT_MS = 2500;
   const LIVE_REFRESH_DEBOUNCE_MS = 600;
@@ -106,11 +109,30 @@
         selectedAlerts: new Map(),
         visitedAlerts: this._loadVisitedAlerts(),
         alertListView: this._loadAlertListView(),
+        authTokens: this._loadAuthTokens(),
+        settingsView: this._loadSettingsView(),
       };
       this.dom = this._getDom();
       this.dom.settingsSiteSelect = document.getElementById("settings-site-select");
       this.dom.settingsRetentionHours = document.getElementById("settings-retention-hours");
       this.dom.settingsSaveSite = document.getElementById("settings-save-site");
+      this.dom.settingsAuthState = document.getElementById("settings-auth-state");
+      this.dom.settingsAdminPassword = document.getElementById("settings-admin-password");
+      this.dom.settingsAuthLogin = document.getElementById("settings-auth-login");
+      this.dom.settingsAuthClear = document.getElementById("settings-auth-clear");
+      this.dom.settingsAuthMessage = document.getElementById("settings-auth-message");
+      this.dom.settingsDeviceId = document.getElementById("settings-device-id");
+      this.dom.settingsPublicKey = document.getElementById("settings-public-key");
+      this.dom.settingsEnrollDevice = document.getElementById("settings-enroll-device");
+      this.dom.settingsEnrollMessage = document.getElementById("settings-enroll-message");
+      this.dom.settingsViewButtons = Array.from(
+        document.querySelectorAll(".settings-subnav-btn[data-settings-view]")
+      );
+      this.dom.settingsPanels = Array.from(document.querySelectorAll("[data-settings-panel]"));
+      this.dom.settingsActiveTarget = document.getElementById("settings-active-target");
+      this.dom.settingsActiveBase = document.getElementById("settings-active-base");
+      this.dom.settingsActiveAdmin = document.getElementById("settings-active-admin");
+      this.dom.settingsActiveSection = document.getElementById("settings-active-section");
     }
 
     start() {
@@ -197,6 +219,93 @@
           }
         });
       }
+      if (this.dom.settingsAuthLogin) {
+        this.dom.settingsAuthLogin.addEventListener("click", async () => {
+          const active = this.store.getActive();
+          const password = (this.dom.settingsAdminPassword?.value || "").trim();
+          if (!active || !password) {
+            this._setSettingsMessage("Enter an admin password for the active target.", true);
+            return;
+          }
+          const base = this._baseUrl(active);
+          try {
+            const body = new URLSearchParams({ username: "admin", password });
+            const response = await fetch(`${base}/api/auth/token`, {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body,
+            });
+            if (!response.ok) throw new Error("Invalid admin credentials");
+            const data = await response.json();
+            this._setAuthToken(active.id, data.access_token);
+            if (this.dom.settingsAdminPassword) {
+              this.dom.settingsAdminPassword.value = "";
+            }
+            this._renderSettingsAdminState();
+            this._setSettingsMessage("Admin access unlocked for this target.", false);
+            await this.refreshSelected();
+          } catch (err) {
+            console.error(err);
+            this._setSettingsMessage("Failed to unlock admin access.", true);
+          }
+        });
+      }
+      if (this.dom.settingsAuthClear) {
+        this.dom.settingsAuthClear.addEventListener("click", async () => {
+          const active = this.store.getActive();
+          if (!active) return;
+          this._clearAuthToken(active.id);
+          this._renderSettingsAdminState();
+          this._setSettingsMessage("Stored admin token cleared for this target.", false);
+          await this.refreshSelected();
+        });
+      }
+      if (this.dom.settingsEnrollDevice) {
+        this.dom.settingsEnrollDevice.addEventListener("click", async () => {
+          const active = this.store.getActive();
+          if (!active) {
+            this._setEnrollMessage("Select an active target first.", true);
+            return;
+          }
+          const token = this._getAuthToken(active.id);
+          if (!token) {
+            this._setEnrollMessage("Unlock admin access before enrolling a device.", true);
+            return;
+          }
+          const deviceId = (this.dom.settingsDeviceId?.value || "").trim();
+          const publicKey = (this.dom.settingsPublicKey?.value || "").trim();
+          if (!deviceId || !publicKey) {
+            this._setEnrollMessage("Enter both the edge/device id and the public key.", true);
+            return;
+          }
+          try {
+            const response = await fetch(`${this._baseUrl(active)}/api/devices/enroll`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...this._authHeaders(active),
+              },
+              body: JSON.stringify({
+                device_id: deviceId,
+                public_key_b64: publicKey,
+              }),
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(payload.detail || "Failed to enroll device");
+            }
+            this._setEnrollMessage(`Device ${deviceId} enrolled successfully.`, false);
+          } catch (err) {
+            console.error(err);
+            this._setEnrollMessage(err.message || "Failed to enroll device.", true);
+          }
+        });
+      }
+      this.dom.settingsViewButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          this._setSettingsView(btn.dataset.settingsView);
+        });
+      });
     }
 
     async refreshAll() {
@@ -305,7 +414,7 @@
         this._fetchJson(`${base}/`),
         this._fetchJson(`${base}/api/alerts?limit=60`),
         this._fetchJson(`${base}/api/heartbeat`),
-        this._fetchJson(`${base}/api/logs?limit=200`),
+        this._fetchJson(`${base}/api/logs?limit=200`, { headers: this._authHeaders(target) }),
         this._fetchJson(`${base}/api/server-info`),
       ]);
 
@@ -345,11 +454,17 @@
       this._pruneVisitedAlerts(target.id, snapshot.alerts);
     }
 
-    async _fetchJson(url) {
+    async _fetchJson(url, options = {}) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 5000);
       try {
-        const response = await fetch(url, { signal: controller.signal });
+        const response = await fetch(url, {
+          ...options,
+          headers: {
+            ...(options.headers || {}),
+          },
+          signal: controller.signal,
+        });
         if (!response.ok) {
           throw new Error(`${response.status} ${response.statusText}`);
         }
@@ -379,6 +494,61 @@
       } catch (_err) {
         return "compact";
       }
+    }
+
+    _loadAuthTokens() {
+      try {
+        const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+        if (!raw) {
+          return {};
+        }
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" ? parsed : {};
+      } catch (_err) {
+        return {};
+      }
+    }
+
+    _loadSettingsView() {
+      try {
+        const raw = localStorage.getItem(SETTINGS_VIEW_STORAGE_KEY);
+        return ["cleanup", "security", "guide"].includes(raw) ? raw : "security";
+      } catch (_err) {
+        return "security";
+      }
+    }
+
+    _saveAuthTokens() {
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(this.state.authTokens));
+    }
+
+    _getAuthToken(targetId) {
+      return targetId ? this.state.authTokens[targetId] || "" : "";
+    }
+
+    _setAuthToken(targetId, token) {
+      if (!targetId) return;
+      this.state.authTokens[targetId] = token;
+      this._saveAuthTokens();
+    }
+
+    _clearAuthToken(targetId) {
+      if (!targetId) return;
+      delete this.state.authTokens[targetId];
+      this._saveAuthTokens();
+    }
+
+    _authHeaders(target) {
+      const token = target ? this._getAuthToken(target.id) : "";
+      return token ? { Authorization: `Bearer ${token}` } : {};
+    }
+
+    _setSettingsView(view) {
+      const nextView = ["cleanup", "security", "guide"].includes(view) ? view : "security";
+      this.state.settingsView = nextView;
+      localStorage.setItem(SETTINGS_VIEW_STORAGE_KEY, nextView);
+      this._renderSettingsView();
+      this._renderSettingsSummary();
     }
 
     _saveVisitedAlerts() {
@@ -540,6 +710,8 @@
 
     _renderMain() {
       const target = this.store.getActive();
+      this._renderSettingsAdminState();
+      this._renderSettingsSummary();
       if (!target) {
         this.dom.activeTargetTitle.textContent = "No target selected";
         this.dom.activeTargetMeta.textContent = "Add a target to begin monitoring.";
@@ -646,7 +818,7 @@
         : (visited ? "visited" : "pending");
       const detailCards = [
         { label: "Alert ID", value: selectedAlert.id || "unknown" },
-        { label: "Detected At", value: this._fmtTs(selectedAlert.timestamp) },
+        { label: "Detected At", value: this._fmtAlertTs(selectedAlert.timestamp) },
         { label: "Site", value: selectedAlert.site_id || "unknown" },
         { label: "Camera", value: selectedAlert.camera_id || "unknown" },
         { label: "Edge PC", value: selectedAlert.edge_pc_id || "unknown" },
@@ -657,7 +829,7 @@
 
       this.dom.selectedAlertTitle.textContent = this._alertLabel(selectedAlert);
       this.dom.selectedAlertSummary.textContent =
-        `${this._fmtTs(selectedAlert.timestamp)} - ${this._formatDetections(selectedAlert) || "No detections reported"}`;
+        `${this._fmtAlertTs(selectedAlert.timestamp)} - ${this._formatDetections(selectedAlert) || "No detections reported"}`;
       this._setSelectedAlertVisitState(visitLabel, visitClass);
 
       if (selectedAlert.image_path) {
@@ -734,7 +906,7 @@
               '<div class="alert-row-top">',
               '<div class="alert-row-list-main">',
               `<p class="alert-row-title">${this._escape(alert.site_id || "Unknown site")}</p>`,
-              `<p class="alert-row-time">${this._escape(this._fmtTs(alert.timestamp))}</p>`,
+              `<p class="alert-row-time">${this._escape(this._fmtAlertTs(alert.timestamp))}</p>`,
               "</div>",
               `<span class="status-pill ${isVisited ? "visited" : "pending"}">${isVisited ? "Visited" : "New"}</span>`,
               "</div>",
@@ -747,7 +919,7 @@
               "</div>",
               `<span class="status-pill ${isVisited ? "visited" : "pending"}">${isVisited ? "Visited" : "New"}</span>`,
               "</div>",
-              `<p class="alert-row-meta">${this._escape(this._fmtTs(alert.timestamp))}</p>`,
+              `<p class="alert-row-meta">${this._escape(this._fmtAlertTs(alert.timestamp))}</p>`,
               `<p class="alert-row-meta">${this._escape(this._formatDetections(alert) || "No detections reported")}</p>`,
               `<p class="alert-row-foot">${this._escape(alert.edge_pc_id || "unknown edge")} - ${alert.image_path ? "image ready" : "no image"}</p>`,
             ].join("");
@@ -827,6 +999,88 @@
       }
     }
 
+    _renderSettingsAdminState() {
+      const active = this.store.getActive();
+      const hasToken = !!(active && this._getAuthToken(active.id));
+      if (this.dom.settingsAuthState) {
+        this.dom.settingsAuthState.textContent = hasToken ? "Admin unlocked" : "Admin locked";
+        this.dom.settingsAuthState.className = `status-pill ${hasToken ? "ok" : "err"}`;
+      }
+      if (this.dom.settingsAuthMessage) {
+        if (!active) {
+          this.dom.settingsAuthMessage.textContent = "Choose an active target before authenticating.";
+        } else if (hasToken) {
+          this.dom.settingsAuthMessage.textContent = `Protected API access is enabled for ${active.name}.`;
+        } else {
+          this.dom.settingsAuthMessage.textContent = `No admin token stored for ${active.name}.`;
+        }
+      }
+      this._renderSettingsSummary();
+    }
+
+    _renderSettingsView() {
+      const activeView = this.state.settingsView || "security";
+      const sectionLabels = {
+        cleanup: "Cleanup",
+        security: "Security",
+        guide: "Guide",
+      };
+
+      this.dom.settingsViewButtons.forEach((btn) => {
+        const isActive = btn.dataset.settingsView === activeView;
+        btn.classList.toggle("is-active", isActive);
+        btn.setAttribute("aria-selected", isActive ? "true" : "false");
+      });
+
+      this.dom.settingsPanels.forEach((panel) => {
+        const show = panel.dataset.settingsPanel === activeView;
+        panel.classList.toggle("hidden", !show);
+      });
+
+      if (this.dom.settingsActiveSection) {
+        this.dom.settingsActiveSection.textContent = sectionLabels[activeView] || "Security";
+      }
+    }
+
+    _renderSettingsSummary() {
+      const active = this.store.getActive();
+      const hasToken = !!(active && this._getAuthToken(active.id));
+      const labels = {
+        cleanup: "Cleanup",
+        security: "Security",
+        guide: "Guide",
+      };
+
+      if (this.dom.settingsActiveTarget) {
+        this.dom.settingsActiveTarget.textContent = active ? active.name : "No target selected";
+      }
+      if (this.dom.settingsActiveBase) {
+        this.dom.settingsActiveBase.textContent = active
+          ? `${this._baseUrl(active)}${active.notes ? ` - ${active.notes}` : ""}`
+          : "Choose a dashboard target to begin administrative work.";
+      }
+      if (this.dom.settingsActiveAdmin) {
+        this.dom.settingsActiveAdmin.textContent = hasToken ? "Unlocked" : "Locked";
+      }
+      if (this.dom.settingsActiveSection) {
+        this.dom.settingsActiveSection.textContent =
+          labels[this.state.settingsView] || "Security";
+      }
+    }
+
+    _setSettingsMessage(message, isError) {
+      if (!this.dom.settingsAuthMessage) return;
+      this.dom.settingsAuthMessage.textContent = message;
+      this.dom.settingsAuthMessage.classList.toggle("danger-text", !!isError);
+    }
+
+    _setEnrollMessage(message, isError) {
+      if (!this.dom.settingsEnrollMessage) return;
+      this.dom.settingsEnrollMessage.textContent = message;
+      this.dom.settingsEnrollMessage.classList.toggle("danger-text", !!isError);
+      this.dom.settingsEnrollMessage.classList.toggle("ok-text", !isError);
+    }
+
     _alertLabel(alert) {
       const site = alert.site_id || "Unknown site";
       const camera = alert.camera_id || "unknown camera";
@@ -863,6 +1117,26 @@
         return String(ts);
       }
       return date.toLocaleString();
+    }
+
+    _fmtAlertTs(ts) {
+      if (!ts) {
+        return "unknown";
+      }
+      const date = new Date(ts);
+      if (Number.isNaN(date.getTime())) {
+        return String(ts);
+      }
+      return new Intl.DateTimeFormat(undefined, {
+        timeZone: ALERT_TIME_ZONE,
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        second: "2-digit",
+        timeZoneName: "short",
+      }).format(date);
     }
 
     _escape(value) {
@@ -934,6 +1208,9 @@
       if (view === "settings") {
         try {
           app._populateSettingsSites();
+          app._renderSettingsAdminState();
+          app._renderSettingsView();
+          app._renderSettingsSummary();
         } catch (_e) {
           // ignore
         }
@@ -947,6 +1224,8 @@
     const saved = localStorage.getItem(NAV_KEY);
     const defaultBtn = document.querySelector(".nav-btn.is-active[data-view]");
     const initial = saved || (defaultBtn && defaultBtn.dataset.view) || "overview";
+    app._renderSettingsView();
+    app._renderSettingsSummary();
     setView(initial);
   });
 })();

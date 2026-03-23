@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BIL Server Console</title>
-  <link rel="stylesheet" href="/static/dashboard/styles.css">
+  <link rel="stylesheet" href="/dashboard/assets/styles.css">
 </head>
 <body>
   <header class="topbar">
@@ -22,7 +22,7 @@
   </header>
 
   <div class="dashboard-shell">
-    <aside class="sidebar" data-pages="overview settings">
+    <aside class="sidebar" data-pages="overview">
       <div class="brand-block">
         <p class="eyebrow">Security Operations</p>
         <h1 class="brand">BIL Server Console</h1>
@@ -118,24 +118,229 @@
       <div class="settings-hero-inner">
         <div class="settings-hero-left">
           <p class="eyebrow">Settings</p>
-          <h2>Connections and Cleanup</h2>
-          <p class="muted">This page is only for configuration work. Manage dashboard targets here and set each site's image cleanup window without mixing that work into live monitoring or review.</p>
+          <h2>Provisioning Control Room</h2>
+          <p class="muted">This workspace is for deliberate admin work, not live monitoring. Use it to choose the active server, tune cleanup rules, unlock protected APIs, and enroll a new edge without switching tools or losing context.</p>
+          <div class="settings-pill-row">
+            <span class="status-pill neutral">Target-aware</span>
+            <span class="status-pill neutral">Admin-gated</span>
+            <span class="status-pill neutral">Public-key enrollment</span>
+          </div>
+          <div class="settings-subnav" role="tablist" aria-label="Settings sections">
+            <button class="settings-subnav-btn is-active" data-settings-view="cleanup" type="button">Cleanup</button>
+            <button class="settings-subnav-btn" data-settings-view="security" type="button">Security</button>
+            <button class="settings-subnav-btn" data-settings-view="guide" type="button">Guide</button>
+          </div>
         </div>
         <div class="settings-hero-right">
-          <label class="small">Active Target
-            <select id="settings-site-select"></select>
-          </label>
-          <label class="small">Retention (hours)
-            <input id="settings-retention-hours" type="number" min="1" value="24">
-          </label>
-          <div class="action-row">
-            <button id="settings-save-site" class="btn primary" type="button">Save Site Settings</button>
+          <div class="settings-control-card">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Target Snapshot</p>
+                <h2>Active Server Context</h2>
+              </div>
+            </div>
+            <p id="settings-active-target" class="settings-summary-title">No target selected</p>
+            <p id="settings-active-base" class="muted">Choose a dashboard target to begin administrative work.</p>
+            <div class="settings-summary-grid">
+              <div class="stat-card">
+                <span class="stat-label">Admin</span>
+                <strong id="settings-active-admin">Locked</strong>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Current View</span>
+                <strong id="settings-active-section">Cleanup</strong>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </section>
 
-    <main class="console" data-pages="overview alerts">
+    <main class="console settings-console" data-pages="settings">
+      <section class="panel settings-card settings-card-wide" data-settings-panel="cleanup">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Cleanup</p>
+            <h2>Site Image Retention</h2>
+          </div>
+        </div>
+        <p class="muted">Set the evidence retention window for the selected site on the active target. This controls how long stored alert images remain available before cleanup removes them.</p>
+        <div class="settings-form-grid">
+          <label class="small">
+            Active Site
+            <select id="settings-site-select"></select>
+          </label>
+          <div class="settings-inline-tip">
+            <span class="settings-inline-tip-label">Policy note</span>
+            <p>Use shorter retention for high-volume sites and longer retention where review lag is expected.</p>
+          </div>
+        </div>
+        <label class="small">
+          Retention (hours)
+          <input id="settings-retention-hours" type="number" min="1" value="24">
+        </label>
+        <div class="action-row">
+          <button id="settings-save-site" class="btn primary" type="button">Save Site Settings</button>
+        </div>
+        <div class="settings-note">
+          <strong>Scope</strong>
+          <span>This action updates the currently selected site on the currently active target only.</span>
+        </div>
+      </section>
+
+      <section class="panel settings-card" data-settings-panel="security">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Admin Access</p>
+            <h2>Unlock Protected APIs</h2>
+          </div>
+          <span id="settings-auth-state" class="status-pill err">Admin locked</span>
+        </div>
+        <p class="muted">Protected routes such as logs and device enrollment require an admin token for the currently selected target. The dashboard stores only the issued token per target, not the password.</p>
+        <div class="settings-note">
+          <strong>Why this matters</strong>
+          <span>Enrollment and log access are target-specific admin actions. Unlock once per target, then continue working inside Settings.</span>
+        </div>
+        <label>
+          Admin Password
+          <input id="settings-admin-password" type="password" placeholder="Enter the configured ADMIN_PASSWORD">
+        </label>
+        <div class="action-row">
+          <button id="settings-auth-login" class="btn primary" type="button">Unlock Admin</button>
+          <button id="settings-auth-clear" class="btn ghost" type="button">Forget Token</button>
+        </div>
+        <p id="settings-auth-message" class="muted">No admin token stored for the active target.</p>
+      </section>
+
+      <section class="panel settings-card settings-card-wide" data-settings-panel="security">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Edge Enrollment</p>
+            <h2>Enroll Edge Device</h2>
+          </div>
+        </div>
+        <p class="muted">Generate the Ed25519 keypair on the edge PC, keep the private key there, and paste only the public key here. Use the same value for `EDGE_PC_ID` and `DEVICE_ID` on the edge machine.</p>
+        <div class="settings-form-grid">
+          <label>
+            Edge / Device ID
+            <input id="settings-device-id" type="text" placeholder="edge-demo-1">
+          </label>
+          <div class="settings-inline-tip">
+            <span class="settings-inline-tip-label">Identity rule</span>
+            <p>`EDGE_PC_ID` and `DEVICE_ID` must match. The enrolled public key will be tied to that same id.</p>
+          </div>
+        </div>
+        <label>
+          Public Key (base64)
+          <textarea id="settings-public-key" rows="6" placeholder="Paste the base64-encoded Ed25519 public key from the edge PC"></textarea>
+        </label>
+        <div class="action-row">
+          <button id="settings-enroll-device" class="btn primary" type="button">Enroll Device</button>
+        </div>
+        <p id="settings-enroll-message" class="muted">The dashboard will call `/api/devices/enroll` on the active target.</p>
+      </section>
+
+      <section class="panel settings-card settings-card-wide" data-settings-panel="guide">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Operator Flow</p>
+            <h2>Provisioning Checklist</h2>
+          </div>
+        </div>
+        <ol class="settings-steps">
+          <li>Generate the Ed25519 keypair on the edge PC.</li>
+          <li>Keep the private key on the edge PC only.</li>
+          <li>Unlock admin access for the active server target.</li>
+          <li>Enroll the public key here using the final edge/device id.</li>
+          <li>Set `EDGE_PC_ID`, `DEVICE_ID`, and `DEVICE_PRIVATE_KEY_B64` on the edge machine.</li>
+          <li>Start the edge agent and confirm heartbeat appears on the server.</li>
+        </ol>
+        <div class="settings-note">
+          <strong>Recommended practice</strong>
+          <span>Let the edge generate the keypair locally. The dashboard should receive only the public key.</span>
+        </div>
+      </section>
+    </main>
+
+    <main class="console overview-console" data-pages="overview">
+      <section class="panel overview-hero-panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Overview</p>
+            <h2>Operations At A Glance</h2>
+          </div>
+          <span class="status-pill neutral">Summary Mode</span>
+        </div>
+        <p class="muted">
+          Use Overview to stay oriented. It keeps the active target, health, edge count, logs count,
+          and saved connections visible without dropping you into live alert triage.
+        </p>
+        <div class="overview-pill-row">
+          <span class="status-pill neutral">Target health</span>
+          <span class="status-pill neutral">Watch list</span>
+          <span class="status-pill neutral">Connection setup</span>
+        </div>
+      </section>
+
+      <section class="overview-grid">
+        <article class="panel overview-card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">What Lives Here</p>
+              <h2>Quick Monitoring</h2>
+            </div>
+          </div>
+          <p class="muted">
+            The left rail is your summary space for target switching, status checks, and connection management.
+            It is meant to stay readable even when alerts are noisy.
+          </p>
+          <ul class="overview-list">
+            <li>Check whether the active server is online.</li>
+            <li>See high-level counts for alerts, edge PCs, and logs.</li>
+            <li>Add or switch dashboard targets without leaving the page.</li>
+          </ul>
+        </article>
+
+        <article class="panel overview-card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">When To Switch</p>
+              <h2>Use The Right Workspace</h2>
+            </div>
+          </div>
+          <div class="overview-workspace-grid">
+            <div class="settings-note">
+              <strong>Overview</strong>
+              <span>Use for orientation, target selection, and a calm status check.</span>
+            </div>
+            <div class="settings-note">
+              <strong>Alerts</strong>
+              <span>Use for image review, recent alert browsing, heartbeat detail, and server logs.</span>
+            </div>
+            <div class="settings-note">
+              <strong>Settings</strong>
+              <span>Use for retention policy, admin unlock, and enrolling a new edge device.</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel overview-card overview-card-wide">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Operator Flow</p>
+              <h2>Typical Daily Rhythm</h2>
+            </div>
+          </div>
+          <ol class="settings-steps">
+            <li>Start in Overview to confirm the correct target is selected and healthy.</li>
+            <li>Open Alerts only when you want to inspect incoming evidence or heartbeat detail.</li>
+            <li>Open Settings when you need to change retention or enroll a new edge PC.</li>
+          </ol>
+        </article>
+      </section>
+    </main>
+
+    <main class="console" data-pages="alerts">
       <section class="panel viewer-panel">
         <div class="section-heading viewer-heading">
           <div>
@@ -179,7 +384,7 @@
       </section>
     </main>
 
-    <aside class="panel alerts-rail" data-pages="overview alerts">
+    <aside class="panel alerts-rail" data-pages="alerts">
       <div class="section-heading">
         <div>
           <p class="eyebrow">Alert Feed</p>
@@ -198,6 +403,6 @@
     </aside>
   </div>
 
-  <script src="/static/dashboard/app.js"></script>
+  <script src="/dashboard/assets/app.js"></script>
 </body>
 </html>

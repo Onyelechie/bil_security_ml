@@ -1,6 +1,7 @@
 import os
 from typing import List
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,6 +20,18 @@ class Settings(BaseSettings):
     port: int = int(os.getenv("PORT", 8000))
     debug: bool = os.getenv("DEBUG", "false").lower() == "true"
 
+    @field_validator("debug", mode="before")
+    @classmethod
+    def _coerce_debug_value(cls, value):
+        # Accept common deployment shorthands while preserving strictness for unknown values.
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"release", "prod", "production", "false", "0", "no", "off"}:
+                return False
+            if normalized in {"debug", "dev", "development", "true", "1", "yes", "on"}:
+                return True
+        return value
+
     # CORS (stored as CSV in env)
     cors_origins: str = os.getenv(
         "CORS_ORIGINS",
@@ -29,6 +42,9 @@ class Settings(BaseSettings):
     # Read SECRET_KEY from environment; do not hardcode a production secret here.
     # For development, leave empty and populate `.env` or CI secrets as appropriate.
     secret_key: str = os.getenv("SECRET_KEY", "")
+    # Optional admin password used for first-stage admin login (v1). Prefer setting a strong
+    # password in env var `ADMIN_PASSWORD` or use a proper user store in production.
+    admin_password: str | None = os.getenv("ADMIN_PASSWORD", None)
 
     # WebSocket alert ingestion
     ws_max_connections: int = int(os.getenv("WS_MAX_CONNECTIONS", 1000))

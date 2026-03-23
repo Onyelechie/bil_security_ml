@@ -8,6 +8,7 @@ from .config import settings
 from .models import alert as _m_alert  # noqa: F401
 from .models import edge_pc as _m_edge_pc  # noqa: F401
 from .models import model_version as _m_model_version  # noqa: F401
+from .models import device as _m_device  # noqa: F401
 from .models.base import Base
 
 engine = create_engine(

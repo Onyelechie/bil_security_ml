@@ -40,6 +40,8 @@ class EdgeSettings(BaseSettings):
     # Identity fields that match what Area C uses
     edge_pc_id: str = "edge_demo"
     site_name: str = "Demo Site"
+    device_id: str | None = None
+    device_private_key_b64: str = ""
 
     # --- Trigger control (rate limit / dedupe) ---
     trigger_cooldown_sec: int = 10

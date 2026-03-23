@@ -2,6 +2,9 @@ from datetime import datetime
 from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
+from pydantic import field_serializer, field_validator
+
+from bil_time import ensure_winnipeg, isoformat_winnipeg
 
 
 class Detection(BaseModel):
@@ -20,6 +23,15 @@ class AlertCreate(BaseModel):
     timestamp: datetime
     detections: List[Detection]
     image_path: Optional[str] = None
+
+    @field_validator("timestamp")
+    @classmethod
+    def normalize_timestamp(cls, value: datetime) -> datetime:
+        return ensure_winnipeg(value)
+
+    @field_serializer("timestamp")
+    def serialize_timestamp(self, value: datetime) -> str:
+        return isoformat_winnipeg(value)
 
 
 class AlertOut(AlertCreate):

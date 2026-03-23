@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timezone
+import logging
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, WebSocket
 from pydantic import ValidationError
 
+from bil_time import ensure_winnipeg, now_in_winnipeg
+
+from ..db import SessionLocal
 from ..schemas import AlertCreate
+from ..services.edge_authorization import is_authorized_edge_pc, resolve_edge_pc_id
 from ..services.dashboard_events import publish_dashboard_event
 from ..services.image_storage import ImageStorageError, ImageStorageService
 from ..services.ws_alert_dispatcher import (AlertDispatchFailure,
@@ -18,6 +23,22 @@ from ..services.ws_alert_dispatcher import (AlertDispatchFailure,
 from ..services.ws_connection_manager import WebSocketConnectionManager
 
 router = APIRouter(tags=["alerts-websocket"])
+logger = logging.getLogger(__name__)
+
+
+def _safe_identity(value: str | None) -> str:
+    if not value:
+        return "<missing>"
+    return value[:64]
+
+
+def _is_authorized_edge_sender(edge_pc_id: str | None) -> tuple[bool, str]:
+    resolved_edge_id = resolve_edge_pc_id(edge_pc_id)
+    db = SessionLocal()
+    try:
+        return is_authorized_edge_pc(db, resolved_edge_id), resolved_edge_id
+    finally:
+        db.close()
 
 
 def _extract_alert_payload(message: Any, *, strip_type: bool = False) -> dict[str, Any]:
@@ -121,7 +142,11 @@ async def alerts_websocket(websocket: WebSocket) -> None:
                 pending_alert_payload = None
                 site_id = str(alert_payload.get("site_id", "unknown"))
                 camera_id = str(alert_payload.get("camera_id", "unknown"))
-                received_at = datetime.now(timezone.utc)
+                raw_timestamp = alert_payload.get("timestamp")
+                try:
+                    received_at = ensure_winnipeg(datetime.fromisoformat(str(raw_timestamp)))
+                except Exception:
+                    received_at = now_in_winnipeg()
                 try:
                     # Save image using the configured websocket image storage
                     # instance. Prefix the returned path with a special scheme so
@@ -147,6 +172,25 @@ async def alerts_websocket(websocket: WebSocket) -> None:
                     continue
 
                 alert_payload = {**alert_payload, "image_path": image_path}
+                authorized, resolved_edge_id = await asyncio.to_thread(
+                    _is_authorized_edge_sender,
+                    alert_payload.get("edge_pc_id"),
+                )
+                if not authorized:
+                    logger.warning(
+                        "Rejecting websocket alert ingestion from unregistered edge_pc_id=%s",
+                        _safe_identity(resolved_edge_id),
+                    )
+                    await manager.send_json(
+                        websocket,
+                        {
+                            "type": "error",
+                            "code": "unauthorized",
+                            "status": 403,
+                            "message": "Edge PC is not authorized to submit alerts",
+                        },
+                    )
+                    continue
                 try:
                     alert_out = await dispatcher.submit(alert_payload)
                 except AlertValidationFailure as exc:
@@ -275,6 +319,25 @@ async def alerts_websocket(websocket: WebSocket) -> None:
                     continue
 
                 alert_payload = _extract_alert_payload(incoming_json)
+                authorized, resolved_edge_id = await asyncio.to_thread(
+                    _is_authorized_edge_sender,
+                    alert_payload.get("edge_pc_id"),
+                )
+                if not authorized:
+                    logger.warning(
+                        "Rejecting websocket alert ingestion from unregistered edge_pc_id=%s",
+                        _safe_identity(resolved_edge_id),
+                    )
+                    await manager.send_json(
+                        websocket,
+                        {
+                            "type": "error",
+                            "code": "unauthorized",
+                            "status": 403,
+                            "message": "Edge PC is not authorized to submit alerts",
+                        },
+                    )
+                    continue
                 alert_out = await dispatcher.submit(alert_payload)
             except TypeError as exc:
                 await manager.send_json(

@@ -9,6 +9,7 @@ from server.main import app
 from server.services.image_storage import ImageStorageService
 from server.services.ws_alert_dispatcher import AlertQueueFullError
 from server.services.ws_connection_manager import WebSocketConnectionManager
+from tests.server.device_auth_helpers import register_edge
 
 
 def _alert_payload(edge_pc_id: str, site_id: str, camera_id: str) -> dict:
@@ -33,6 +34,7 @@ def _alert_meta_frame(edge_pc_id: str, site_id: str, camera_id: str) -> dict:
 
 def test_websocket_alert_ingestion_ack():
     with TestClient(app) as client:
+        register_edge(client, "edge-ws-1", site_name="WS Alert Test Site")
         with client.websocket_connect("/ws/alerts") as websocket:
             connected = websocket.receive_json()
             assert connected["type"] == "connected"
@@ -61,6 +63,8 @@ def test_websocket_alert_validation_error():
 
 def test_websocket_handles_multiple_connections():
     with TestClient(app) as client:
+        register_edge(client, "edge-ws-2a", site_name="WS Alert Test Site")
+        register_edge(client, "edge-ws-2b", site_name="WS Alert Test Site")
         with client.websocket_connect("/ws/alerts") as ws1, client.websocket_connect(
             "/ws/alerts"
         ) as ws2:
@@ -91,6 +95,7 @@ def test_websocket_invalid_json_message_returns_error():
 
 def test_websocket_alert_meta_then_binary_ingestion_ack(tmp_path):
     with TestClient(app) as client:
+        register_edge(client, "edge-ws-bin-1", site_name="WS Alert Test Site")
         original_storage = app.state.ws_image_storage
         image_storage = ImageStorageService(str(tmp_path))
         image_storage.ensure_ready()
@@ -133,6 +138,7 @@ def test_websocket_binary_without_meta_returns_error():
 
 def test_websocket_binary_too_large_returns_error():
     with TestClient(app) as client:
+        register_edge(client, "edge-ws-bin-2", site_name="WS Alert Test Site")
         original_limit = app.state.ws_max_image_bytes
         app.state.ws_max_image_bytes = 4
         try:
@@ -156,6 +162,7 @@ def test_websocket_queue_full_returns_error():
             raise AlertQueueFullError("Alert queue is full")
 
     with TestClient(app) as client:
+        register_edge(client, "edge-qf-1", site_name="WS Alert Test Site")
         original_dispatcher = app.state.ws_alert_dispatcher
         app.state.ws_alert_dispatcher = _QueueFullDispatcher()
         try:
@@ -183,3 +190,16 @@ def test_websocket_rejects_when_max_connections_reached():
                 assert exc_info.value.code == 1013
         finally:
             app.state.ws_connection_manager = original_manager
+
+
+def test_websocket_rejects_unregistered_edge_sender():
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws/alerts") as websocket:
+            websocket.receive_json()
+            websocket.send_json(
+                _alert_payload("edge-not-registered-ws", "site_ws_unauth", "cam_ws_unauth")
+            )
+            err = websocket.receive_json()
+            assert err["type"] == "error"
+            assert err["code"] == "unauthorized"
+            assert err["status"] == 403

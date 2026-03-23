@@ -59,13 +59,13 @@ copy .env.example .env
 # On Unix/macOS: cp .env.example .env
 ```
 
-Important variables (see `.env.example`): `DATABASE_URL`, `HOST`, `PORT`, `DEBUG`, `SECRET_KEY`, `CORS_ORIGINS` (comma-separated), `WS_MAX_CONNECTIONS`, `WS_ALERT_QUEUE_SIZE`, `WS_ALERT_WORKER_COUNT`, `WS_MAX_IMAGE_BYTES`, `WS_IMAGE_STORAGE_DIR`, `WS_IMAGE_RETENTION_HOURS`, `WS_IMAGE_CLEANUP_INTERVAL_HOURS`, `LOG_BUFFER_MAX_ENTRIES`.
+Important variables (see `.env.example`): `DATABASE_URL`, `HOST`, `PORT`, `DEBUG`, `SECRET_KEY`, `ADMIN_PASSWORD`, `CORS_ORIGINS` (comma-separated), `WS_MAX_CONNECTIONS`, `WS_ALERT_QUEUE_SIZE`, `WS_ALERT_WORKER_COUNT`, `WS_MAX_IMAGE_BYTES`, `WS_IMAGE_STORAGE_DIR`, `WS_IMAGE_RETENTION_HOURS`, `WS_IMAGE_CLEANUP_INTERVAL_HOURS`, `LOG_BUFFER_MAX_ENTRIES`.
 
-Note: Edge agents SHOULD provide `edge_pc_id` when sending alerts. The server accepts
-alerts that omit `edge_pc_id` for backward compatibility: when missing the server will
-store a sentinel value `'edge-001'` for provenance. If you prefer strict provenance,
-use the `scripts/backfill_edge_001.py` helper to map historical alerts and
-`scripts/remove_sentinel_if_safe.py` for manual sentinel cleanup when safe.
+Current edge auth model:
+- Edge heartbeat and HTTP alerts must be signed by an enrolled device.
+- `DEVICE_ID` must match `EDGE_PC_ID`.
+- The edge PC receives the private key at provisioning time; the matching public key is enrolled on the server.
+- See [docs/AUTHENTICATION.md](/c:/Users/ebere/Documents/bil_security_ml/docs/AUTHENTICATION.md) for the exact workflow.
 
 ### Edge Agent Configuration (.env)
 
@@ -74,9 +74,13 @@ Copy `.env.example` and edit `.env`. **Do not commit credentials**.
 Edge Agent key variables (see `.env.example`):
 
 **Core**
-- `SITE_ID`, `EDGE_PC_ID`, `SITE_NAME`
+- `SITE_ID`, `EDGE_PC_ID`, `DEVICE_ID`, `SITE_NAME`
 - `TCP_HOST`, `TCP_PORT` (motion events)
 - `SERVER_BASE_URL` (central server)
+- `DEVICE_PRIVATE_KEY_B64` (required for signed heartbeat/alerts)
+
+Provisioning rule:
+- `DEVICE_ID` must equal `EDGE_PC_ID`, and the matching public key must be enrolled on the server before the edge agent starts.
 
 **Trigger control (rate limit / dedupe)**
 - `TRIGGER_COOLDOWN_SEC` (e.g., 10)
@@ -193,6 +197,9 @@ Quick copy-paste command (PowerShell, fixed host/port):
 $env:PYTHONPATH="$PWD\src"; python -m uvicorn server.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
+Admin note:
+- Set `ADMIN_PASSWORD` in `.env` before using `/api/auth/token`, `/api/logs`, `/api/devices/enroll`, or the protected dashboard login at `/dashboard`.
+
 #### Route Table (Server)
 
 | Method | Route | Purpose |
@@ -205,7 +212,7 @@ $env:PYTHONPATH="$PWD\src"; python -m uvicorn server.main:app --reload --host 12
 | GET | `/api/alerts/{alert_id}/image` | Serve stored alert image bytes |
 | GET | `/api/logs` | Read recent bounded server logs |
 | WS | `/ws/alerts` | Ingest alerts over WebSocket (`connected` / `meta_received` / `ack` / `error`) |
-| GET | `/dashboard` | Web monitoring UI (multi-target, alerts, logs, edge details) |
+| GET | `/dashboard` | Protected web monitoring UI (login required) |
 
 Apply migrations before first run:
 ```bash
@@ -223,6 +230,8 @@ Open the monitoring UI:
 ```powershell
 start http://127.0.0.1:8000/dashboard
 ```
+
+The dashboard now requires login with the configured `ADMIN_PASSWORD`.
 
 HTTP alert ingestion from PowerShell (recommended):
 ```powershell
@@ -324,12 +333,12 @@ The script exits with code `1` if all expected messages are not ACKed.
 
 ### Endpoint Purpose
 
-- **Heartbeat** (`POST /api/heartbeat`): Used by edge PCs to report their own status and last-seen time to the server. This lets the server track which devices are online and their current state.
+- **Heartbeat** (`POST /api/heartbeat`): Used by edge PCs to report their own status and last-seen time to the server. This endpoint now requires a signed request from an enrolled device.
 - **Edge Status List** (`GET /api/heartbeat`): Returns known edge PCs and their current status/last heartbeat for dashboard-style monitoring.
 - **Healthcheck** (`GET /`): Used by anyone (user, monitoring system, load balancer) to check if the server itself is running and responsive. Returns a simple status message.
-- **Server Logs** (`GET /api/logs`): Returns recent in-memory server logs for operations visibility in the web dashboard.
+- **Server Logs** (`GET /api/logs`): Returns recent in-memory server logs for operations visibility in the web dashboard. Requires admin auth.
 - **WebSocket Alert Ingestion** (`WS /ws/alerts`): Used by edge clients or UI clients to stream alert payloads in real time and receive immediate ACK or error responses. Supports metadata-first + binary image frames.
-- **Dashboard** (`GET /dashboard`): Built-in web UI to monitor multiple server targets (host/port), view alerts/images, edge status, and logs.
+- **Dashboard** (`GET /dashboard`): Protected web UI to monitor multiple server targets (host/port), view alerts/images, edge status, and logs.
 
 ---
 
@@ -351,6 +360,11 @@ These docs are auto-generated from the code and always up to date. You can try o
 **POST /api/heartbeat**
 
 Used by edge PCs to report their status. The server records the time it receives the heartbeat as `last_heartbeat` (using its own UTC clock, not the client timestamp).
+The request must include:
+- `X-Device-Id`
+- `X-Device-Signature`
+
+The enrolled `device_id` must match the claimed `edge_pc_id`.
 
 **Request Body (HeartbeatIn):**
 ```json
@@ -379,7 +393,7 @@ Used by edge PCs to report their status. The server records the time it receives
 - `Out` models (e.g., `HeartbeatOut`) are for data sent from the server to the client (responses). The heartbeat response now includes a `message` field confirming receipt. The `last_heartbeat` field is always set by the server's current UTC time.
 
 #### Alerts Endpoint
-- **POST /api/alerts**: Ingests alerts from edge PCs (see code for schema).
+- **POST /api/alerts**: Ingests alerts from edge PCs. Requires a signed request from an enrolled device whose `device_id` matches `edge_pc_id`.
 - **GET /api/alerts**: Lists alerts (filtering to be implemented).
 - **GET /api/alerts/{alert_id}/image**: Returns the stored image bytes for that alert if `image_path` exists and is within configured storage.
 - **WS /ws/alerts**: Accepts alert JSON messages (backward compatible) and metadata + binary image frames. Returns `connected`, `meta_received`, `ack`, or `error` frames.
@@ -407,11 +421,12 @@ Summary of notable updates made in the `Server` branch during March 2026:
 - Multipart HTTP upload endpoint: `POST /api/alerts/upload` accepts multipart metadata + image upload for edges that prefer HTTP ingestion.
 - Ingestion normalization: server now copies local/absolute image paths referenced by incoming alerts into the configured storage root and persists a storage-relative path in the DB. This prevents serving arbitrary files from the host filesystem.
 - Per-site retention & cleanup: per-site image retention settings are exposed to the dashboard and a background cleanup task deletes images older than their configured retention.
-- Dashboard changes: added a full-width `Settings` view to configure per-site retention, Overview improvements (connections, registered PCs, ports), and fixed regressions in the alerts viewer.
+- Dashboard changes: added protected dashboard login, a full-width `Settings` view for retention and edge enrollment, Overview cleanup, and fixed regressions in the alerts viewer.
+- Alert timestamps are normalized and displayed in `America/Winnipeg` for alert-related flows.
 - Compatibility: existing WebSocket ingestion (`/ws/alerts`) is still supported for clients that prefer it; the server accepts both legacy `WS_*` image storage env names and the new `IMAGE_*` names for backward compatibility.
-- Helper scripts: `scripts/test_alert_upload.py` (multipart uploader) and `scripts/fix_alert_image.py` (copy legacy absolute-path images into storage and update DB rows) were added to assist testing and migration.
+- Helper scripts: `scripts/test_alert_upload.py` (multipart uploader) remains available for manual upload testing.
 
-See the `docs/` folder for the new Windows runbook and authentication/enrollment plan.
+See the `docs/` folder for the Windows runbook and the current authentication/enrollment guide.
   - recent server logs
 
 Note: `alerts.edge_pc_id` is now a required foreign key referencing `edge_pcs.edge_pc_id`.
@@ -458,7 +473,7 @@ The script connects using the repository's configured DB (via `src/server/db.py`
 
 ### Security & Production Notes
 - CORS is now restricted to `http://localhost:3000` and `http://localhost:8000` for development. **Update this for production deployments!**
-- No authentication is enabled by default. Add API keys or JWT for production deployments.
+- Admin authentication and signed edge-device authentication are enabled. Set a dedicated `ADMIN_PASSWORD` and a strong `SECRET_KEY` before production deployments.
 - Alert listing filters are marked as TODO and will be implemented in future updates.
 
 

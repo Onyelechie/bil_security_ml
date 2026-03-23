@@ -3,15 +3,21 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status, UploadFile, File, Form
 from fastapi.responses import FileResponse
 import asyncio
+import hashlib
 import json
+import logging
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+
+from bil_time import isoformat_winnipeg
 
 from ..config import settings
 from ..db import SessionLocal
 from ..models.alert import Alert
 from ..schemas import AlertCreate, AlertOut
+from ..services.device_auth import require_signed_device
+from ..services.edge_authorization import is_authorized_edge_pc, resolve_edge_pc_id
 from ..services.dashboard_events import publish_dashboard_event
 from ..services.alert_ingestion import AlertIngestionService, AlertPersistenceError
 
@@ -20,6 +26,27 @@ from ..services.alert_ingestion import AlertIngestionService, AlertPersistenceEr
 # Tags: alerts (for OpenAPI grouping)
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 alert_ingestion_service = AlertIngestionService()
+logger = logging.getLogger(__name__)
+
+
+def _safe_identity(value: str | None) -> str:
+    if not value:
+        return "<missing>"
+    return value[:64]
+
+
+def _ensure_edge_sender_authorized(db: Session, edge_pc_id: str | None) -> str:
+    resolved_edge_id = resolve_edge_pc_id(edge_pc_id)
+    if not is_authorized_edge_pc(db, resolved_edge_id):
+        logger.warning(
+            "Rejecting alert ingestion from unregistered edge_pc_id=%s",
+            _safe_identity(resolved_edge_id),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Edge PC is not authorized to submit alerts",
+        )
+    return resolved_edge_id
 
 
 def get_db() -> Session:
@@ -32,13 +59,27 @@ def get_db() -> Session:
 
 
 @router.post("", response_model=AlertOut, status_code=status.HTTP_201_CREATED)
-def receive_alert(alert: AlertCreate, request: Request, db: Session = Depends(get_db)):
+async def receive_alert(alert: AlertCreate, request: Request, db: Session = Depends(get_db)):
     """
     Endpoint to receive an alert from an edge PC.
 
     Expected: JSON body with alert details (site_id, camera_id, timestamp, detections, etc.)
     Action: Stores the alert in the database.
     """
+    resolved_edge_id = resolve_edge_pc_id(alert.edge_pc_id)
+    device_id = request.headers.get("X-Device-Id")
+    signature = request.headers.get("X-Device-Signature")
+    body = await request.body()
+    require_signed_device(
+        db,
+        device_id=device_id,
+        signature_b64=signature,
+        message=body,
+        expected_edge_pc_id=resolved_edge_id,
+    )
+
+    _ensure_edge_sender_authorized(db, alert.edge_pc_id)
+
     try:
         db_alert = alert_ingestion_service.ingest(db, alert)
         publish_dashboard_event(
@@ -49,7 +90,7 @@ def receive_alert(alert: AlertCreate, request: Request, db: Session = Depends(ge
                 "site_id": db_alert.site_id,
                 "camera_id": db_alert.camera_id,
                 "edge_pc_id": db_alert.edge_pc_id,
-                "timestamp": db_alert.timestamp.isoformat() if db_alert.timestamp else None,
+                "timestamp": isoformat_winnipeg(db_alert.timestamp) if db_alert.timestamp else None,
             },
         )
         return db_alert
@@ -95,6 +136,21 @@ async def upload_alert(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to read uploaded image") from exc
 
     storage = request.app.state.image_storage
+    resolved_edge_id = resolve_edge_pc_id(edge_pc_id)
+    device_id = request.headers.get("X-Device-Id")
+    signature = request.headers.get("X-Device-Signature")
+    sha = hashlib.sha256(image_bytes).hexdigest()
+    canonical = f"{site_id}|{camera_id}|{edge_pc_id or ''}|{timestamp}|{sha}".encode("utf-8")
+    require_signed_device(
+        db,
+        device_id=device_id,
+        signature_b64=signature,
+        message=canonical,
+        expected_edge_pc_id=resolved_edge_id,
+    )
+
+    _ensure_edge_sender_authorized(db, edge_pc_id)
+
     try:
         saved_path = await asyncio.to_thread(
             storage.save_alert_image,
@@ -130,7 +186,7 @@ async def upload_alert(
                 "site_id": db_alert.site_id,
                 "camera_id": db_alert.camera_id,
                 "edge_pc_id": db_alert.edge_pc_id,
-                "timestamp": db_alert.timestamp.isoformat() if db_alert.timestamp else None,
+                "timestamp": isoformat_winnipeg(db_alert.timestamp) if db_alert.timestamp else None,
             },
         )
         return db_alert

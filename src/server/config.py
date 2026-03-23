@@ -61,8 +61,18 @@ class Settings(BaseSettings):
     image_storage_dir: str = os.getenv(
         "IMAGE_STORAGE_DIR", os.getenv("WS_IMAGE_STORAGE_DIR", "storage/alert_images")
     )
-    image_retention_hours: int = int(os.getenv("IMAGE_RETENTION_HOURS", os.getenv("WS_IMAGE_RETENTION_HOURS", 24)))
-    image_cleanup_interval_hours: int = int(os.getenv("IMAGE_CLEANUP_INTERVAL_HOURS", os.getenv("WS_IMAGE_CLEANUP_INTERVAL_HOURS", 24)))
+    image_retention_hours: int = int(
+        os.getenv(
+            "IMAGE_RETENTION_HOURS",
+            os.getenv("WS_IMAGE_RETENTION_HOURS", 24),
+        )
+    )
+    image_cleanup_interval_hours: int = int(
+        os.getenv(
+            "IMAGE_CLEANUP_INTERVAL_HOURS",
+            os.getenv("WS_IMAGE_CLEANUP_INTERVAL_HOURS", 24),
+        )
+    )
     log_buffer_max_entries: int = int(os.getenv("LOG_BUFFER_MAX_ENTRIES", 5000))
 
     def __init__(self, **values):

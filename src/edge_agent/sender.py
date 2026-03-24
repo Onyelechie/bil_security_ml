@@ -160,8 +160,10 @@ class ServerSender:
             try:
                 if os.path.exists(tmp_path):
                     os.remove(tmp_path)
-            except Exception:
-                pass
+            except Exception as cleanup_err:
+                logger.warning(
+                    "Failed to remove temp queue file '%s': %s", tmp_path, cleanup_err
+                )
 
     @staticmethod
     def _queue_payload(payload: Dict[str, Any]) -> Dict[str, Any]:

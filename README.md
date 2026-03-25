@@ -101,6 +101,12 @@ Provisioning rule:
 - `MOTION_THRESHOLD` (e.g., 0.02-0.08)
 - `DEFAULT_CAMERA_ID` (used for local motion labeling in single-camera mode)
 
+**Shared storage (optional)**
+- `SHARED_STORAGE_ROOT` (absolute path to a shared mount visible to both edge and server)
+- When set, queued alerts keep `image_path` only if the file exists and resolves under this root.
+- Queued alerts that are invalid JSON or rejected with 4xx are quarantined under `OFFLINE_QUEUE_DIR/bad/`.
+- Quarantined payloads are deleted after `QUEUE_QUARANTINE_RETENTION_DAYS` (default 7).
+
 FFmpeg note:
 - The edge agent uses `imageio-ffmpeg`, which provides an ffmpeg binary automatically (no separate system ffmpeg install required).
 

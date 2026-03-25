@@ -18,12 +18,9 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 
 # We extend the ModelWrapper slightly to return bounding boxes
-from benchmark.benchmark_suite import (  # noqa: E402
-    COCO_CLASSES,
-    EfficientDetWrapper,
-    TorchvisionSSDWrapper,
-    YOLOWrapper,
-)
+from benchmark.benchmark_suite import (COCO_CLASSES,  # noqa: E402
+                                       EfficientDetWrapper,
+                                       TorchvisionSSDWrapper, YOLOWrapper)
 
 OUTPUT_CSV = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "accuracy_results.csv"

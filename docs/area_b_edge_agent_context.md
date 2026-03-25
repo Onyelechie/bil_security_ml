@@ -89,6 +89,15 @@ Edge maintains ring buffers for configured cameras (default: low stream for anal
 Edge sends alert metadata + optional snapshot image to central server.
 (Prefer multipart for image bytes rather than base64 for efficiency.)
 
+Shared storage option:
+- If a shared mount exists between edge and server, edge can write images to that
+  mount and include `image_path` in alert payloads.
+- Configure `SHARED_STORAGE_ROOT` so queued alerts keep `image_path` only when the
+  file exists under the shared root (safe to replay after reconnect).
+- Invalid JSON or 4xx-rejected queued alerts are quarantined under
+  `OFFLINE_QUEUE_DIR/bad/` so they don't block later replays.
+- Quarantined payloads are deleted after `QUEUE_QUARANTINE_RETENTION_DAYS` (default 7).
+
 ### 5.4 Output: Heartbeat + update polling *(later)*
 Edge periodically:
 - POST heartbeat (health + versions)

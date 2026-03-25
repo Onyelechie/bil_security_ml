@@ -4,13 +4,13 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from src.edge_agent.pipeline_runner import PipelineRunner
-from src.edge_agent.video.ring_buffer import FrameItem
+from edge_agent.pipeline_runner import PipelineRunner
+from edge_agent.video.ring_buffer import FrameItem
 
 
 @pytest.fixture(autouse=True)
 def _no_disk_writes(mocker):
-    return mocker.patch("src.edge_agent.pipeline_runner.cv2.imwrite", return_value=True)
+    return mocker.patch("edge_agent.pipeline_runner.cv2.imwrite", return_value=True)
 
 
 def test_pipeline_runner_uses_frameitem_timestamp(tmp_path):
@@ -104,3 +104,30 @@ def test_pipeline_runner_rejects_invalid_frames(tmp_path):
 
     with pytest.raises(ValueError):
         pipeline.process_frames("cam-1", [object()])
+
+
+def test_save_frame_avoids_filename_collisions(tmp_path, mocker):
+    evaluator = MagicMock()
+    sender = MagicMock()
+
+    pipeline = PipelineRunner(
+        evaluator=evaluator,
+        sender=sender,
+        image_output_dir=str(tmp_path),
+    )
+
+    fixed_ts = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    mock_dt = mocker.patch("edge_agent.pipeline_runner.datetime")
+    mock_dt.now.return_value = fixed_ts
+
+    u1 = MagicMock()
+    u1.hex = "aaaabbbb"
+    u2 = MagicMock()
+    u2.hex = "ccccdddd"
+    mocker.patch("edge_agent.pipeline_runner.uuid4", side_effect=[u1, u2])
+
+    frame = np.zeros((10, 10, 3), dtype=np.uint8)
+    path1 = pipeline._save_frame("cam-1", frame)
+    path2 = pipeline._save_frame("cam-1", frame)
+
+    assert path1 != path2

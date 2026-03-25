@@ -6,6 +6,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class EdgeSettings(BaseSettings):
     """
     Configuration for the Edge Agent.
+
+    If SHARED_STORAGE_ROOT is set, image_path values under that root are safe
+    to replay from the offline queue.
     """
 
     # Tell pydantic-settings to load environment variables from .env if present.
@@ -76,6 +79,14 @@ class EdgeSettings(BaseSettings):
 
     # --- Offline alert queue ---
     offline_queue_dir: str = "storage/offline_queue"
+
+    # --- Quarantine retention ---
+    # Delete quarantined queue files older than this many days.
+    queue_quarantine_retention_days: int = 7
+
+    # --- Shared storage (optional) ---
+    # If set, image_path values under this root are safe to replay from the offline queue.
+    shared_storage_root: str = ""
 
 
 settings = EdgeSettings()

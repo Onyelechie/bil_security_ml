@@ -219,7 +219,6 @@ def test_retry_queued_alerts_resends_and_deletes(sender: ServerSender, tmp_path)
         "camera_id": "cam-1",
         "timestamp": "2026-01-01T00:00:00Z",
         "detections": [{"class": "person", "confidence": 0.9}],
-        "image_path": "edge-local/path.jpg",
     }
     queue_file = os.path.join(sender.queue_dir, "alert_20260101_000000_000000.json")
     with open(queue_file, "w") as f:
@@ -233,3 +232,172 @@ def test_retry_queued_alerts_resends_and_deletes(sender: ServerSender, tmp_path)
 
     sender._session.post.assert_called_once()
     assert not os.path.exists(queue_file)
+
+
+def test_retry_queued_alerts_quarantines_invalid_json_and_continues(
+    sender: ServerSender,
+):
+    bad_file = os.path.join(sender.queue_dir, "alert_20260101_000000_000000.json")
+    good_file = os.path.join(sender.queue_dir, "alert_20260101_000000_000001.json")
+    with open(bad_file, "w") as f:
+        f.write("{not valid json")
+    with open(good_file, "w") as f:
+        json.dump(
+            {
+                "site_id": "site-1",
+                "edge_pc_id": "test-edge-1",
+                "camera_id": "cam-1",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "detections": [{"class": "person", "confidence": 0.9}],
+            },
+            f,
+        )
+
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status.return_value = None
+    sender._session.post.return_value = mock_resp
+
+    sender.retry_queued_alerts()
+
+    sender._session.post.assert_called_once()
+    assert not os.path.exists(good_file)
+
+    bad_dir = os.path.join(sender.queue_dir, "bad")
+    quarantined = [
+        f for f in os.listdir(bad_dir) if f.startswith("alert_20260101_000000_000000")
+    ]
+    assert quarantined
+
+
+def test_retry_queued_alerts_quarantines_on_4xx_and_continues(sender: ServerSender):
+    first_file = os.path.join(sender.queue_dir, "alert_20260101_000000_000000.json")
+    second_file = os.path.join(sender.queue_dir, "alert_20260101_000000_000001.json")
+    payload = {
+        "site_id": "site-1",
+        "edge_pc_id": "test-edge-1",
+        "camera_id": "cam-1",
+        "timestamp": "2026-01-01T00:00:00Z",
+        "detections": [{"class": "person", "confidence": 0.9}],
+    }
+    with open(first_file, "w") as f:
+        json.dump(payload, f)
+    with open(second_file, "w") as f:
+        json.dump(payload, f)
+
+    bad_resp = MagicMock()
+    bad_resp.status_code = 400
+    bad_err = requests.HTTPError("400 Bad Request")
+    bad_err.response = bad_resp
+    bad_resp.raise_for_status.side_effect = bad_err
+
+    ok_resp = MagicMock()
+    ok_resp.raise_for_status.return_value = None
+
+    sender._session.post.side_effect = [bad_resp, ok_resp]
+
+    sender.retry_queued_alerts()
+
+    assert sender._session.post.call_count == 2
+    assert not os.path.exists(second_file)
+
+    bad_dir = os.path.join(sender.queue_dir, "bad")
+    quarantined = [
+        f for f in os.listdir(bad_dir) if f.startswith("alert_20260101_000000_000000")
+    ]
+    assert quarantined
+
+
+def test_cleanup_quarantine_removes_old_files(tmp_path):
+    settings = EdgeSettings(
+        server_base_url="http://mock-server",
+        edge_pc_id="test-edge-1",
+        site_name="Test Site",
+        site_id="site-1",
+        offline_queue_dir=str(tmp_path / "offline_queue"),
+        queue_quarantine_retention_days=7,
+    )
+    sender = ServerSender(settings)
+
+    bad_dir = os.path.join(sender.queue_dir, "bad")
+    os.makedirs(bad_dir, exist_ok=True)
+    old_file = os.path.join(bad_dir, "old.json")
+    new_file = os.path.join(bad_dir, "new.json")
+    with open(old_file, "w") as f:
+        f.write("{}")
+    with open(new_file, "w") as f:
+        f.write("{}")
+
+    old_mtime = time.time() - (8 * 86400)
+    os.utime(old_file, (old_mtime, old_mtime))
+
+    sender._cleanup_quarantine()
+
+    assert not os.path.exists(old_file)
+    assert os.path.exists(new_file)
+
+
+def test_queue_payload_keeps_image_path_in_shared_root(tmp_path):
+    shared_root = tmp_path / "shared_storage"
+    shared_root.mkdir()
+    image_path = shared_root / "img.jpg"
+    image_path.write_bytes(b"test")
+
+    settings = EdgeSettings(
+        server_base_url="http://mock-server",
+        edge_pc_id="test-edge-1",
+        site_name="Test Site",
+        site_id="site-1",
+        offline_queue_dir=str(tmp_path / "offline_queue"),
+        shared_storage_root=str(shared_root),
+    )
+    sender = ServerSender(settings)
+
+    payload = {"image_path": str(image_path)}
+    queued = sender._queue_payload(payload)
+
+    assert queued.get("image_path") == str(image_path)
+
+
+def test_queue_payload_drops_image_path_outside_shared_root(tmp_path):
+    shared_root = tmp_path / "shared_storage"
+    shared_root.mkdir()
+    other_root = tmp_path / "other_storage"
+    other_root.mkdir()
+    image_path = other_root / "img.jpg"
+    image_path.write_bytes(b"test")
+
+    settings = EdgeSettings(
+        server_base_url="http://mock-server",
+        edge_pc_id="test-edge-1",
+        site_name="Test Site",
+        site_id="site-1",
+        offline_queue_dir=str(tmp_path / "offline_queue"),
+        shared_storage_root=str(shared_root),
+    )
+    sender = ServerSender(settings)
+
+    payload = {"image_path": str(image_path)}
+    queued = sender._queue_payload(payload)
+
+    assert "image_path" not in queued
+
+
+def test_queue_payload_drops_missing_shared_image(tmp_path):
+    shared_root = tmp_path / "shared_storage"
+    shared_root.mkdir()
+    image_path = shared_root / "missing.jpg"
+
+    settings = EdgeSettings(
+        server_base_url="http://mock-server",
+        edge_pc_id="test-edge-1",
+        site_name="Test Site",
+        site_id="site-1",
+        offline_queue_dir=str(tmp_path / "offline_queue"),
+        shared_storage_root=str(shared_root),
+    )
+    sender = ServerSender(settings)
+
+    payload = {"image_path": str(image_path)}
+    queued = sender._queue_payload(payload)
+
+    assert "image_path" not in queued

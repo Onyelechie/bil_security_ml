@@ -4,6 +4,7 @@ import logging
 import os
 from datetime import datetime, timezone
 from typing import List, Optional, Sequence, Union
+from uuid import uuid4
 
 import cv2
 import numpy as np
@@ -117,8 +118,8 @@ class PipelineRunner:
 
         os.makedirs(self.image_output_dir, exist_ok=True)
 
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        filename = f"{camera_id}_{timestamp}.jpg"
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+        filename = f"{camera_id}_{timestamp}_{uuid4().hex[:8]}.jpg"
         path = os.path.join(self.image_output_dir, filename)
 
         try:

@@ -6,6 +6,7 @@ import os
 import threading
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -165,13 +166,41 @@ class ServerSender:
                     "Failed to remove temp queue file '%s': %s", tmp_path, cleanup_err
                 )
 
-    @staticmethod
-    def _queue_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _queue_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """
         Remove fields that are not safe to replay later.
-        For now, drop image_path because it points to an edge-local path.
+        If a shared storage root is configured, keep image_path only when it
+        resolves within that root and the file exists.
         """
         payload = dict(payload)
+        image_path = payload.get("image_path")
+        if not image_path:
+            return payload
+
+        shared_root = self.settings.shared_storage_root.strip()
+        if not shared_root:
+            payload.pop("image_path", None)
+            return payload
+
+        try:
+            shared_root_path = Path(shared_root)
+            if not shared_root_path.is_absolute():
+                shared_root_path = shared_root_path.resolve()
+            else:
+                shared_root_path = shared_root_path.resolve()
+
+            candidate = Path(image_path)
+            if not candidate.is_absolute():
+                candidate = (shared_root_path / candidate).resolve()
+            else:
+                candidate = candidate.resolve()
+
+            candidate.relative_to(shared_root_path)
+            if candidate.is_file():
+                return payload
+        except Exception:
+            pass
+
         payload.pop("image_path", None)
         return payload
 
@@ -204,10 +233,78 @@ class ServerSender:
                 logger.info(
                     "Successfully resent queued alert and removed file: %s", path
                 )
-
+            except json.JSONDecodeError as e:
+                logger.error("Invalid JSON in queued alert file %s: %s", path, e)
+                self._quarantine_file(path, "invalid_json")
+                continue
+            except requests.HTTPError as e:
+                status = None
+                if getattr(e, "response", None) is not None:
+                    status = e.response.status_code
+                if status is not None and 400 <= status < 500:
+                    logger.error(
+                        "Queued alert rejected (client error %s); quarantining: %s",
+                        status,
+                        path,
+                    )
+                    self._quarantine_file(path, f"client_error_{status}")
+                    continue
+                logger.error("Error sending queued alert file %s: %s", path, e)
+                break  # Stop processing further files on server/unreachable errors.
+            except requests.RequestException as e:
+                logger.error("Error sending queued alert file %s: %s", path, e)
+                break  # Stop processing further files on transient errors.
             except Exception as e:
                 logger.error("Error processing queued alert file %s: %s", path, e)
-                break  # Stop processing further files if one fails to avoid rapid retries
+                self._quarantine_file(path, "unexpected_error")
+                continue
+
+        self._cleanup_quarantine()
+
+    def _quarantine_file(self, path: str, reason: str) -> None:
+        """Move a bad queue file aside so it does not block retries."""
+        bad_dir = os.path.join(self.queue_dir, "bad")
+        try:
+            with self._queue_lock:
+                os.makedirs(bad_dir, exist_ok=True)
+                base = os.path.basename(path)
+                quarantine_path = os.path.join(bad_dir, f"{base}.{reason}")
+                if os.path.exists(path):
+                    os.replace(path, quarantine_path)
+            logger.warning("Quarantined queued alert file: %s", quarantine_path)
+        except Exception as e:
+            logger.error("Failed to quarantine file %s: %s", path, e)
+
+    def _cleanup_quarantine(self) -> None:
+        """Delete quarantined files older than the retention window."""
+        retention_days = self.settings.queue_quarantine_retention_days
+        if retention_days <= 0:
+            return
+        bad_dir = os.path.join(self.queue_dir, "bad")
+        if not os.path.isdir(bad_dir):
+            return
+        cutoff = time.time() - (retention_days * 86400)
+        removed = 0
+        try:
+            with self._queue_lock:
+                for filename in os.listdir(bad_dir):
+                    path = os.path.join(bad_dir, filename)
+                    try:
+                        if os.path.isfile(path) and os.path.getmtime(path) < cutoff:
+                            os.remove(path)
+                            removed += 1
+                    except Exception as e:
+                        logger.warning(
+                            "Failed to remove old quarantined file '%s': %s", path, e
+                        )
+        except Exception as e:
+            logger.warning("Failed to scan quarantine directory '%s': %s", bad_dir, e)
+        if removed:
+            logger.info(
+                "Removed %d quarantined alert file(s) older than %d days.",
+                removed,
+                retention_days,
+            )
 
     @staticmethod
     def _validate_detections(detections: List[Dict[str, Any]]) -> bool:

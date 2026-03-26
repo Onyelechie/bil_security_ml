@@ -11,34 +11,36 @@ from alembic.config import Config
 
 project_root = Path(__file__).resolve().parents[1]
 
-# If you keep these, fine; but we can also do it via pytest.ini (see below)
+# Keep project imports working during test collection.
 sys.path.insert(0, str(project_root / "src"))
 sys.path.insert(0, str(project_root))
 
 
 def _make_temp_sqlite_url(tmp_dir: Path) -> str:
-    # Unique DB every run -> no “file in use” collisions
+    # Unique DB every run -> no "file in use" collisions.
     db_path = tmp_dir / f"_pytest_{os.getpid()}_{uuid.uuid4().hex}.db"
-    # sqlite URL wants forward slashes
     return "sqlite:///" + db_path.as_posix()
 
 
+_TEST_DB_DIR = project_root / ".pytest-db"
+_TEST_DB_DIR.mkdir(exist_ok=True)
+_DEFAULT_TEST_DATABASE_URL = _make_temp_sqlite_url(_TEST_DB_DIR)
+
+# Set a dedicated test database before test modules import application settings/engines.
+os.environ.setdefault("DATABASE_URL", _DEFAULT_TEST_DATABASE_URL)
+
+
 @pytest.fixture(scope="session", autouse=True)
-def setup_test_db(tmp_path_factory: pytest.TempPathFactory):
+def setup_test_db():
     """
     Apply Alembic migrations to the test database schema before any tests run.
 
     Rules:
     - If DATABASE_URL is set externally, use it (do NOT delete anything).
-    - Otherwise create a unique sqlite DB in pytest's temp dir each run.
+    - Otherwise use a unique sqlite DB in a dedicated temp directory for this run.
     """
-    db_url = os.environ.get("DATABASE_URL")
-    if not db_url:
-        tmp_dir = tmp_path_factory.getbasetemp()
-        db_url = _make_temp_sqlite_url(Path(tmp_dir))
-        os.environ["DATABASE_URL"] = db_url
+    db_url = os.environ.get("DATABASE_URL", _DEFAULT_TEST_DATABASE_URL)
 
-    # Safety: never run tests against server.db
     if db_url.endswith("server.db"):
         raise RuntimeError(
             f"Refusing to run tests against server.db (DATABASE_URL={db_url}). "

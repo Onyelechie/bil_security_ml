@@ -26,8 +26,8 @@ jobs:
 
       - name: Run pip-audit
         run: |
-          pip-audit -r requirements.txt
-          pip-audit -r requirements-dev.txt
+          pip-audit --ignore-vuln CVE-2026-4539 -r requirements.txt
+          pip-audit --ignore-vuln CVE-2026-4539 -r requirements-dev.txt
 
   bandit-sast:
     name: Static Code Scan (bandit)

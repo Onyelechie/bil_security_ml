@@ -1,10 +1,13 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager, suppress
-from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+try:
+    from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+except Exception:  # pragma: no cover - runtime compatibility
+    ProxyHeadersMiddleware = None
+    # Delay logger access until after logging is configured
 
 from .config import settings
 from .db import init_db
@@ -14,6 +17,10 @@ from .routes.heartbeat import router as heartbeat_router
 from .routes.logs import router as logs_router
 from .routes.ws_alerts import router as ws_alerts_router
 from .routes.ws_dashboard import router as ws_dashboard_router
+from .routes.sites import router as sites_router
+from .routes.info import router as info_router
+from .routes.auth import router as auth_router
+from .routes.devices import router as devices_router
 from .services.dashboard_events import DashboardEventManager
 from .services.image_storage import ImageStorageService
 from .services.log_buffer import InMemoryLogBuffer, InMemoryLogHandler
@@ -37,18 +44,19 @@ async def _run_ws_image_cleanup(
     interval_seconds = interval_hours * 3600
     while True:
         try:
-            removed = await asyncio.to_thread(
-                image_storage.cleanup_older_than,
-                hours=retention_hours,
+            # cleanup_all will respect per-site settings where present
+            results = await asyncio.to_thread(
+                image_storage.cleanup_all,
+                default_hours=retention_hours,
             )
-            if removed > 0:
+            total_removed = sum(results.values()) if isinstance(results, dict) else 0
+            if total_removed > 0:
                 logger.info(
-                    "WebSocket image cleanup removed %s file(s) older than %s hour(s)",
-                    removed,
-                    retention_hours,
+                    "Image cleanup removed %s file(s) older than retention policy",
+                    total_removed,
                 )
         except Exception:  # noqa: BLE001
-            logger.exception("WebSocket image cleanup task failed")
+            logger.exception("Image cleanup task failed")
         await asyncio.sleep(interval_seconds)
 
 
@@ -92,16 +100,19 @@ async def lifespan(app: FastAPI):
         worker_count=settings.ws_alert_worker_count,
         queue_size=settings.ws_alert_queue_size,
     )
-    app.state.ws_image_storage = ImageStorageService(settings.ws_image_storage_dir)
-    app.state.ws_image_storage.ensure_ready()
+    # Unified image storage service (backwards-compatible with ws_* names)
+    app.state.image_storage = ImageStorageService(settings.image_storage_dir)
+    app.state.image_storage.ensure_ready()
+    # keep alias for backward compatibility
+    app.state.ws_image_storage = app.state.image_storage
     app.state.ws_max_image_bytes = settings.ws_max_image_bytes
-    app.state.ws_image_cleanup_task = asyncio.create_task(
+    app.state.image_cleanup_task = asyncio.create_task(
         _run_ws_image_cleanup(
-            image_storage=app.state.ws_image_storage,
-            retention_hours=settings.ws_image_retention_hours,
-            interval_hours=settings.ws_image_cleanup_interval_hours,
+            image_storage=app.state.image_storage,
+            retention_hours=settings.image_retention_hours,
+            interval_hours=settings.image_cleanup_interval_hours,
         ),
-        name="ws-image-cleanup",
+        name="image-cleanup",
     )
     await app.state.ws_alert_dispatcher.start()
     logger.info(
@@ -120,9 +131,13 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        app.state.ws_image_cleanup_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await app.state.ws_image_cleanup_task
+        # cancel cleanup task (alias names preserved for compatibility)
+        try:
+            app.state.image_cleanup_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await app.state.image_cleanup_task
+        except Exception:
+            logger.exception("Failed to stop image cleanup task cleanly during shutdown")
         await app.state.ws_alert_dispatcher.stop()
         logging.getLogger().removeHandler(app.state.log_handler)
         with suppress(Exception):
@@ -137,8 +152,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-_STATIC_DIR = Path(__file__).resolve().parent / "static"
-app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
+# Add ProxyHeadersMiddleware before other middlewares so forwarded headers are applied early.
+if ProxyHeadersMiddleware is not None:
+    app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+else:  # pragma: no cover - runtime compatibility
+    logger.warning(
+        "uvicorn.middleware.proxy_headers.ProxyHeadersMiddleware not available; "
+        "forwarded headers will not be applied. Install/upgrade 'uvicorn' "
+        "to a newer version (or pip install -r requirements.txt)."
+    )
 
 # CORS middleware for web clients
 app.add_middleware(
@@ -154,7 +176,12 @@ app.include_router(heartbeat_router)
 app.include_router(logs_router)
 app.include_router(ws_alerts_router)
 app.include_router(ws_dashboard_router)
+# new site management and server info routers may be added by other modules
 app.include_router(dashboard_router)
+app.include_router(sites_router)
+app.include_router(info_router)
+app.include_router(auth_router)
+app.include_router(devices_router)
 
 
 @app.get("/")

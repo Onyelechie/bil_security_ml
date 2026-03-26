@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
@@ -8,7 +9,10 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
+from bil_time import isoformat_winnipeg, now_in_winnipeg
+
 from .config import EdgeSettings
+from .signing import sign_message_b64
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +41,36 @@ class ServerSender:
         with self._status_lock:
             return self._status
 
+    def _resolved_device_id(self) -> str:
+        return (self.settings.device_id or self.settings.edge_pc_id).strip()
+
+    def _signed_headers(self, message: bytes, *, edge_pc_id: str) -> dict[str, str] | None:
+        device_id = self._resolved_device_id()
+        private_key_b64 = self.settings.device_private_key_b64.strip()
+        if not device_id:
+            logger.error("Cannot send request without a configured device_id or edge_pc_id")
+            return None
+        if not private_key_b64:
+            logger.error("Cannot send request without DEVICE_PRIVATE_KEY_B64 configured")
+            return None
+        if device_id != edge_pc_id:
+            logger.error(
+                "Configured device_id '%s' does not match edge_pc_id '%s'",
+                device_id,
+                edge_pc_id,
+            )
+            return None
+        try:
+            signature = sign_message_b64(private_key_b64, message)
+        except Exception as exc:
+            logger.error("Failed to sign request: %s", exc)
+            return None
+        return {
+            "Content-Type": "application/json",
+            "X-Device-Id": device_id,
+            "X-Device-Signature": signature,
+        }
+
     def send_alert(
         self,
         *,
@@ -63,15 +97,19 @@ class ServerSender:
             "site_id": self.settings.site_id,
             "edge_pc_id": self.settings.edge_pc_id,
             "camera_id": camera_id,
-            "timestamp": (timestamp or datetime.now(timezone.utc)).isoformat(),
+            "timestamp": isoformat_winnipeg(timestamp or now_in_winnipeg()),
             "detections": detections,
         }
         if image_path:
             payload["image_path"] = image_path
+        body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        headers = self._signed_headers(body, edge_pc_id=self.settings.edge_pc_id)
+        if headers is None:
+            return False
 
         try:
             with self._session_lock:
-                resp = self._session.post(url, json=payload, timeout=5)
+                resp = self._session.post(url, data=body, headers=headers, timeout=5)
             resp.raise_for_status()
             logger.info(
                 "Sent alert to server: camera_id=%s detections=%d",
@@ -115,10 +153,14 @@ class ServerSender:
         }
         if started_monotonic is not None:
             payload["uptime_seconds"] = int(time.monotonic() - started_monotonic)
+        body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        headers = self._signed_headers(body, edge_pc_id=self.settings.edge_pc_id)
+        if headers is None:
+            return False
 
         try:
             with self._session_lock:
-                resp = self._session.post(url, json=payload, timeout=5)
+                resp = self._session.post(url, data=body, headers=headers, timeout=5)
             resp.raise_for_status()
             logger.info("Sent heartbeat to server (status: %s).", current_status)
             return True

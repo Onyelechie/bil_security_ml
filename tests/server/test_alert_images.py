@@ -5,6 +5,7 @@ import uuid
 from fastapi.testclient import TestClient
 
 from server.main import app
+from tests.server.device_auth_helpers import post_signed_json, register_edge
 
 client = TestClient(app)
 
@@ -19,15 +20,23 @@ def test_get_alert_image_serves_stored_file():
     image_path.write_bytes(image_bytes)
 
     try:
+        edge_pc_id = "edge-img-1"
+        private_key_b64 = register_edge(client, edge_pc_id, site_name="Image Test Site")
         payload = {
             "site_id": "site_img",
             "camera_id": "cam_img",
-            "edge_pc_id": "edge-img-1",
+            "edge_pc_id": edge_pc_id,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "detections": [{"class": "person", "confidence": 0.99}],
             "image_path": image_path.as_posix(),
         }
-        create_response = client.post("/api/alerts", json=payload)
+        create_response = post_signed_json(
+            client,
+            "/api/alerts",
+            payload,
+            device_id=edge_pc_id,
+            private_key_b64=private_key_b64,
+        )
         assert create_response.status_code == 201
         alert_id = create_response.json()["id"]
 

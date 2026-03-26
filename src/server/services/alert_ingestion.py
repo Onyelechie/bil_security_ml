@@ -6,6 +6,10 @@ from sqlalchemy.orm import Session
 
 from ..models.alert import Alert
 from ..schemas import AlertCreate
+from pathlib import Path
+import shutil
+import re
+from ..config import settings
 
 DEFAULT_EDGE_PC_ID = "edge-001"
 
@@ -24,13 +28,83 @@ class AlertIngestionService:
         edge_id = alert.edge_pc_id or self._default_edge_pc_id
         try:
             self._ensure_edge_pc_exists(db, edge_id)
+            # Ensure any provided image_path refers to a file under the configured storage.
+            # If the alert contains an absolute/local path that exists on the server, copy it
+            # into the per-site storage folder and update the path to the relative storage path.
+            image_path_val = alert.image_path
+            try:
+                repo_root = Path(__file__).resolve().parents[3]
+                storage_root = Path(settings.image_storage_dir)
+                if not storage_root.is_absolute():
+                    storage_root = repo_root / storage_root
+                storage_root = storage_root.resolve()
+
+                def _sanitize_part(value: str) -> str:
+                    return re.sub(r"[^A-Za-z0-9_-]+", "_", (value or "").strip()).strip("_") or "unknown"
+
+                if image_path_val and isinstance(image_path_val, str):
+                    # ignore URLs
+                    if image_path_val.startswith("http://") or image_path_val.startswith("https://"):
+                        pass
+                    # special-case websocket-saved images: they are prefixed with
+                    # `ws://` by the websocket route to indicate they were already
+                    # persisted by the websocket storage instance and should not be
+                    # copied into the main storage root again.
+                    elif image_path_val.startswith("ws://"):
+                        src = Path(image_path_val[len("ws://"):])
+                        if not src.is_absolute():
+                            # if a relative path was returned, resolve it against cwd
+                            src = src.resolve()
+                        if src.is_file():
+                            # store absolute path as-is (no copy)
+                            image_path_val = src.as_posix()
+                        else:
+                            image_path_val = None
+                    else:
+                        src = Path(image_path_val)
+                        # if relative, resolve against repo root
+                        if not src.is_absolute():
+                            candidate = (repo_root / src).resolve()
+                            if candidate.exists():
+                                src = candidate
+
+                        if src.is_file():
+                            # copy into storage_root/site
+                            site_safe = _sanitize_part(alert.site_id)
+                            dst_dir = (storage_root / site_safe)
+                            dst_dir.mkdir(parents=True, exist_ok=True)
+                            dst_name = src.name
+                            dst = dst_dir / dst_name
+                            # avoid clobbering
+                            if dst.exists():
+                                base = dst.stem
+                                ext = dst.suffix
+                                for i in range(1, 1000):
+                                    cand = dst_dir / f"{base}_{i}{ext}"
+                                    if not cand.exists():
+                                        dst = cand
+                                        break
+                            shutil.copy2(str(src), str(dst))
+                            # store relative path under repo (use forward slashes)
+                            try:
+                                rel = dst.relative_to(repo_root).as_posix()
+                            except Exception:
+                                rel = dst.as_posix()
+                            image_path_val = rel
+                        else:
+                            # file not found; clear the image path to avoid storing external refs
+                            image_path_val = None
+            except Exception:
+                # if anything goes wrong during normalization, fall back to the provided value
+                image_path_val = alert.image_path
+
             db_alert = Alert(
                 site_id=alert.site_id,
                 camera_id=alert.camera_id,
                 edge_pc_id=edge_id,
                 timestamp=alert.timestamp,
                 detections=[d.model_dump(by_alias=True) for d in alert.detections],
-                image_path=alert.image_path,
+                image_path=image_path_val,
             )
             db.add(db_alert)
             db.commit()

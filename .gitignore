@@ -1,3 +1,22 @@
+# Ignore generated certs and local infra secrets
+infra/certs/
+infra/letsencrypt/
+*.pem
+*.key
+*.pfx
+
+# Pytest temp/CI artifacts
+.pytest_tmp*/
+.pytest-temp*/
+pytest-cache-files*/
+.pytest-db/
+.pytest-files/
+.tmp-pytest/
+.tmp-pytest-clean/
+.tmp-audit/
+tmp_ws_debug/
+.manual_site_retention_checks/
+.manual_ws_image_check/
 support_files/Industrial_Project_Proposal.pdf
 
 # Python

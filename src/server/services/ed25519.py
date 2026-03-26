@@ -20,5 +20,5 @@ def verify_signature_b64(pubkey_b64: str, message: bytes, signature_b64: str) ->
         vk = Ed25519PublicKey.from_public_bytes(pub)
         vk.verify(sig, message)
         return True
-    except (InvalidSignature, ValueError, Exception):
+    except (InvalidSignature, ValueError):
         return False

@@ -13,6 +13,7 @@ pytest-cache-files*/
 .pytest-files/
 .tmp-pytest/
 .tmp-pytest-clean/
+.tmp-audit/
 tmp_ws_debug/
 .manual_site_retention_checks/
 .manual_ws_image_check/

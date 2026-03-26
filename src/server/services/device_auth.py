@@ -46,7 +46,7 @@ def require_signed_device(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unknown device",
         )
-    if not getattr(dev, "active", True):
+    if not dev.active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Device revoked or inactive",

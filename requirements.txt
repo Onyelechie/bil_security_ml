@@ -40,5 +40,4 @@ pytest>=8.0.0
 pytest-asyncio>=0.23.5
 pytest-cov>=4.0.0
 cryptography>=44.0.0
-Pygments>=2.19.3
 PyNaCl>=1.5.0

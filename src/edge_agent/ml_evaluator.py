@@ -15,7 +15,7 @@ COLOR_VEHICLE = (255, 165, 0)  # Orange
 class MLEvaluator:
     """
     Evaluates a clip of frames (max 40, BGR format from RingBuffer)
-    using YOLOv8-Nano to determine if a person or vehicle is present
+    using YOLOv8-Small to determine if a person or vehicle is present
     with high enough confidence to trigger an alert.
 
     Returns the annotated frame with bounding box drawn on it.
@@ -31,13 +31,13 @@ class MLEvaluator:
 
         # Use the registry to get a cached instance of YOLO
         self.model = ModelRegistry.get_model(
-            YOLOWrapper, "YOLOv8-Nano", weights_path, input_size=640
+            YOLOWrapper, "YOLOv8-Small", weights_path, input_size=640
         )
         logger.info(f"MLEvaluator initialized with model from {weights_path}")
 
     def evaluate_frames(self, frames: list[np.ndarray]) -> dict | None:
         """
-        Runs YOLOv8-Nano on a list of frames (BGR or Grayscale, up to 40 from RingBuffer).
+        Runs YOLOv8-Small on a list of frames (BGR or Grayscale, up to 40 from RingBuffer).
         If frames are grayscale, they are converted to BGR for YOLO compatibility.
         Returns the best detection with an annotated frame (bounding box drawn),
         or None if no person/vehicle found.

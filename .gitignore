@@ -105,6 +105,7 @@ benchmark/system_info.txt
 # Others
 docs/self_assessment_ebere.tex
 accuracy/dataset_frames
+accuracy/accuracy_results.csv
 dataset_frames/
 accuracy/labeled_data/
 

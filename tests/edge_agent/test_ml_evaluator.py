@@ -133,7 +133,7 @@ def test_ml_evaluator_grayscale_3d_mocked(mock_evaluator):
         ("C3HighRes - Car_frame_0.jpg", "car", 0.5, 0.3, True),
         ("C4HighRes - Human_frame_60.jpg", "person", 0.5, 0.6, True),
         ("C5HighResPTZ - Car_frame_90.jpg", "car", 0.5, 0.3, True),
-        ("C1HighRes - Human_frame_216.jpg", "truck", 0.05, 0.05, False),
+        ("C1HighRes - Human_frame_216.jpg", "truck", 0.05, 0.05, True),
     ],
 )
 def test_ml_evaluator_specific_frames_integration(

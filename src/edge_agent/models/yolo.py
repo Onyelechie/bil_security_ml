@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from .base import ModelWrapper
 
 
@@ -6,28 +7,45 @@ class YOLOWrapper(ModelWrapper):
     def __init__(self, name="YOLOv8-Nano", weights_path=None, input_size=640):
         super().__init__(name, input_size=input_size, weights_path=weights_path)
 
+    def _openvino_dir(self) -> Path:
+        """Returns the path to the compiled OpenVINO model directory."""
+        pt_path = Path(self.weights_path)
+        return pt_path.parent / (pt_path.stem + "_openvino_model")
+
     def load(self):
-        print(f"Loading {self.name} ({self.weights_path})...")
         from ultralytics import YOLO
 
+        ov_dir = self._openvino_dir()
+
+        # Download weights first if they don't exist
         if not os.path.exists(self.weights_path):
             weights_name = os.path.basename(self.weights_path)
             print(f"Warning: {self.weights_path} not found.")
             print(f"Attempting to download {weights_name} automatically...")
-            self.model = YOLO(weights_name)
+            YOLO(weights_name)
             if os.path.exists(weights_name) and not os.path.exists(self.weights_path):
-                try:
-                    import shutil
+                import shutil
+                shutil.move(weights_name, self.weights_path)
+                print(f"Moved downloaded weights to {self.weights_path}")
 
-                    shutil.move(weights_name, self.weights_path)
-                    print(f"Moved downloaded weights to {self.weights_path}")
-                except Exception as e:
-                    print(f"Note: Could not move weights to {self.weights_path}: {e}")
+        # Export to OpenVINO IR format if not already done (YOLOv8 only)
+        weights_name_lower = os.path.basename(self.weights_path).lower()
+        if "yolov8" in weights_name_lower:
+            if not ov_dir.exists():
+                print(f"Compiling {self.name} to OpenVINO format (one-time export)...")
+                pt_model = YOLO(self.weights_path)
+                pt_model.export(format="openvino", imgsz=self.input_size)
+                print(f"Export complete → {ov_dir}")
+
+            # Load the compiled OpenVINO model
+            print(f"Loading {self.name} from OpenVINO: {ov_dir}")
+            self.model = YOLO(str(ov_dir))
         else:
+            # Non-YOLOv8 models (e.g. YOLOv5) use standard PyTorch runtime
+            print(f"Loading {self.name} from PyTorch: {self.weights_path}")
             self.model = YOLO(self.weights_path)
 
     def predict(self, frame):
-        # Ultralytics YOLO supports imgsz parameter directly
         results = self.model(frame, verbose=False, imgsz=self.input_size)
         detections = []
         for r in results:

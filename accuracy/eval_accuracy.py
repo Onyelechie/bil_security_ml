@@ -17,13 +17,9 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 
 # We extend the ModelWrapper slightly to return bounding boxes
-from benchmark.benchmark_suite import (
-    ModelWrapper,
-    YOLOWrapper,
-    EfficientDetWrapper,
-    TorchvisionSSDWrapper,
-    COCO_CLASSES,
-)
+from src.edge_agent.models import YOLOWrapper, COCO_CLASSES
+from src.edge_agent.models.efficientdet import EfficientDetWrapper
+from src.edge_agent.models.ssd import TorchvisionSSDWrapper
 
 OUTPUT_CSV = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "accuracy_results.csv"
@@ -201,18 +197,21 @@ def run_accuracy_evaluation(args):
     def str_to_cls_id(label_str):
         nonlocal _next_available_id
         name = label_str.lower()
-        
-        # Standard COCO/YOLO mapping for our primary targets
-        if name in ["person", "0"]:
-            return 0
-        if name in ["car", "vehicle", "2"]:
+
+        # Map YOLO/COCO output names to our dataset's class IDs:
+        #   0 = objects (unused / background)
+        #   1 = Person
+        #   2 = Vehicle (car, truck, bus, motorcycle)
+        if name in ["person"]:
+            return 1
+        if name in ["car", "truck", "bus", "motorcycle", "vehicle"]:
             return 2
-            
-        # Deterministic mapping for other unexpected labels
+
+        # Deterministic mapping for anything else
         if name not in _label_registry:
             _label_registry[name] = _next_available_id
             _next_available_id += 1
-            
+
         return _label_registry[name]
 
     for model_wrapper in models_to_run:

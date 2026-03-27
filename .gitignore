@@ -106,6 +106,7 @@ benchmark/system_info.txt
 docs/self_assessment_ebere.tex
 accuracy/dataset_frames
 accuracy/accuracy_results.csv
+benchmark/yolov8n_openvino_model/
 dataset_frames/
 accuracy/labeled_data/
 

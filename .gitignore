@@ -106,10 +106,11 @@ benchmark/system_info.txt
 docs/self_assessment_ebere.tex
 accuracy/dataset_frames
 accuracy/accuracy_results.csv
-benchmark/yolov8n_openvino_model/
+benchmark/*_openvino_model/
 dataset_frames/
 accuracy/labeled_data/
 
 # Whitelists (Must be at the end to override broad ignores)
 !src/server/models/
 !src/edge_agent/models/
+!benchmark/yolov8s.pt

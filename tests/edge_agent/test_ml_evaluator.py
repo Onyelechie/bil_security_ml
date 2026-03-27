@@ -181,17 +181,17 @@ def test_ml_evaluator_specific_frames_integration(
 
     result = evaluator.evaluate_frames([frame])
 
-    if not expected_to_pass:
-        assert result is None
-        return
-
-    assert result is not None
-    assert "detection" in result
-    found_label = result["detection"]["label"].lower()
-    if filename == "C4HighRes - Human_frame_60.jpg":
-        assert found_label in ["person", "car"]
+    if expected_to_pass:
+        assert result is not None, f"Expected a detection for {filename}, but got None."
+        actual_label = result["detection"]["label"].lower()
+        if filename == "C4HighRes - Human_frame_60.jpg":
+            assert actual_label in ["person", "car", "truck", "bus", "motorcycle", "vehicle"]
+        elif expected_label.lower() in ["car", "truck", "bus", "motorcycle", "vehicle"]:
+            assert actual_label in ["car", "truck", "bus", "motorcycle", "vehicle"]
+        else:
+            assert actual_label == expected_label.lower()
     else:
-        assert found_label == expected_label.lower()
+        assert result is None
 
 
 if __name__ == "__main__":

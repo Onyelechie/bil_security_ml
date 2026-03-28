@@ -120,7 +120,10 @@ def test_send_alert_structure(sender: ServerSender):
     assert payload["detections"] == detections
     assert "timestamp" in payload
     sent_at = datetime.fromisoformat(payload["timestamp"])
-    assert sent_at.utcoffset() == sent_at.astimezone(ZoneInfo("America/Winnipeg")).utcoffset()
+    assert (
+        sent_at.utcoffset()
+        == sent_at.astimezone(ZoneInfo("America/Winnipeg")).utcoffset()
+    )
     assert kwargs["headers"]["X-Device-Id"] == "test-edge-1"
     mock_resp.raise_for_status.assert_called_once()
 
@@ -188,6 +191,7 @@ def test_send_heartbeat_requires_private_key(settings: EdgeSettings, mocker):
 
     assert success is False
     sender._session.post.assert_not_called()
+
 
 def test_send_alert_drops_on_4xx(sender: ServerSender):
     """

@@ -1,15 +1,16 @@
 from __future__ import annotations
 
+import re
+import shutil
+from pathlib import Path
+
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from ..config import settings
 from ..models.alert import Alert
 from ..schemas import AlertCreate
-from pathlib import Path
-import shutil
-import re
-from ..config import settings
 
 DEFAULT_EDGE_PC_ID = "edge-001"
 
@@ -40,11 +41,18 @@ class AlertIngestionService:
                 storage_root = storage_root.resolve()
 
                 def _sanitize_part(value: str) -> str:
-                    return re.sub(r"[^A-Za-z0-9_-]+", "_", (value or "").strip()).strip("_") or "unknown"
+                    return (
+                        re.sub(r"[^A-Za-z0-9_-]+", "_", (value or "").strip()).strip(
+                            "_"
+                        )
+                        or "unknown"
+                    )
 
                 if image_path_val and isinstance(image_path_val, str):
                     # ignore URLs
-                    if image_path_val.startswith("http://") or image_path_val.startswith("https://"):
+                    if image_path_val.startswith(
+                        "http://"
+                    ) or image_path_val.startswith("https://"):
                         pass
                     # special-case websocket-saved images: they are prefixed with
                     # `ws://` by the websocket route to indicate they were already
@@ -71,7 +79,7 @@ class AlertIngestionService:
                         if src.is_file():
                             # copy into storage_root/site
                             site_safe = _sanitize_part(alert.site_id)
-                            dst_dir = (storage_root / site_safe)
+                            dst_dir = storage_root / site_safe
                             dst_dir.mkdir(parents=True, exist_ok=True)
                             dst_name = src.name
                             dst = dst_dir / dst_name

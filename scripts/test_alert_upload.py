@@ -19,8 +19,8 @@ import datetime
 import hashlib
 import json
 import os
-from pathlib import Path
 import time
+from pathlib import Path
 
 import requests
 
@@ -34,7 +34,10 @@ except Exception as exc:  # pragma: no cover - runtime dependency check
 
 
 BASE = os.getenv("BASE_URL", "http://127.0.0.1:8000")
-DEFAULT_IMAGE_PATH = r"C:\Users\ebere\Documents\bil_security_ml\storage\alert_images\test_site\test_site_cam_01_test-edge-1_20260322T025707090673Z_person-0_95.jpg"
+DEFAULT_IMAGE_PATH = (
+    r"C:\Users\ebere\Documents\bil_security_ml\storage\alert_images\test_site\\"
+    r"test_site_cam_01_test-edge-1_20260322T025707090673Z_person-0_95.jpg"
+)
 REQUEST_TIMEOUT_SEC = 10
 
 
@@ -104,7 +107,9 @@ def public_key_b64_from_private(private_key: Ed25519PrivateKey) -> str:
     return base64.b64encode(private_key.public_key().public_bytes_raw()).decode("ascii")
 
 
-def enroll_or_rotate_device(base: str, admin_token: str, device_id: str, public_key_b64: str) -> None:
+def enroll_or_rotate_device(
+    base: str, admin_token: str, device_id: str, public_key_b64: str
+) -> None:
     headers = {
         "Authorization": f"Bearer {admin_token}",
         "Content-Type": "application/json",
@@ -131,7 +136,9 @@ def enroll_or_rotate_device(base: str, admin_token: str, device_id: str, public_
         timeout=REQUEST_TIMEOUT_SEC,
     )
     if rr.status_code != 200:
-        raise RuntimeError(f"Failed to rotate existing device key: {rr.status_code} {rr.text}")
+        raise RuntimeError(
+            f"Failed to rotate existing device key: {rr.status_code} {rr.text}"
+        )
     print("Device key rotated:", device_id)
 
 
@@ -147,7 +154,9 @@ def post_signed_heartbeat(
         "status": "online",
         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
-    body_bytes = json.dumps(hb, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    body_bytes = json.dumps(hb, separators=(",", ":"), ensure_ascii=False).encode(
+        "utf-8"
+    )
     signature_b64 = sign_bytes_b64(private_key, body_bytes)
     headers = {
         "Content-Type": "application/json",
@@ -156,7 +165,12 @@ def post_signed_heartbeat(
     }
 
     print("Posting signed heartbeat...", hb)
-    r = requests.post(base + "/api/heartbeat", data=body_bytes, headers=headers, timeout=REQUEST_TIMEOUT_SEC)
+    r = requests.post(
+        base + "/api/heartbeat",
+        data=body_bytes,
+        headers=headers,
+        timeout=REQUEST_TIMEOUT_SEC,
+    )
     print(r.status_code, r.text)
     if r.status_code != 201:
         raise RuntimeError("Heartbeat failed; cannot continue")
@@ -186,7 +200,9 @@ def upload_signed_alert(
         "X-Device-Id": edge_pc_id,
         "X-Device-Signature": signature_b64,
     }
-    files = {"image": (os.path.basename(image_path), image_bytes, "application/octet-stream")}
+    files = {
+        "image": (os.path.basename(image_path), image_bytes, "application/octet-stream")
+    }
     data = {
         "site_id": site_id,
         "camera_id": camera_id,
@@ -196,7 +212,13 @@ def upload_signed_alert(
     }
 
     print("Uploading signed alert image...")
-    r = requests.post(base + "/api/alerts/upload", files=files, data=data, headers=headers, timeout=REQUEST_TIMEOUT_SEC)
+    r = requests.post(
+        base + "/api/alerts/upload",
+        files=files,
+        data=data,
+        headers=headers,
+        timeout=REQUEST_TIMEOUT_SEC,
+    )
     print("Upload response:", r.status_code, r.text)
     if r.status_code != 201:
         raise RuntimeError("Alert upload failed")
@@ -204,7 +226,9 @@ def upload_signed_alert(
 
 def get_site_settings(base: str, site_name: str) -> None:
     print("GET site settings")
-    r = requests.get(base + f"/api/sites/{site_name}/settings", timeout=REQUEST_TIMEOUT_SEC)
+    r = requests.get(
+        base + f"/api/sites/{site_name}/settings", timeout=REQUEST_TIMEOUT_SEC
+    )
     print(r.status_code, r.text)
 
 
@@ -239,17 +263,48 @@ def parse_detections(raw: str | None) -> list:
 def main() -> None:
     load_local_env_file()
     parser = argparse.ArgumentParser(description="Signed test alert uploader")
-    parser.add_argument("--image", "-i", required=False, help="Path to image file to upload")
-    parser.add_argument("--site", default=(os.getenv("SITE_ID") or "test_site"), help="Site id/name")
-    parser.add_argument("--camera", default="cam_01", help="Camera id (default: cam_01)")
-    parser.add_argument("--edge", default=(os.getenv("EDGE_PC_ID") or "test-edge-1"), help="Edge PC/device id")
-    parser.add_argument("--base", default=BASE, help=f"Server base URL (default: {BASE})")
-    parser.add_argument("--set-retention", type=int, help="If provided, PUT site settings to this retention (hours)")
-    parser.add_argument("--detections", help='Detections JSON string, e.g. "[{\"class\":\"person\",\"confidence\":0.95}]"')
-    parser.add_argument("--admin-user", default=os.getenv("ADMIN_USER", "admin"), help="Admin username for /api/auth/token")
+    parser.add_argument(
+        "--image", "-i", required=False, help="Path to image file to upload"
+    )
+    parser.add_argument(
+        "--site",
+        default=(os.getenv("SITE_ID") or "test_site"),
+        help="Site id/name",
+    )
+    parser.add_argument(
+        "--camera", default="cam_01", help="Camera id (default: cam_01)"
+    )
+    parser.add_argument(
+        "--edge",
+        default=(os.getenv("EDGE_PC_ID") or "test-edge-1"),
+        help="Edge PC/device id",
+    )
+    parser.add_argument(
+        "--base", default=BASE, help=f"Server base URL (default: {BASE})"
+    )
+    parser.add_argument(
+        "--set-retention",
+        type=int,
+        help="If provided, PUT site settings to this retention (hours)",
+    )
+    parser.add_argument(
+        "--detections",
+        help=(
+            'Detections JSON string, e.g. "[{\\"class\\":\\"person\\",\\"confidence\\":0.95}]"'
+        ),
+    )
+    parser.add_argument(
+        "--admin-user",
+        default=os.getenv("ADMIN_USER", "admin"),
+        help="Admin username for /api/auth/token",
+    )
     parser.add_argument(
         "--admin-password",
-        default=(os.getenv("ADMIN_PASSWORD") or os.getenv("SECRET_KEY") or "your-secret-key-here"),
+        default=(
+            os.getenv("ADMIN_PASSWORD")
+            or os.getenv("SECRET_KEY")
+            or "your-secret-key-here"
+        ),
         help="Admin password for /api/auth/token",
     )
     parser.add_argument(

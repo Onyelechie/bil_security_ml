@@ -157,7 +157,9 @@ class ImageStorageService:
                 if path.is_file():
                     if path.name == self._SITE_SETTINGS_NAME:
                         continue
-                    mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+                    mtime = datetime.fromtimestamp(
+                        path.stat().st_mtime, tz=timezone.utc
+                    )
                     if mtime < cutoff:
                         path.unlink()
                         removed += 1
@@ -169,7 +171,9 @@ class ImageStorageService:
                         if child.name == self._SITE_SETTINGS_NAME:
                             continue
                         try:
-                            mtime = datetime.fromtimestamp(child.stat().st_mtime, tz=timezone.utc)
+                            mtime = datetime.fromtimestamp(
+                                child.stat().st_mtime, tz=timezone.utc
+                            )
                             if mtime < cutoff:
                                 child.unlink()
                                 removed += 1
@@ -180,7 +184,9 @@ class ImageStorageService:
 
         return removed
 
-    def cleanup_all(self, *, default_hours: int, now: datetime | None = None) -> dict[str, int]:
+    def cleanup_all(
+        self, *, default_hours: int, now: datetime | None = None
+    ) -> dict[str, int]:
         """Run cleanup for all site folders, returning a mapping of site->removed count.
 
         Each site may define its own retention in `.site_settings.json`; if present
@@ -195,7 +201,9 @@ class ImageStorageService:
                 continue
             site_name = site_dir.name
             site_settings = self._read_site_settings(site_dir)
-            hours = site_settings.get("image_retention_hours") if site_settings else None
+            hours = (
+                site_settings.get("image_retention_hours") if site_settings else None
+            )
             try:
                 use_hours = int(hours) if hours and int(hours) >= 1 else default_hours
             except Exception:

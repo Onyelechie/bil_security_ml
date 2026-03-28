@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query, Request, status, Depends
-
-from .auth import get_current_admin
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from ..schemas import ServerLogListOut
 from ..services.log_buffer import InMemoryLogBuffer
+from .auth import get_current_admin
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 

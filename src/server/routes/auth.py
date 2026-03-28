@@ -1,5 +1,5 @@
-﻿from datetime import timedelta
-import secrets
+﻿import secrets
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Security, status
 from fastapi.security import (
@@ -33,7 +33,9 @@ def authenticate_admin_password(password: str) -> bool:
     return secrets.compare_digest(password, admin_pw)
 
 
-def issue_admin_token(subject: str = DASHBOARD_SESSION_SUBJECT, *, hours: int = 1) -> str:
+def issue_admin_token(
+    subject: str = DASHBOARD_SESSION_SUBJECT, *, hours: int = 1
+) -> str:
     return create_access_token(
         subject=subject,
         expires_delta=timedelta(hours=hours),

@@ -22,7 +22,8 @@ class TorchvisionSSDWrapper(ModelWrapper):
         print(f"Loading {self.name}...")
         from torchvision.models.detection import (
             SSDLite320_MobileNet_V3_Large_Weights,
-            ssdlite320_mobilenet_v3_large)
+            ssdlite320_mobilenet_v3_large,
+        )
 
         self.weights = SSDLite320_MobileNet_V3_Large_Weights.DEFAULT
         self.model = ssdlite320_mobilenet_v3_large(weights=self.weights)

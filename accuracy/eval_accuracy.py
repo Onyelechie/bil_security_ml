@@ -1,6 +1,5 @@
 import argparse
 import os
-import sys
 import warnings
 from pathlib import Path
 from typing import List
@@ -10,20 +9,18 @@ import pandas as pd
 import torch
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 
-# Suppress specific pytorch warnings that might clutter the CLI output
-warnings.filterwarnings("ignore", category=UserWarning)
-
-# Ensure benchmark models are importable
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, project_root)
-
 # We extend the ModelWrapper slightly to return bounding boxes
-from benchmark.benchmark_suite import COCO_CLASSES  # noqa: E402
-from benchmark.benchmark_suite import (  # noqa: E402
+from benchmark.benchmark_suite import COCO_CLASSES
+from benchmark.benchmark_suite import (
     EfficientDetWrapper,
     TorchvisionSSDWrapper,
     YOLOWrapper,
 )
+
+project_root = Path(__file__).resolve().parents[1]
+
+# Suppress specific pytorch warnings that might clutter the CLI output
+warnings.filterwarnings("ignore", category=UserWarning)
 
 OUTPUT_CSV = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "accuracy_results.csv"
@@ -170,16 +167,16 @@ def run_accuracy_evaluation(args):
     print(f"Loaded dataset: {len(image_files)} test images found.")
 
     # 1. Setup Models
-    script_dir = os.path.join(project_root, "benchmark")
+    script_dir = project_root / "benchmark"
     available_models = {
         "YOLOv8-Nano": YOLOWrapper(
-            "YOLOv8-Nano", os.path.join(script_dir, "yolov8n.pt"), args.input_size
+            "YOLOv8-Nano", str(script_dir / "yolov8n.pt"), args.input_size
         ),
         "YOLOv8-Small": YOLOWrapper(
-            "YOLOv8-Small", os.path.join(script_dir, "yolov8s.pt"), args.input_size
+            "YOLOv8-Small", str(script_dir / "yolov8s.pt"), args.input_size
         ),
         "YOLOv5-Nano": YOLOWrapper(
-            "YOLOv5-Nano", os.path.join(script_dir, "yolov5n.pt"), args.input_size
+            "YOLOv5-Nano", str(script_dir / "yolov5n.pt"), args.input_size
         ),
         "EfficientDet-D0": EfficientDetWrapper("efficientdet_d0", args.input_size),
         "SSD-MobileNet": TorchvisionSSDWrapper("SSD-MobileNet", args.input_size),

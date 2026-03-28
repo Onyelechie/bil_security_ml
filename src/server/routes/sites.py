@@ -1,6 +1,7 @@
-from pathlib import Path
 import json
 import logging
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 
@@ -35,9 +36,15 @@ def get_site_settings(site_name: str, request: Request):
         return {"site_name": site_name, "image_retention_hours": None}
     try:
         data = json.loads(path.read_text(encoding="utf8"))
-        return {"site_name": site_name, "image_retention_hours": data.get("image_retention_hours")}
+        return {
+            "site_name": site_name,
+            "image_retention_hours": data.get("image_retention_hours"),
+        }
     except Exception:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to read site settings")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to read site settings",
+        )
 
 
 @router.put("/{site_name}/settings", response_model=SiteSettingsOut)
@@ -60,4 +67,7 @@ def set_site_settings(site_name: str, body: SiteSettingsIn, request: Request):
             "image_retention_hours": data.get("image_retention_hours"),
         }
     except Exception:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to write site settings")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to write site settings",
+        )

@@ -54,14 +54,20 @@ class ServerSender:
     def _resolved_device_id(self) -> str:
         return (self.settings.device_id or self.settings.edge_pc_id).strip()
 
-    def _signed_headers(self, message: bytes, *, edge_pc_id: str) -> dict[str, str] | None:
+    def _signed_headers(
+        self, message: bytes, *, edge_pc_id: str
+    ) -> dict[str, str] | None:
         device_id = self._resolved_device_id()
         private_key_b64 = self.settings.device_private_key_b64.strip()
         if not device_id:
-            logger.error("Cannot send request without a configured device_id or edge_pc_id")
+            logger.error(
+                "Cannot send request without a configured device_id or edge_pc_id"
+            )
             return None
         if not private_key_b64:
-            logger.error("Cannot send request without DEVICE_PRIVATE_KEY_B64 configured")
+            logger.error(
+                "Cannot send request without DEVICE_PRIVATE_KEY_B64 configured"
+            )
             return None
         if device_id != edge_pc_id:
             logger.error(

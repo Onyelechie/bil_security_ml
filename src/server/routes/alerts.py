@@ -8,13 +8,13 @@ from pathlib import Path
 from fastapi import (
     APIRouter,
     Depends,
+    File,
+    Form,
     HTTPException,
     Query,
     Request,
-    status,
     UploadFile,
-    File,
-    Form,
+    status,
 )
 from fastapi.responses import FileResponse
 from sqlalchemy.exc import SQLAlchemyError
@@ -69,7 +69,9 @@ def get_db() -> Session:
 
 
 @router.post("", response_model=AlertOut, status_code=status.HTTP_201_CREATED)
-async def receive_alert(alert: AlertCreate, request: Request, db: Session = Depends(get_db)):
+async def receive_alert(
+    alert: AlertCreate, request: Request, db: Session = Depends(get_db)
+):
     """
     Endpoint to receive an alert from an edge PC.
 
@@ -100,9 +102,11 @@ async def receive_alert(alert: AlertCreate, request: Request, db: Session = Depe
                 "site_id": db_alert.site_id,
                 "camera_id": db_alert.camera_id,
                 "edge_pc_id": db_alert.edge_pc_id,
-                "timestamp": isoformat_winnipeg(db_alert.timestamp)
-                if db_alert.timestamp
-                else None,
+                "timestamp": (
+                    isoformat_winnipeg(db_alert.timestamp)
+                    if db_alert.timestamp
+                    else None
+                ),
             },
         )
         return db_alert
@@ -133,26 +137,35 @@ async def upload_alert(
     try:
         ts = datetime.fromisoformat(timestamp)
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid timestamp") from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid timestamp"
+        ) from exc
 
     try:
         dets = json.loads(detections)
         if not isinstance(dets, list):
             raise ValueError("detections must be an array")
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid detections JSON") from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid detections JSON"
+        ) from exc
 
     try:
         image_bytes = await image.read()
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to read uploaded image") from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to read uploaded image",
+        ) from exc
 
     storage = request.app.state.image_storage
     resolved_edge_id = resolve_edge_pc_id(edge_pc_id)
     device_id = request.headers.get("X-Device-Id")
     signature = request.headers.get("X-Device-Signature")
     sha = hashlib.sha256(image_bytes).hexdigest()
-    canonical = f"{site_id}|{camera_id}|{edge_pc_id or ''}|{timestamp}|{sha}".encode("utf-8")
+    canonical = f"{site_id}|{camera_id}|{edge_pc_id or ''}|{timestamp}|{sha}".encode(
+        "utf-8"
+    )
     require_signed_device(
         db,
         device_id=device_id,
@@ -174,7 +187,10 @@ async def upload_alert(
             received_at=ts,
         )
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save image") from exc
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save image",
+        ) from exc
 
     # Build AlertCreate and persist
     from ..schemas import AlertCreate as _AlertCreate
@@ -198,9 +214,11 @@ async def upload_alert(
                 "site_id": db_alert.site_id,
                 "camera_id": db_alert.camera_id,
                 "edge_pc_id": db_alert.edge_pc_id,
-                "timestamp": isoformat_winnipeg(db_alert.timestamp)
-                if db_alert.timestamp
-                else None,
+                "timestamp": (
+                    isoformat_winnipeg(db_alert.timestamp)
+                    if db_alert.timestamp
+                    else None
+                ),
             },
         )
         return db_alert

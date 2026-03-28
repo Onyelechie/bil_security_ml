@@ -4,11 +4,12 @@ from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 from .config import settings
+
 # Import model modules so they are registered on Base.metadata
 from .models import alert as _m_alert  # noqa: F401
+from .models import device as _m_device  # noqa: F401
 from .models import edge_pc as _m_edge_pc  # noqa: F401
 from .models import model_version as _m_model_version  # noqa: F401
-from .models import device as _m_device  # noqa: F401
 
 engine = create_engine(
     settings.database_url,

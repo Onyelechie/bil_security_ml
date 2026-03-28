@@ -198,8 +198,8 @@ class ServerSender:
             candidate.relative_to(shared_root_path)
             if candidate.is_file():
                 return payload
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to validate shared image path for queue: %s", e)
 
         payload.pop("image_path", None)
         return payload

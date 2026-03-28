@@ -1,12 +1,13 @@
+import argparse
 import os
 import sys
-import cv2
-import torch
 import warnings
-import argparse
-import pandas as pd
 from pathlib import Path
 from typing import List
+
+import cv2
+import pandas as pd
+import torch
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 
 # Suppress specific pytorch warnings that might clutter the CLI output
@@ -17,12 +18,11 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 
 # We extend the ModelWrapper slightly to return bounding boxes
-from benchmark.benchmark_suite import (
-    ModelWrapper,
-    YOLOWrapper,
+from benchmark.benchmark_suite import (  # noqa: E402
+    COCO_CLASSES,
     EfficientDetWrapper,
     TorchvisionSSDWrapper,
-    COCO_CLASSES,
+    YOLOWrapper,
 )
 
 OUTPUT_CSV = os.path.join(
@@ -143,8 +143,12 @@ def run_accuracy_evaluation(args):
     if not dataset_dir.exists():
         print(f"\nOops! The dataset directory '{dataset_dir}' does not exist.")
         print("To run the accuracy evaluation, you first need to:")
-        print("  1. Generate frames using the window extractor (creating 'accuracy/dataset_frames').")
-        print("  2. Label those frames and export them in YOLO format to 'accuracy/labeled_data'.")
+        print(
+            "  1. Generate frames using the window extractor (creating 'accuracy/dataset_frames')."
+        )
+        print(
+            "  2. Label those frames and export them in YOLO format to 'accuracy/labeled_data'."
+        )
         print("Please ensure your labeled data is present and try again.\n")
         return
 
@@ -201,18 +205,18 @@ def run_accuracy_evaluation(args):
     def str_to_cls_id(label_str):
         nonlocal _next_available_id
         name = label_str.lower()
-        
+
         # Standard COCO/YOLO mapping for our primary targets
         if name in ["person", "0"]:
             return 0
         if name in ["car", "vehicle", "2"]:
             return 2
-            
+
         # Deterministic mapping for other unexpected labels
         if name not in _label_registry:
             _label_registry[name] = _next_available_id
             _next_available_id += 1
-            
+
         return _label_registry[name]
 
     for model_wrapper in models_to_run:

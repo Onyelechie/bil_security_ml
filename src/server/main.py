@@ -88,7 +88,9 @@ async def lifespan(app: FastAPI):
     app.state.main_event_loop = asyncio.get_running_loop()
     app.state.dashboard_event_manager = DashboardEventManager()
 
-    app.state.log_buffer = InMemoryLogBuffer(max_entries=settings.log_buffer_max_entries)
+    app.state.log_buffer = InMemoryLogBuffer(
+        max_entries=settings.log_buffer_max_entries
+    )
     app.state.log_handler = InMemoryLogHandler(app.state.log_buffer)
     app.state.log_handler._is_bil_log_buffer_handler = True  # type: ignore[attr-defined]
     logging.getLogger().addHandler(app.state.log_handler)

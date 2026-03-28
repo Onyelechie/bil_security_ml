@@ -18,7 +18,9 @@ def list_logs(
     after_id: int | None = Query(default=None, ge=1),
     level: str | None = Query(default=None),
 ):
-    log_buffer: InMemoryLogBuffer | None = getattr(request.app.state, "log_buffer", None)
+    log_buffer: InMemoryLogBuffer | None = getattr(
+        request.app.state, "log_buffer", None
+    )
     if log_buffer is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

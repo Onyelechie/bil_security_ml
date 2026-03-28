@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import logging
 from collections import deque
 from datetime import datetime, timezone
-import logging
 from threading import Lock
 from typing import TypedDict
 

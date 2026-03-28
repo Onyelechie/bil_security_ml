@@ -1,14 +1,24 @@
-from pathlib import Path
-
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status, UploadFile, File, Form
-from fastapi.responses import FileResponse
 import asyncio
 import hashlib
 import json
 import logging
 from datetime import datetime
-from sqlalchemy.orm import Session
+from pathlib import Path
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    status,
+    UploadFile,
+    File,
+    Form,
+)
+from fastapi.responses import FileResponse
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from bil_time import isoformat_winnipeg
 
@@ -16,10 +26,10 @@ from ..config import settings
 from ..db import SessionLocal
 from ..models.alert import Alert
 from ..schemas import AlertCreate, AlertOut
+from ..services.alert_ingestion import AlertIngestionService, AlertPersistenceError
+from ..services.dashboard_events import publish_dashboard_event
 from ..services.device_auth import require_signed_device
 from ..services.edge_authorization import is_authorized_edge_pc, resolve_edge_pc_id
-from ..services.dashboard_events import publish_dashboard_event
-from ..services.alert_ingestion import AlertIngestionService, AlertPersistenceError
 
 # This router handles all endpoints related to alerts sent from edge PCs.
 # Prefix: /api/alerts
@@ -90,7 +100,9 @@ async def receive_alert(alert: AlertCreate, request: Request, db: Session = Depe
                 "site_id": db_alert.site_id,
                 "camera_id": db_alert.camera_id,
                 "edge_pc_id": db_alert.edge_pc_id,
-                "timestamp": isoformat_winnipeg(db_alert.timestamp) if db_alert.timestamp else None,
+                "timestamp": isoformat_winnipeg(db_alert.timestamp)
+                if db_alert.timestamp
+                else None,
             },
         )
         return db_alert
@@ -186,7 +198,9 @@ async def upload_alert(
                 "site_id": db_alert.site_id,
                 "camera_id": db_alert.camera_id,
                 "edge_pc_id": db_alert.edge_pc_id,
-                "timestamp": isoformat_winnipeg(db_alert.timestamp) if db_alert.timestamp else None,
+                "timestamp": isoformat_winnipeg(db_alert.timestamp)
+                if db_alert.timestamp
+                else None,
             },
         )
         return db_alert
@@ -224,9 +238,13 @@ def list_alerts(
 def get_alert_image(alert_id: str, db: Session = Depends(get_db)):
     alert = db.query(Alert).filter_by(id=alert_id).first()
     if alert is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found"
+        )
     if not alert.image_path:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert has no image")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Alert has no image"
+        )
 
     repo_root = Path(__file__).resolve().parents[3]
     image_path = Path(alert.image_path)
@@ -261,5 +279,7 @@ def get_alert_image(alert_id: str, db: Session = Depends(get_db)):
         )
 
     if not image_path.is_file():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image file not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Image file not found"
+        )
     return FileResponse(image_path)

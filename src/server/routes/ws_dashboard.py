@@ -21,9 +21,13 @@ async def dashboard_events_websocket(websocket: WebSocket) -> None:
         await websocket.close(code=4401, reason="Dashboard login required")
         return
 
-    manager: DashboardEventManager | None = getattr(websocket.app.state, "dashboard_event_manager", None)
+    manager: DashboardEventManager | None = getattr(
+        websocket.app.state, "dashboard_event_manager", None
+    )
     if manager is None:
-        await websocket.close(code=1011, reason="Dashboard event subsystem not initialized")
+        await websocket.close(
+            code=1011, reason="Dashboard event subsystem not initialized"
+        )
         return
 
     await manager.connect(websocket)

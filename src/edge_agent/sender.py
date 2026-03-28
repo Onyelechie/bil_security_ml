@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 import time
 from datetime import datetime, timezone
@@ -28,6 +29,14 @@ class ServerSender:
         self._status = "starting"
         self._status_lock = threading.Lock()
         self._session_lock = threading.Lock()
+        self._queue_lock = threading.Lock()
+        self.queue_dir = settings.offline_queue_dir
+        try:
+            os.makedirs(self.queue_dir, exist_ok=True)
+        except Exception as e:
+            logger.error(
+                "Failed to create offline queue dir '%s': %s", self.queue_dir, e
+            )
 
     def set_status(self, status: str) -> None:
         """Set the agent's status for heartbeats. This is thread-safe."""
@@ -118,8 +127,85 @@ class ServerSender:
             )
             return True
         except requests.RequestException as e:
+            status = None
+            if getattr(e, "response", None) is not None:
+                status = e.response.status_code
+
+            if status is not None and 400 <= status < 500:
+                logger.error(
+                    "Failed to send alert (client error %s); dropping: %s",
+                    status,
+                    e,
+                )
+                return False
+
             logger.error("Failed to send alert: %s", e)
+            self._save_to_queue(self._queue_payload(payload))
             return False
+
+    def _save_to_queue(self, payload: Dict[str, Any]) -> None:
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+        filename = f"alert_{timestamp}.json"
+        path = os.path.join(self.queue_dir, filename)
+        tmp_path = f"{path}.tmp"
+
+        try:
+            with self._queue_lock:
+                with open(tmp_path, "w") as f:
+                    json.dump(payload, f)
+                os.replace(tmp_path, path)
+            logger.warning("Saved alert to offline queue: %s", path)
+        except Exception as e:
+            logger.error("Failed to save alert locally: %s", e)
+            try:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except Exception:
+                pass
+
+    @staticmethod
+    def _queue_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Remove fields that are not safe to replay later.
+        For now, drop image_path because it points to an edge-local path.
+        """
+        payload = dict(payload)
+        payload.pop("image_path", None)
+        return payload
+
+    def retry_queued_alerts(self) -> None:
+        """Attempt to resend any alerts that were saved to the offline queue."""
+        with self._queue_lock:
+            files = sorted(
+                f
+                for f in os.listdir(self.queue_dir)
+                if f.startswith("alert_") and f.endswith(".json")
+            )
+        if files:
+            logger.info("Retrying %d queued alerts", len(files))
+        for filename in files:
+            path = os.path.join(self.queue_dir, filename)
+            try:
+                with self._queue_lock:
+                    with open(path, "r") as f:
+                        payload = json.load(f)
+
+                url = f"{self.settings.server_base_url}/api/alerts"
+
+                with self._session_lock:
+                    resp = self._session.post(url, json=payload, timeout=5)
+
+                resp.raise_for_status()
+
+                with self._queue_lock:
+                    os.remove(path)
+                logger.info(
+                    "Successfully resent queued alert and removed file: %s", path
+                )
+
+            except Exception as e:
+                logger.error("Error processing queued alert file %s: %s", path, e)
+                break  # Stop processing further files if one fails to avoid rapid retries
 
     @staticmethod
     def _validate_detections(detections: List[Dict[str, Any]]) -> bool:

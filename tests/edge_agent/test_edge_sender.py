@@ -1,6 +1,7 @@
 # tests/test_sender.py
 import base64
 import json
+import os
 import time
 from datetime import datetime
 from unittest.mock import MagicMock
@@ -15,7 +16,7 @@ from edge_agent.sender import ServerSender
 
 
 @pytest.fixture
-def settings() -> EdgeSettings:
+def settings(tmp_path) -> EdgeSettings:
     """Provides a standard EdgeSettings for testing."""
     signing_key = Ed25519PrivateKey.generate()
     private_key_b64 = base64.b64encode(signing_key.private_bytes_raw()).decode("ascii")
@@ -26,6 +27,7 @@ def settings() -> EdgeSettings:
         site_name="Test Site",
         site_id="site-1",
         device_private_key_b64=private_key_b64,
+        offline_queue_dir=str(tmp_path / "offline_queue"),
     )
 
 
@@ -124,6 +126,9 @@ def test_send_alert_structure(sender: ServerSender):
 
 
 def test_send_heartbeat_handles_server_error(sender, mocker):
+    """
+    Test that send_heartbeat properly handles a server error and logs it.
+    """
     mock_resp = MagicMock()
     mock_resp.raise_for_status.side_effect = requests.HTTPError("500 Server Error")
     sender._session.post.return_value = mock_resp
@@ -141,6 +146,9 @@ def test_send_heartbeat_handles_server_error(sender, mocker):
 
 
 def test_send_alert_handles_request_exception(sender, mocker):
+    """
+    Test that send_alert properly handles a requests exception and logs it.
+    """
     sender._session.post.side_effect = requests.RequestException("Connection timed out")
 
     mocked_logger = mocker.patch("edge_agent.sender.logger")
@@ -155,9 +163,14 @@ def test_send_alert_handles_request_exception(sender, mocker):
         "Failed to send alert" in str(call.args[0])
         for call in mocked_logger.error.call_args_list
     )
+    files = os.listdir(sender.queue_dir)
+    assert any(f.startswith("alert_") and f.endswith(".json") for f in files)
 
 
 def test_send_alert_rejects_invalid_detections(sender, mocker):
+    """
+    Test that send_alert rejects invalid detections and logs an error.
+    """
     mocked_logger = mocker.patch("edge_agent.sender.logger")
 
     success = sender.send_alert(camera_id="cam-3", detections=[{"class": "person"}])
@@ -175,3 +188,48 @@ def test_send_heartbeat_requires_private_key(settings: EdgeSettings, mocker):
 
     assert success is False
     sender._session.post.assert_not_called()
+
+def test_send_alert_drops_on_4xx(sender: ServerSender):
+    """
+    Test that send_alert does not queue alerts on client errors (4xx)
+    and logs appropriately.
+    """
+    mock_resp = MagicMock()
+    mock_resp.status_code = 400
+    http_err = requests.HTTPError("400 Bad Request")
+    http_err.response = mock_resp
+    sender._session.post.return_value = mock_resp
+    mock_resp.raise_for_status.side_effect = http_err
+
+    detections = [{"class": "person", "confidence": 0.9}]
+    success = sender.send_alert(camera_id="cam-1", detections=detections)
+
+    assert success is False
+    assert os.listdir(sender.queue_dir) == []
+
+
+def test_retry_queued_alerts_resends_and_deletes(sender: ServerSender, tmp_path):
+    """
+    Test that retry_queued_alerts resends queued alerts
+    and deletes them on success.
+    """
+    payload = {
+        "site_id": "site-1",
+        "edge_pc_id": "test-edge-1",
+        "camera_id": "cam-1",
+        "timestamp": "2026-01-01T00:00:00Z",
+        "detections": [{"class": "person", "confidence": 0.9}],
+        "image_path": "edge-local/path.jpg",
+    }
+    queue_file = os.path.join(sender.queue_dir, "alert_20260101_000000_000000.json")
+    with open(queue_file, "w") as f:
+        json.dump(payload, f)
+
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status.return_value = None
+    sender._session.post.return_value = mock_resp
+
+    sender.retry_queued_alerts()
+
+    sender._session.post.assert_called_once()
+    assert not os.path.exists(queue_file)

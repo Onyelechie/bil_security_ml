@@ -46,12 +46,18 @@ class DashboardEventManager:
                 for websocket in dead:
                     self._clients.discard(websocket)
 
-    def broadcast_threadsafe(self, loop: asyncio.AbstractEventLoop, event: dict[str, Any]) -> None:
+    def broadcast_threadsafe(
+        self, loop: asyncio.AbstractEventLoop, event: dict[str, Any]
+    ) -> None:
         loop.call_soon_threadsafe(lambda: asyncio.create_task(self.broadcast(event)))
 
 
-def publish_dashboard_event(app: FastAPI, event_type: str, payload: dict[str, Any]) -> None:
-    manager: DashboardEventManager | None = getattr(app.state, "dashboard_event_manager", None)
+def publish_dashboard_event(
+    app: FastAPI, event_type: str, payload: dict[str, Any]
+) -> None:
+    manager: DashboardEventManager | None = getattr(
+        app.state, "dashboard_event_manager", None
+    )
     loop: asyncio.AbstractEventLoop | None = getattr(app.state, "main_event_loop", None)
     if manager is None or loop is None:
         return

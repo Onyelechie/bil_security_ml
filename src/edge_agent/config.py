@@ -29,6 +29,7 @@ class EdgeSettings(BaseSettings):
     # --- Periodic timers (seconds) ---
     heartbeat_interval_sec: int = 60  # how often we send "I'm alive" to the server
     update_interval_sec: int = 300  # how often we check for model/config updates
+    retry_interval_sec: int = 30  # how often we retry sending queued alerts
 
     # --- Logging ---
     log_level: str = "INFO"
@@ -72,6 +73,9 @@ class EdgeSettings(BaseSettings):
     window_target_fps: float = 5.0  # selection sampling rate
     window_max_frames: int = 40  # cap selected frames
     window_wait_grace_sec: float = 1.5  # extra wait time before calling it PARTIAL
+
+    # --- Offline alert queue ---
+    offline_queue_dir: str = "storage/offline_queue"
 
 
 settings = EdgeSettings()

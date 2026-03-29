@@ -10,12 +10,8 @@ import torch
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 
 # We extend the ModelWrapper slightly to return bounding boxes
-from benchmark.benchmark_suite import COCO_CLASSES
-from benchmark.benchmark_suite import (
-    EfficientDetWrapper,
-    TorchvisionSSDWrapper,
-    YOLOWrapper,
-)
+from benchmark.benchmark_suite import (COCO_CLASSES, EfficientDetWrapper,
+                                       TorchvisionSSDWrapper, YOLOWrapper)
 
 project_root = Path(__file__).resolve().parents[1]
 

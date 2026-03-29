@@ -229,7 +229,9 @@ class ServerSender:
                 url = f"{self.settings.server_base_url}/api/alerts"
 
                 body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
-                headers = self._signed_headers(body, edge_pc_id=self.settings.edge_pc_id)
+                headers = self._signed_headers(
+                    body, edge_pc_id=self.settings.edge_pc_id
+                )
                 if headers is None:
                     logger.error(
                         "Cannot resend queued alert without signing credentials: %s",
@@ -239,7 +241,9 @@ class ServerSender:
                     continue
 
                 with self._session_lock:
-                    resp = self._session.post(url, data=body, headers=headers, timeout=5)
+                    resp = self._session.post(
+                        url, data=body, headers=headers, timeout=5
+                    )
 
                 resp.raise_for_status()
 

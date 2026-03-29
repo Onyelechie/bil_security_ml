@@ -14,14 +14,13 @@ from bil_time import ensure_winnipeg, now_in_winnipeg
 from ..db import SessionLocal
 from ..schemas import AlertCreate
 from ..services.dashboard_events import publish_dashboard_event
-from ..services.edge_authorization import is_authorized_edge_pc, resolve_edge_pc_id
+from ..services.edge_authorization import (is_authorized_edge_pc,
+                                           resolve_edge_pc_id)
 from ..services.image_storage import ImageStorageError, ImageStorageService
-from ..services.ws_alert_dispatcher import (
-    AlertDispatchFailure,
-    AlertQueueFullError,
-    AlertValidationFailure,
-    WebSocketAlertDispatcher,
-)
+from ..services.ws_alert_dispatcher import (AlertDispatchFailure,
+                                            AlertQueueFullError,
+                                            AlertValidationFailure,
+                                            WebSocketAlertDispatcher)
 from ..services.ws_connection_manager import WebSocketConnectionManager
 
 router = APIRouter(tags=["alerts-websocket"])

@@ -25,7 +25,8 @@ from pathlib import Path
 import requests
 
 try:
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import \
+        Ed25519PrivateKey
 except Exception as exc:  # pragma: no cover - runtime dependency check
     raise SystemExit(
         "Missing dependency: cryptography is required for request signing. "

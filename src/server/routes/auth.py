@@ -2,15 +2,13 @@
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Security, status
-from fastapi.security import (
-    HTTPAuthorizationCredentials,
-    HTTPBearer,
-    OAuth2PasswordRequestForm,
-)
+from fastapi.security import (HTTPAuthorizationCredentials, HTTPBearer,
+                              OAuth2PasswordRequestForm)
 from pydantic import BaseModel
 
 from ..config import settings
-from ..services.auth import TokenError, create_access_token, verify_access_token
+from ..services.auth import (TokenError, create_access_token,
+                             verify_access_token)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 security = HTTPBearer()

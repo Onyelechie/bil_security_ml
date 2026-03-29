@@ -5,17 +5,8 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    File,
-    Form,
-    HTTPException,
-    Query,
-    Request,
-    UploadFile,
-    status,
-)
+from fastapi import (APIRouter, Depends, File, Form, HTTPException, Query,
+                     Request, UploadFile, status)
 from fastapi.responses import FileResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -26,10 +17,12 @@ from ..config import settings
 from ..db import SessionLocal
 from ..models.alert import Alert
 from ..schemas import AlertCreate, AlertOut
-from ..services.alert_ingestion import AlertIngestionService, AlertPersistenceError
+from ..services.alert_ingestion import (AlertIngestionService,
+                                        AlertPersistenceError)
 from ..services.dashboard_events import publish_dashboard_event
 from ..services.device_auth import require_signed_device
-from ..services.edge_authorization import is_authorized_edge_pc, resolve_edge_pc_id
+from ..services.edge_authorization import (is_authorized_edge_pc,
+                                           resolve_edge_pc_id)
 
 # This router handles all endpoints related to alerts sent from edge PCs.
 # Prefix: /api/alerts

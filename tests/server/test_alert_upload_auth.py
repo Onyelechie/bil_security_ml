@@ -5,11 +5,8 @@ from zoneinfo import ZoneInfo
 from fastapi.testclient import TestClient
 
 from server.main import app
-from tests.server.device_auth_helpers import (
-    build_signed_upload_headers,
-    enroll_device,
-    register_edge,
-)
+from tests.server.device_auth_helpers import (build_signed_upload_headers,
+                                              enroll_device, register_edge)
 
 
 def _upload_payload(edge_pc_id: str) -> tuple[dict, dict, bytes]:

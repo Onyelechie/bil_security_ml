@@ -116,8 +116,9 @@ class ServerSender:
             "timestamp": isoformat_winnipeg(timestamp or now_in_winnipeg()),
             "detections": detections,
         }
-        if image_path:
-            payload["image_path"] = image_path
+        shared_image_path = self._resolve_shared_image_path(image_path)
+        if shared_image_path:
+            payload["image_path"] = shared_image_path
         body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         headers = self._signed_headers(body, edge_pc_id=self.settings.edge_pc_id)
         if headers is None:
@@ -179,22 +180,22 @@ class ServerSender:
         resolves within that root and the file exists.
         """
         payload = dict(payload)
-        image_path = payload.get("image_path")
-        if not image_path:
-            return payload
+        shared_image_path = self._resolve_shared_image_path(payload.get("image_path"))
+        if shared_image_path:
+            payload["image_path"] = shared_image_path
+        else:
+            payload.pop("image_path", None)
+        return payload
 
+    def _resolve_shared_image_path(self, image_path: Optional[str]) -> Optional[str]:
+        if not image_path:
+            return None
         shared_root = self.settings.shared_storage_root.strip()
         if not shared_root:
-            payload.pop("image_path", None)
-            return payload
+            return None
 
         try:
-            shared_root_path = Path(shared_root)
-            if not shared_root_path.is_absolute():
-                shared_root_path = shared_root_path.resolve()
-            else:
-                shared_root_path = shared_root_path.resolve()
-
+            shared_root_path = Path(shared_root).resolve()
             candidate = Path(image_path)
             if not candidate.is_absolute():
                 candidate = (shared_root_path / candidate).resolve()
@@ -203,12 +204,10 @@ class ServerSender:
 
             candidate.relative_to(shared_root_path)
             if candidate.is_file():
-                return payload
+                return str(candidate)
         except Exception as e:
-            logger.debug("Failed to validate shared image path for queue: %s", e)
-
-        payload.pop("image_path", None)
-        return payload
+            logger.debug("Failed to validate shared image path: %s", e)
+        return None
 
     def retry_queued_alerts(self) -> None:
         """Attempt to resend any alerts that were saved to the offline queue."""
@@ -229,8 +228,18 @@ class ServerSender:
 
                 url = f"{self.settings.server_base_url}/api/alerts"
 
+                body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+                headers = self._signed_headers(body, edge_pc_id=self.settings.edge_pc_id)
+                if headers is None:
+                    logger.error(
+                        "Cannot resend queued alert without signing credentials: %s",
+                        path,
+                    )
+                    self._quarantine_file(path, "missing_signature")
+                    continue
+
                 with self._session_lock:
-                    resp = self._session.post(url, json=payload, timeout=5)
+                    resp = self._session.post(url, data=body, headers=headers, timeout=5)
 
                 resp.raise_for_status()
 

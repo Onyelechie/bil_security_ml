@@ -128,6 +128,66 @@ def test_send_alert_structure(sender: ServerSender):
     mock_resp.raise_for_status.assert_called_once()
 
 
+def test_send_alert_omits_image_path_without_shared_root(
+    settings: EdgeSettings, tmp_path, mocker
+):
+    sender = ServerSender(settings)
+    sender._session = mocker.MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status.return_value = None
+    sender._session.post.return_value = mock_resp
+
+    image_path = tmp_path / "img.jpg"
+    image_path.write_bytes(b"test")
+
+    success = sender.send_alert(
+        camera_id="cam-1",
+        detections=[{"class": "person", "confidence": 0.9}],
+        image_path=str(image_path),
+    )
+
+    assert success is True
+    _, kwargs = sender._session.post.call_args
+    payload = json.loads(kwargs["data"].decode("utf-8"))
+    assert "image_path" not in payload
+
+
+def test_send_alert_includes_image_path_with_shared_root(tmp_path, mocker):
+    signing_key = Ed25519PrivateKey.generate()
+    private_key_b64 = base64.b64encode(signing_key.private_bytes_raw()).decode("ascii")
+    shared_root = tmp_path / "shared"
+    shared_root.mkdir()
+    image_path = shared_root / "img.jpg"
+    image_path.write_bytes(b"test")
+
+    settings = EdgeSettings(
+        server_base_url="http://mock-server",
+        edge_pc_id="test-edge-1",
+        device_id="test-edge-1",
+        site_name="Test Site",
+        site_id="site-1",
+        device_private_key_b64=private_key_b64,
+        offline_queue_dir=str(tmp_path / "offline_queue"),
+        shared_storage_root=str(shared_root),
+    )
+    sender = ServerSender(settings)
+    sender._session = mocker.MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status.return_value = None
+    sender._session.post.return_value = mock_resp
+
+    success = sender.send_alert(
+        camera_id="cam-1",
+        detections=[{"class": "person", "confidence": 0.9}],
+        image_path=str(image_path),
+    )
+
+    assert success is True
+    _, kwargs = sender._session.post.call_args
+    payload = json.loads(kwargs["data"].decode("utf-8"))
+    assert payload["image_path"] == str(image_path)
+
+
 def test_send_heartbeat_handles_server_error(sender, mocker):
     """
     Test that send_heartbeat properly handles a server error and logs it.
@@ -304,6 +364,40 @@ def test_retry_queued_alerts_quarantines_on_4xx_and_continues(sender: ServerSend
     assert sender._session.post.call_count == 2
     assert not os.path.exists(second_file)
 
+    bad_dir = os.path.join(sender.queue_dir, "bad")
+    quarantined = [
+        f for f in os.listdir(bad_dir) if f.startswith("alert_20260101_000000_000000")
+    ]
+    assert quarantined
+
+
+def test_retry_queued_alerts_quarantines_when_signature_missing(
+    settings: EdgeSettings, tmp_path, mocker
+):
+    sender = ServerSender(
+        settings.model_copy(
+            update={
+                "device_private_key_b64": "",
+                "offline_queue_dir": str(tmp_path / "offline_queue"),
+            }
+        )
+    )
+    sender._session = mocker.MagicMock()
+
+    payload = {
+        "site_id": "site-1",
+        "edge_pc_id": "test-edge-1",
+        "camera_id": "cam-1",
+        "timestamp": "2026-01-01T00:00:00Z",
+        "detections": [{"class": "person", "confidence": 0.9}],
+    }
+    queue_file = os.path.join(sender.queue_dir, "alert_20260101_000000_000000.json")
+    with open(queue_file, "w") as f:
+        json.dump(payload, f)
+
+    sender.retry_queued_alerts()
+
+    sender._session.post.assert_not_called()
     bad_dir = os.path.join(sender.queue_dir, "bad")
     quarantined = [
         f for f in os.listdir(bad_dir) if f.startswith("alert_20260101_000000_000000")

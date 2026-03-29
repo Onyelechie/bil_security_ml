@@ -106,6 +106,7 @@ Provisioning rule:
 - When set, queued alerts keep `image_path` only if the file exists and resolves under this root.
 - Queued alerts that are invalid JSON or rejected with 4xx are quarantined under `OFFLINE_QUEUE_DIR/bad/`.
 - Quarantined payloads are deleted after `QUEUE_QUARANTINE_RETENTION_DAYS` (default 7).
+- `image_path` may be absolute or relative; when shared storage is enabled it must resolve within `SHARED_STORAGE_ROOT`.
 
 FFmpeg note:
 - The edge agent uses `imageio-ffmpeg`, which provides an ffmpeg binary automatically (no separate system ffmpeg install required).

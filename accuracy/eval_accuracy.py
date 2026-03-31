@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 import warnings
 from pathlib import Path
 from typing import List
@@ -9,11 +10,13 @@ import pandas as pd
 import torch
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 
-# We extend the ModelWrapper slightly to return bounding boxes
-from benchmark.benchmark_suite import (COCO_CLASSES, EfficientDetWrapper,
-                                       TorchvisionSSDWrapper, YOLOWrapper)
-
 project_root = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(project_root / "src"))
+
+# We extend the ModelWrapper slightly to return bounding boxes
+from edge_agent.models import COCO_CLASSES, YOLOWrapper  # noqa: E402
+from edge_agent.models.efficientdet import EfficientDetWrapper  # noqa: E402
+from edge_agent.models.ssd import TorchvisionSSDWrapper  # noqa: E402
 
 # Suppress specific pytorch warnings that might clutter the CLI output
 warnings.filterwarnings("ignore", category=UserWarning)

@@ -111,6 +111,10 @@ Provisioning rule:
 FFmpeg note:
 - The edge agent uses `imageio-ffmpeg`, which provides an ffmpeg binary automatically (no separate system ffmpeg install required).
 
+Matplotlib note (accuracy eval):
+- If `accuracy/eval_accuracy.py` hangs or errors with a Matplotlib cache permission issue on Windows,
+  set `MPLCONFIGDIR` to a writable folder, e.g. `$env:MPLCONFIGDIR="$env:TEMP\mpl-cache"`.
+
 ### Database Migrations
 
 This project uses Alembic for database schema migrations. If you change any models, you must generate and apply a migration:

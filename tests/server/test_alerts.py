@@ -42,7 +42,9 @@ def test_receive_alert():
     assert data["detections"][1]["class"] == "vehicle"
     assert "id" in data
     returned_ts = datetime.fromisoformat(data["timestamp"])
-    assert returned_ts.utcoffset() == ZoneInfo("America/Winnipeg").utcoffset(returned_ts)
+    assert returned_ts.utcoffset() == ZoneInfo("America/Winnipeg").utcoffset(
+        returned_ts
+    )
 
 
 def test_list_alerts():

@@ -1,8 +1,9 @@
+import base64
 from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-import base64
 
 from ..db import SessionLocal
 from ..models.device import Device
@@ -72,7 +73,9 @@ def get_device(
 ):
     d = db.query(Device).filter_by(device_id=device_id).first()
     if not d:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Device not found"
+        )
     return {
         "device_id": d.device_id,
         "public_key_b64": d.public_key_b64,
@@ -89,7 +92,9 @@ def revoke_device(
 ):
     d = db.query(Device).filter_by(device_id=device_id).first()
     if not d:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Device not found"
+        )
     if not d.active:
         return {
             "device_id": d.device_id,
@@ -100,7 +105,11 @@ def revoke_device(
     d.revoked_at = datetime.utcnow()
     db.add(d)
     db.commit()
-    return {"device_id": d.device_id, "active": d.active, "revoked_at": d.revoked_at.isoformat()}
+    return {
+        "device_id": d.device_id,
+        "active": d.active,
+        "revoked_at": d.revoked_at.isoformat(),
+    }
 
 
 @router.post("/{device_id}/rotate", status_code=status.HTTP_200_OK)
@@ -123,7 +132,9 @@ def rotate_device(
 
     d = db.query(Device).filter_by(device_id=device_id).first()
     if not d:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Device not found"
+        )
     d.public_key_b64 = payload.public_key_b64
     d.last_key_rotation_at = datetime.utcnow()
     db.add(d)

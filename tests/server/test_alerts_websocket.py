@@ -106,7 +106,9 @@ def test_websocket_alert_meta_then_binary_ingestion_ack():
                 with client.websocket_connect("/ws/alerts") as websocket:
                     websocket.receive_json()
                     websocket.send_json(
-                        _alert_meta_frame("edge-ws-bin-1", "site_ws_bin_1", "cam_ws_bin_1")
+                        _alert_meta_frame(
+                            "edge-ws-bin-1", "site_ws_bin_1", "cam_ws_bin_1"
+                        )
                     )
                     meta_ack = websocket.receive_json()
                     assert meta_ack["type"] == "meta_received"
@@ -199,7 +201,9 @@ def test_websocket_rejects_unregistered_edge_sender():
         with client.websocket_connect("/ws/alerts") as websocket:
             websocket.receive_json()
             websocket.send_json(
-                _alert_payload("edge-not-registered-ws", "site_ws_unauth", "cam_ws_unauth")
+                _alert_payload(
+                    "edge-not-registered-ws", "site_ws_unauth", "cam_ws_unauth"
+                )
             )
             err = websocket.receive_json()
             assert err["type"] == "error"

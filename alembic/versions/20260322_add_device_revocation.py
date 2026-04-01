@@ -4,9 +4,11 @@ Revision ID: 20260322_add_device_revocation
 Revises: merge_heads_20260223
 Create Date: 2026-03-22 00:00:00.000000
 """
-from alembic import op
+
 import sqlalchemy as sa
 from sqlalchemy import inspect
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "20260322_add_device_revocation"
@@ -29,7 +31,9 @@ def upgrade() -> None:
             sa.Column("last_key_rotation_at", sa.DateTime(), nullable=True),
             sa.PrimaryKeyConstraint("device_id"),
         )
-        op.create_index(op.f("ix_devices_device_id"), "devices", ["device_id"], unique=False)
+        op.create_index(
+            op.f("ix_devices_device_id"), "devices", ["device_id"], unique=False
+        )
         return
     columns = {col["name"] for col in inspector.get_columns("devices")}
     if "revoked_at" not in columns:

@@ -112,7 +112,9 @@ def run_benchmark(args):
 
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
-            while cap.isOpened() and (args.max_frames <= 0 or frame_count < args.max_frames):
+            while cap.isOpened() and (
+                args.max_frames <= 0 or frame_count < args.max_frames
+            ):
                 start_frame_time = time.time()
                 ret, frame = cap.read()
                 if not ret:
@@ -170,9 +172,7 @@ def run_benchmark(args):
                         "Resolution": (
                             "High"
                             if "HighRes" in video_path
-                            else "Low"
-                            if "LowRes" in video_path
-                            else "Unknown"
+                            else "Low" if "LowRes" in video_path else "Unknown"
                         ),
                     }
                 )
@@ -238,7 +238,10 @@ if __name__ == "__main__":
     )
     parser.add_argument("--warmup", type=int, default=DEFAULT_WARMUP, help="Warmup.")
     parser.add_argument(
-        "--max-frames", type=int, default=DEFAULT_MAX_FRAMES, help="Max frames (0 or less for all)."
+        "--max-frames",
+        type=int,
+        default=DEFAULT_MAX_FRAMES,
+        help="Max frames (0 or less for all).",
     )
     parser.add_argument(
         "--confidence", type=float, default=DEFAULT_CONF, help="Conf threshold."

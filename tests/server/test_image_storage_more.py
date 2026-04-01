@@ -1,9 +1,8 @@
 import os
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 from src.server.services.image_storage import ImageStorageService
 from tests.temp_dirs import repo_temp_dir
-
 
 PNG_1X1 = bytes.fromhex(
     "89504E470D0A1A0A0000000D49484452000000010000000108060000001F15C489"

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query, Request, status, Depends
-
-from .auth import get_current_admin
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from ..schemas import ServerLogListOut
 from ..services.log_buffer import InMemoryLogBuffer
+from .auth import get_current_admin
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 
@@ -18,7 +17,9 @@ def list_logs(
     after_id: int | None = Query(default=None, ge=1),
     level: str | None = Query(default=None),
 ):
-    log_buffer: InMemoryLogBuffer | None = getattr(request.app.state, "log_buffer", None)
+    log_buffer: InMemoryLogBuffer | None = getattr(
+        request.app.state, "log_buffer", None
+    )
     if log_buffer is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

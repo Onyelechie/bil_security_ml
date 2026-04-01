@@ -1,29 +1,25 @@
+import argparse
 import os
 import sys
-import cv2
-import torch
 import warnings
-import argparse
-import pandas as pd
 from pathlib import Path
 from typing import List
+
+import cv2
+import pandas as pd
+import torch
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
+
+project_root = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(project_root / "src"))
+
+# We extend the ModelWrapper slightly to return bounding boxes
+from edge_agent.models import COCO_CLASSES, YOLOWrapper  # noqa: E402
+from edge_agent.models.efficientdet import EfficientDetWrapper  # noqa: E402
+from edge_agent.models.ssd import TorchvisionSSDWrapper  # noqa: E402
 
 # Suppress specific pytorch warnings that might clutter the CLI output
 warnings.filterwarnings("ignore", category=UserWarning)
-
-# Ensure benchmark models are importable
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, project_root)
-
-# We extend the ModelWrapper slightly to return bounding boxes
-from benchmark.benchmark_suite import (
-    ModelWrapper,
-    YOLOWrapper,
-    EfficientDetWrapper,
-    TorchvisionSSDWrapper,
-    COCO_CLASSES,
-)
 
 OUTPUT_CSV = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "accuracy_results.csv"
@@ -143,8 +139,12 @@ def run_accuracy_evaluation(args):
     if not dataset_dir.exists():
         print(f"\nOops! The dataset directory '{dataset_dir}' does not exist.")
         print("To run the accuracy evaluation, you first need to:")
-        print("  1. Generate frames using the window extractor (creating 'accuracy/dataset_frames').")
-        print("  2. Label those frames and export them in YOLO format to 'accuracy/labeled_data'.")
+        print(
+            "  1. Generate frames using the window extractor (creating 'accuracy/dataset_frames')."
+        )
+        print(
+            "  2. Label those frames and export them in YOLO format to 'accuracy/labeled_data'."
+        )
         print("Please ensure your labeled data is present and try again.\n")
         return
 
@@ -166,16 +166,16 @@ def run_accuracy_evaluation(args):
     print(f"Loaded dataset: {len(image_files)} test images found.")
 
     # 1. Setup Models
-    script_dir = os.path.join(project_root, "benchmark")
+    script_dir = project_root / "benchmark"
     available_models = {
         "YOLOv8-Nano": YOLOWrapper(
-            "YOLOv8-Nano", os.path.join(script_dir, "yolov8n.pt"), args.input_size
+            "YOLOv8-Nano", str(script_dir / "yolov8n.pt"), args.input_size
         ),
         "YOLOv8-Small": YOLOWrapper(
-            "YOLOv8-Small", os.path.join(script_dir, "yolov8s.pt"), args.input_size
+            "YOLOv8-Small", str(script_dir / "yolov8s.pt"), args.input_size
         ),
         "YOLOv5-Nano": YOLOWrapper(
-            "YOLOv5-Nano", os.path.join(script_dir, "yolov5n.pt"), args.input_size
+            "YOLOv5-Nano", str(script_dir / "yolov5n.pt"), args.input_size
         ),
         "EfficientDet-D0": EfficientDetWrapper("efficientdet_d0", args.input_size),
         "SSD-MobileNet": TorchvisionSSDWrapper("SSD-MobileNet", args.input_size),
@@ -201,18 +201,18 @@ def run_accuracy_evaluation(args):
     def str_to_cls_id(label_str):
         nonlocal _next_available_id
         name = label_str.lower()
-        
+
         # Standard COCO/YOLO mapping for our primary targets
         if name in ["person", "0"]:
             return 0
         if name in ["car", "vehicle", "2"]:
             return 2
-            
+
         # Deterministic mapping for other unexpected labels
         if name not in _label_registry:
             _label_registry[name] = _next_available_id
             _next_available_id += 1
-            
+
         return _label_registry[name]
 
     for model_wrapper in models_to_run:

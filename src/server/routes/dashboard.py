@@ -138,27 +138,39 @@ def dashboard_login(request: Request, password: str = Form(...)):
 
 @router.post("/dashboard/logout", include_in_schema=False)
 def dashboard_logout():
-    response = RedirectResponse(url="/dashboard/login", status_code=status.HTTP_303_SEE_OTHER)
+    response = RedirectResponse(
+        url="/dashboard/login", status_code=status.HTTP_303_SEE_OTHER
+    )
     response.delete_cookie(_DASHBOARD_COOKIE)
     return response
 
 
 @router.get("/dashboard/assets/{asset_name}", include_in_schema=False)
-def dashboard_asset(asset_name: str, _subject: str = Cookie(default=None, alias=_DASHBOARD_COOKIE)):
+def dashboard_asset(
+    asset_name: str, _subject: str = Cookie(default=None, alias=_DASHBOARD_COOKIE)
+):
     require_dashboard_session(_subject)
     if asset_name not in _ALLOWED_ASSETS:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found"
+        )
     return FileResponse(_STATIC_ROOT / asset_name)
 
 
 @router.get("/dashboard", include_in_schema=False)
-def dashboard_index(dashboard_session: str | None = Cookie(default=None, alias=_DASHBOARD_COOKIE)):
+def dashboard_index(
+    dashboard_session: str | None = Cookie(default=None, alias=_DASHBOARD_COOKIE)
+):
     if not dashboard_session:
-        return RedirectResponse(url="/dashboard/login", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(
+            url="/dashboard/login", status_code=status.HTTP_303_SEE_OTHER
+        )
     try:
         verify_access_token(dashboard_session)
     except TokenError:
-        response = RedirectResponse(url="/dashboard/login", status_code=status.HTTP_303_SEE_OTHER)
+        response = RedirectResponse(
+            url="/dashboard/login", status_code=status.HTTP_303_SEE_OTHER
+        )
         response.delete_cookie(_DASHBOARD_COOKIE)
         return response
     return FileResponse(_STATIC_ROOT / "index.html")

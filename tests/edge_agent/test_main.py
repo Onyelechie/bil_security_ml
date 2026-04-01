@@ -1,5 +1,6 @@
 import runpy
 import sys
+import threading
 
 import pytest
 import uvicorn
@@ -171,6 +172,59 @@ def test_run_returns_1_on_unexpected_exception(monkeypatch):
     monkeypatch.setattr(m, "build_parser", mock_build_parser)
     code = m.run(argv=[])
     assert code == 1
+
+
+def test_run_starts_retry_thread(monkeypatch):
+    import edge_agent.main as m
+
+    created = []
+
+    class DummyThread:
+        def __init__(self, *args, **kwargs):
+            created.append(kwargs)
+
+        def start(self):
+            return None
+
+        def join(self, timeout=None):
+            return None
+
+        def is_alive(self):
+            return False
+
+    monkeypatch.setattr("edge_agent.main.threading.Thread", DummyThread)
+    cfg = EdgeSettings(retry_interval_sec=123)
+
+    code = run(argv=[], cfg=cfg)
+
+    assert code == 0
+    assert any(
+        kw.get("target") == m.retry_loop
+        and len(kw.get("args", ())) >= 2
+        and kw.get("args", ())[1] == 123
+        for kw in created
+    )
+
+
+def test_retry_loop_handles_exception():
+    import edge_agent.main as m
+
+    stop_event = threading.Event()
+
+    class FakeSender:
+        def __init__(self):
+            self.calls = 0
+
+        def retry_queued_alerts(self):
+            self.calls += 1
+            stop_event.set()
+            raise RuntimeError("boom")
+
+    sender = FakeSender()
+
+    m.retry_loop(sender, 0, stop_event)
+
+    assert sender.calls == 1
 
 
 def test_module_entrypoint_exits_cleanly(monkeypatch):

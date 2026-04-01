@@ -1,6 +1,7 @@
 import cv2
 import torch
-from .base import ModelWrapper, COCO_CLASSES
+
+from .base import COCO_CLASSES, ModelWrapper
 
 
 class TorchvisionSSDWrapper(ModelWrapper):
@@ -20,9 +21,8 @@ class TorchvisionSSDWrapper(ModelWrapper):
     def load(self):
         print(f"Loading {self.name}...")
         from torchvision.models.detection import (
-            ssdlite320_mobilenet_v3_large,
             SSDLite320_MobileNet_V3_Large_Weights,
-        )
+            ssdlite320_mobilenet_v3_large)
 
         self.weights = SSDLite320_MobileNet_V3_Large_Weights.DEFAULT
         self.model = ssdlite320_mobilenet_v3_large(weights=self.weights)

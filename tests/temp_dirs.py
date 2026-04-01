@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import shutil
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
-import uuid
-
 
 _ROOT = Path(__file__).resolve().parents[1] / ".pytest-files"
 _ROOT.mkdir(exist_ok=True)

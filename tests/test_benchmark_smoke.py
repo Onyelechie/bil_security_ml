@@ -69,7 +69,9 @@ def test_benchmark_smoke(monkeypatch):
             assert col in df.columns, f"Missing column: {col}"
 
         assert len(df) == 5, f"Expected 5 rows, got {len(df)}"
-        assert (df["Person_Detections"] > 0).all(), "Expected person detections in all rows"
+        assert (
+            df["Person_Detections"] > 0
+        ).all(), "Expected person detections in all rows"
 
         with open(output_sum, "r") as f:
             content = f.read()

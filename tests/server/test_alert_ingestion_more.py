@@ -1,10 +1,10 @@
 from datetime import datetime
 from pathlib import Path
 
-from src.server.services.alert_ingestion import AlertIngestionService
-from src.server.schemas import AlertCreate, Detection
-from src.server.db import SessionLocal
 from src.server.config import settings
+from src.server.db import SessionLocal
+from src.server.schemas import AlertCreate, Detection
+from src.server.services.alert_ingestion import AlertIngestionService
 from tests.temp_dirs import repo_temp_dir
 
 

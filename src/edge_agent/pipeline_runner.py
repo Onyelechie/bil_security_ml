@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timezone
-from typing import List, Optional, Sequence, Union
+from typing import List, Optional, Sequence, Union, TYPE_CHECKING
 from uuid import uuid4
 
 import cv2
@@ -15,10 +15,13 @@ from .video.ring_buffer import FrameItem
 
 logger = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from .config import EdgeSettings
+
 
 class PipelineRunner:
     """
-    Connects frame extraction → ML evaluation → alert sending.
+    Connects frame extraction -> ML evaluation -> alert sending.
     """
 
     def __init__(
@@ -32,6 +35,25 @@ class PipelineRunner:
         self.sender = sender
         self.image_output_dir = image_output_dir
         self.save_images = save_images
+
+    @classmethod
+    def from_settings(
+        cls,
+        cfg: "EdgeSettings",
+        sender: ServerSender,
+        image_output_dir: Optional[str] = "storage/ws_alert_images",
+        save_images: bool = True,
+    ) -> "PipelineRunner":
+        """
+        Build a pipeline runner using detector settings from EdgeSettings.
+        """
+        evaluator = MLEvaluator.from_settings(cfg)
+        return cls(
+            evaluator=evaluator,
+            sender=sender,
+            image_output_dir=image_output_dir,
+            save_images=save_images,
+        )
 
     def process_frames(
         self,
@@ -67,7 +89,7 @@ class PipelineRunner:
         result = self.evaluator.evaluate_frames(frames)
 
         if result is None:
-            logger.debug("No valid detection → no alert")
+            logger.debug("No valid detection -> no alert")
             return
 
         detection = result["detection"]

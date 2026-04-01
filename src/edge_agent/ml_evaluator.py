@@ -1,5 +1,6 @@
 import os
 import logging
+from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
@@ -8,6 +9,8 @@ from .models import ModelRegistry, YOLOWrapper
 
 logger = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from .config import EdgeSettings
 # Bounding box colors (BGR)
 COLOR_PERSON = (0, 255, 0)  # Green
 COLOR_VEHICLE = (255, 165, 0)  # Orange
@@ -53,6 +56,16 @@ class MLEvaluator:
             YOLOWrapper, model_name, weights_path, input_size=640
         )
         logger.info(f"MLEvaluator initialized with model from {weights_path}")
+
+    @classmethod
+    def from_settings(cls, cfg: "EdgeSettings") -> "MLEvaluator":
+        """
+        Build an evaluator from EdgeSettings detector configuration.
+        """
+        return cls(
+            model_name=cfg.detector_model,
+            weights_path=cfg.detector_weights,
+        )
 
     def evaluate_frames(self, frames: list[np.ndarray]) -> dict | None:
         """

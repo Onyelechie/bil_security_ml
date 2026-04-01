@@ -52,6 +52,8 @@ The ground-truth dataset must follow the YOLO format:
 
 > [!NOTE]
 > Images in `images/` without a corresponding `.txt` in `labels/` are treated as **intentional negative samples** (background images where the model should find zero objects).
+>
+> Note: This repo ignores `.jpg`/`.png` files by default. If you need to track images, update `.gitignore` or provide the image set out-of-band.
 
 ### Confirmed Negative Samples
 The current test set includes confirmed background frames to verify low false-positive rates:

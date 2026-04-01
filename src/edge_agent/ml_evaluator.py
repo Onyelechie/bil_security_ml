@@ -1,3 +1,4 @@
+import os
 import logging
 
 import cv2
@@ -10,6 +11,10 @@ logger = logging.getLogger(__name__)
 # Bounding box colors (BGR)
 COLOR_PERSON = (0, 255, 0)  # Green
 COLOR_VEHICLE = (255, 165, 0)  # Orange
+
+# Default production model path
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+DEFAULT_WEIGHTS = os.path.join(PROJECT_ROOT, "production_model", "yolov8s.pt")
 
 
 class MLEvaluator:
@@ -24,7 +29,10 @@ class MLEvaluator:
     VEHICLE_LABELS = {"car", "truck", "bus", "motorcycle", "vehicle"}
 
     def __init__(
-        self, weights_path: str, person_conf: float = 0.5, vehicle_conf: float = 0.6
+        self,
+        weights_path: str = DEFAULT_WEIGHTS,
+        person_conf: float = 0.5,
+        vehicle_conf: float = 0.6,
     ):
         self.person_conf = person_conf
         self.vehicle_conf = vehicle_conf

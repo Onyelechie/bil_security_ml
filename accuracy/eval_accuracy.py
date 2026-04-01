@@ -170,19 +170,47 @@ def run_accuracy_evaluation(args):
 
     # 1. Setup Models
     script_dir = project_root / "benchmark"
-    available_models = {
-        "YOLOv8-Nano": YOLOWrapper(
-            "YOLOv8-Nano", str(script_dir / "yolov8n.pt"), args.input_size
-        ),
-        "YOLOv8-Small": YOLOWrapper(
-            "YOLOv8-Small", str(script_dir / "yolov8s.pt"), args.input_size
-        ),
-        "YOLOv5-Nano": YOLOWrapper(
-            "YOLOv5-Nano", str(script_dir / "yolov5n.pt"), args.input_size
-        ),
-        "EfficientDet-D0": EfficientDetWrapper("efficientdet_d0", args.input_size),
-        "SSD-MobileNet": TorchvisionSSDWrapper("SSD-MobileNet", args.input_size),
-    }
+    production_dir = project_root / "production_model"
+    
+    if args.production:
+        print(f"Production Mode: Loading site-tuned models from {production_dir}")
+        available_models = {
+            "YOLOv8-Nano": YOLOWrapper(
+                "YOLOv8-Nano-Site",
+                str(production_dir / "yolov8n.pt"),
+                args.input_size,
+                use_openvino=True,
+            ),
+            "YOLOv8-Small": YOLOWrapper(
+                "YOLOv8-Small-Site",
+                str(production_dir / "yolov8s.pt"),
+                args.input_size,
+                use_openvino=True,
+            ),
+        }
+    else:
+        available_models = {
+            "YOLOv8-Nano": YOLOWrapper(
+                "YOLOv8-Nano",
+                str(script_dir / "yolov8n.pt"),
+                args.input_size,
+                use_openvino=False,
+            ),
+            "YOLOv8-Small": YOLOWrapper(
+                "YOLOv8-Small",
+                str(script_dir / "yolov8s.pt"),
+                args.input_size,
+                use_openvino=False,
+            ),
+            "YOLOv5-Nano": YOLOWrapper(
+                "YOLOv5-Nano",
+                str(script_dir / "yolov5n.pt"),
+                args.input_size,
+                use_openvino=False,
+            ),
+            "EfficientDet-D0": EfficientDetWrapper("efficientdet_d0", args.input_size),
+            "SSD-MobileNet": TorchvisionSSDWrapper("SSD-MobileNet", args.input_size),
+        }
 
     selected_model_names = (
         args.models.split(",")
@@ -343,6 +371,11 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--input-size", type=int, default=640, help="Input resolution (imgsz)."
+    )
+    parser.add_argument(
+        "--production",
+        action="store_true",
+        help="Use site-tuned models from production_model/ directory.",
     )
 
     args = parser.parse_args()

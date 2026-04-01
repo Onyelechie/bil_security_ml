@@ -24,6 +24,9 @@ from src.edge_agent.models.ssd import TorchvisionSSDWrapper
 OUTPUT_CSV = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "accuracy_results.csv"
 )
+OUTPUT_TXT = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "accuracy_results.txt"
+)
 
 
 # --- Monkeypatching the Wrappers to return raw boxes [x1, y1, x2, y2, conf, cls_name] ---
@@ -305,7 +308,15 @@ def run_accuracy_evaluation(args):
     if all_results:
         df = pd.DataFrame(all_results)
         df.to_csv(OUTPUT_CSV, index=False)
-        print(f"\nFinal Accuracy Results saved to {OUTPUT_CSV}")
+        
+        with open(OUTPUT_TXT, "w") as f:
+            f.write("Model Accuracy Evaluation Summary\n")
+            f.write("===============================\n")
+            f.write(f"Dataset: {args.dataset}\n\n")
+            f.write(df.to_string(index=False))
+            f.write("\n")
+            
+        print(f"\nFinal Accuracy Results saved to {OUTPUT_CSV} and {OUTPUT_TXT}")
         print("-" * 30)
         print(df.to_string(index=False))
 

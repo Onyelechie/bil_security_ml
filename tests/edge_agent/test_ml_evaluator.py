@@ -11,7 +11,7 @@ from src.edge_agent.models import YOLOWrapper
 
 # We need a path to the weights
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-WEIGHTS_PATH = os.path.join(project_root, "benchmark", "yolov8s.pt")
+WEIGHTS_PATH = os.path.join(project_root, "production_model", "yolov8s.pt")
 WEIGHTS_EXIST = os.path.exists(WEIGHTS_PATH)
 
 

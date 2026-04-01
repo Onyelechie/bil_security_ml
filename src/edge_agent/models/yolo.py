@@ -14,10 +14,36 @@ class YOLOWrapper(ModelWrapper):
         super().__init__(name, input_size=input_size, weights_path=weights_path)
         self.use_openvino = use_openvino
 
+    def _openvino_enabled(self) -> bool:
+        """
+        Returns False when OpenVINO is explicitly disabled via env var.
+        Useful for testing or troubleshooting.
+        """
+        flag = os.getenv("EDGE_AGENT_DISABLE_OPENVINO", "").strip().lower()
+        return flag not in {"1", "true", "yes", "on"}
+
     def _openvino_dir(self) -> Path:
         """Returns the path to the compiled OpenVINO model directory."""
         pt_path = Path(self.weights_path)
         return pt_path.parent / (pt_path.stem + "_openvino_model")
+
+    def _openvino_needs_export(self, ov_dir: Path) -> bool:
+        """
+        Export if OpenVINO artifacts are missing or older than the .pt weights.
+        """
+        if not ov_dir.exists():
+            return True
+
+        try:
+            pt_mtime = Path(self.weights_path).stat().st_mtime
+            ov_mtime = max(
+                (p.stat().st_mtime for p in ov_dir.rglob("*") if p.is_file()),
+                default=0,
+            )
+            return ov_mtime < pt_mtime
+        except Exception:
+            # If we can't stat, be safe and re-export.
+            return True
 
     def load(self):
         from ultralytics import YOLO
@@ -34,11 +60,12 @@ class YOLOWrapper(ModelWrapper):
             print(f"Attempting to download {download_name} automatically...")
 
             # This downloads to the current working directory
-            YOLO(download_name)
+            YOLO(download_name, task="detect")
 
             # Move it to the expected benchmark folder if it exists locally
             if os.path.exists(download_name) and not os.path.exists(self.weights_path):
                 import shutil
+
                 os.makedirs(os.path.dirname(self.weights_path), exist_ok=True)
                 shutil.move(download_name, self.weights_path)
                 print(f"Moved downloaded weights to {self.weights_path}")
@@ -46,20 +73,31 @@ class YOLOWrapper(ModelWrapper):
         # Export to OpenVINO IR format if not already done (YOLOv8 only)
         # We only do this if use_openvino is enabled.
         weights_name_lower = os.path.basename(self.weights_path).lower()
-        if self.use_openvino and "yolov8" in weights_name_lower:
-            if not ov_dir.exists():
-                print(f"Compiling {self.name} to OpenVINO format (one-time export)...")
-                pt_model = YOLO(self.weights_path)
-                pt_model.export(format="openvino", imgsz=self.input_size)
-                print(f"Export complete → {ov_dir}")
+        use_openvino = (
+            self.use_openvino
+            and self._openvino_enabled()
+            and "yolov8" in weights_name_lower
+        )
+        if use_openvino:
+            try:
+                if self._openvino_needs_export(ov_dir):
+                    print(
+                        f"Compiling {self.name} to OpenVINO format (one-time export)..."
+                    )
+                    pt_model = YOLO(self.weights_path, task="detect")
+                    pt_model.export(format="openvino", imgsz=self.input_size)
+                    print(f"Export complete -> {ov_dir}")
 
-            # Load the compiled OpenVINO model
-            print(f"Loading {self.name} from OpenVINO: {ov_dir}")
-            self.model = YOLO(str(ov_dir))
-        else:
-            # Non-YOLOv8 models or explicit PyTorch requested
-            print(f"Loading {self.name} from PyTorch: {self.weights_path}")
-            self.model = YOLO(self.weights_path)
+                # Load the compiled OpenVINO model
+                print(f"Loading {self.name} from OpenVINO: {ov_dir}")
+                self.model = YOLO(str(ov_dir), task="detect")
+                return
+            except Exception as e:
+                print(f"OpenVINO load failed: {e}. Falling back to PyTorch.")
+
+        # Non-YOLOv8 models or explicit PyTorch requested
+        print(f"Loading {self.name} from PyTorch: {self.weights_path}")
+        self.model = YOLO(self.weights_path, task="detect")
 
     def predict(self, frame):
         results = self.model(frame, verbose=False, imgsz=self.input_size)

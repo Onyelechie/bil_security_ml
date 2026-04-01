@@ -78,7 +78,7 @@ benchmark/*.pth
 # Data and Media Files
 data/
 storage/
-models/
+/models/
 videos/
 camera*/
 *.sqlite3
@@ -113,3 +113,5 @@ accuracy/labeled_data
 accuracy/labeled_data/*
 labeled_data/
 !production_model/
+!src/server/models/
+!src/edge_agent/models/

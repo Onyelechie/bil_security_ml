@@ -77,18 +77,18 @@ def setup():
 
     for filename, url in SAMPLES.items():
         filepath = os.path.join(SAMPLES_DIR, filename)
-        
+
         # Check if file exists and is not corrupted (e.g., > 1MB)
         is_missing = not os.path.exists(filepath)
         is_corrupted = not is_missing and os.path.getsize(filepath) < 1024 * 1024
-        
+
         if is_missing or is_corrupted:
             if is_corrupted:
                 print(f"[CORRUPT] {filename} (too small). Deleting and refetching...")
                 os.remove(filepath)
             else:
                 print(f"[MISSING] {filename}")
-                
+
             success = download_from_gdrive(url, filepath)
             if success:
                 print(f"[DONE]    Downloaded {filename}")

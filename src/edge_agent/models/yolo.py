@@ -29,13 +29,13 @@ class YOLOWrapper(ModelWrapper):
             weights_name = os.path.basename(self.weights_path)
             # If it's yolov5n.pt, use the updated 'yolov5nu.pt' for better compatibility with current Ultralytics
             download_name = "yolov5nu.pt" if weights_name == "yolov5n.pt" else weights_name
-            
+
             print(f"Warning: {self.weights_path} not found.")
             print(f"Attempting to download {download_name} automatically...")
-            
+
             # This downloads to the current working directory
             YOLO(download_name)
-            
+
             # Move it to the expected benchmark folder if it exists locally
             if os.path.exists(download_name) and not os.path.exists(self.weights_path):
                 import shutil

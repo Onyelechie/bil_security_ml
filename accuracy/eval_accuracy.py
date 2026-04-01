@@ -317,7 +317,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset",
         type=str,
-        default="accuracy/labeled_data",
+        default="accuracy/labeled_data/val",
         help="Path to the YOLO-formatted dataset (must contain 'images' and 'labels' subfolders).",
     )
     parser.add_argument(

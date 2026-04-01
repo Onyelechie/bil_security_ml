@@ -1,7 +1,7 @@
 # YOLOv8 Site-Specific Dataset Configuration
-path: /Users/subhashyadav/Desktop/bil_security_ml/accuracy/labeled_data
-train: images
-val: images  # Reuse for small dataset validation
+path: labeled_data
+train: train/images
+val: val/images  # Properly held-out validation set
 
 # Classes
 names:

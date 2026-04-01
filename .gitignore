@@ -108,9 +108,5 @@ accuracy/dataset_frames
 accuracy/accuracy_results.csv
 benchmark/*_openvino_model/
 dataset_frames/
-accuracy/labeled_data/
-
-# Whitelists (Must be at the end to override broad ignores)
-!src/server/models/
-!src/edge_agent/models/
+!accuracy/labeled_data/
 !benchmark/yolov8s.pt

@@ -3,8 +3,8 @@ import hashlib
 import json
 from datetime import datetime, timezone
 
-from fastapi.testclient import TestClient
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from fastapi.testclient import TestClient
 
 from server.db import SessionLocal
 from server.models.device import Device
@@ -85,7 +85,9 @@ def build_signed_upload_headers(
     }
 
 
-def register_edge(client: TestClient, edge_pc_id: str, site_name: str = "Test Site") -> str:
+def register_edge(
+    client: TestClient, edge_pc_id: str, site_name: str = "Test Site"
+) -> str:
     private_key_b64 = enroll_device(edge_pc_id)
     heartbeat_payload = {
         "edge_pc_id": edge_pc_id,

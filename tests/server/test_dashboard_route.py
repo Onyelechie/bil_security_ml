@@ -15,7 +15,9 @@ def test_dashboard_route_redirects_when_not_logged_in():
         response = client.get("/dashboard", follow_redirects=False)
         assert response.status_code == 303
         assert response.headers["location"] == "/dashboard/login"
-        static_bypass = client.get("/static/dashboard/index.html", follow_redirects=False)
+        static_bypass = client.get(
+            "/static/dashboard/index.html", follow_redirects=False
+        )
         assert static_bypass.status_code == 404
 
 

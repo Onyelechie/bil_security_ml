@@ -1,6 +1,7 @@
 import cv2
 import torch
-from .base import ModelWrapper, COCO_CLASSES
+
+from .base import COCO_CLASSES, ModelWrapper
 
 
 class EfficientDetWrapper(ModelWrapper):

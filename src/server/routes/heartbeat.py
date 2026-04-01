@@ -1,12 +1,13 @@
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
-import logging
 
 from ..db import SessionLocal
 from ..models.edge_pc import EdgePC
-from ..schemas import EdgePCStatusListOut, EdgePCStatusOut, HeartbeatIn, HeartbeatOut
+from ..schemas import (EdgePCStatusListOut, EdgePCStatusOut, HeartbeatIn,
+                       HeartbeatOut)
 from ..services.dashboard_events import publish_dashboard_event
 from ..services.device_auth import require_signed_device
 
@@ -23,7 +24,9 @@ def get_db():
 
 
 @router.post("", response_model=HeartbeatOut, status_code=status.HTTP_201_CREATED)
-async def heartbeat(payload: HeartbeatIn, request: Request, db: Session = Depends(get_db)):
+async def heartbeat(
+    payload: HeartbeatIn, request: Request, db: Session = Depends(get_db)
+):
     """
     Upsert edge PC heartbeat info.
     """
@@ -59,7 +62,9 @@ async def heartbeat(payload: HeartbeatIn, request: Request, db: Session = Depend
         request.app.state.image_storage.ensure_site_ready(edge_pc.site_name)
     except Exception:
         # best-effort; do not fail heartbeat on storage errors
-        logger.exception("Failed to ensure image storage directory for site '%s'", edge_pc.site_name)
+        logger.exception(
+            "Failed to ensure image storage directory for site '%s'", edge_pc.site_name
+        )
     publish_dashboard_event(
         request.app,
         "heartbeat_received",
@@ -67,7 +72,9 @@ async def heartbeat(payload: HeartbeatIn, request: Request, db: Session = Depend
             "edge_pc_id": edge_pc.edge_pc_id,
             "site_name": edge_pc.site_name,
             "status": edge_pc.status,
-            "last_heartbeat": edge_pc.last_heartbeat.isoformat() if edge_pc.last_heartbeat else None,
+            "last_heartbeat": (
+                edge_pc.last_heartbeat.isoformat() if edge_pc.last_heartbeat else None
+            ),
         },
     )
     return {

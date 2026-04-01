@@ -13,8 +13,9 @@ from bil_time import ensure_winnipeg, now_in_winnipeg
 
 from ..db import SessionLocal
 from ..schemas import AlertCreate
-from ..services.edge_authorization import is_authorized_edge_pc, resolve_edge_pc_id
 from ..services.dashboard_events import publish_dashboard_event
+from ..services.edge_authorization import (is_authorized_edge_pc,
+                                           resolve_edge_pc_id)
 from ..services.image_storage import ImageStorageError, ImageStorageService
 from ..services.ws_alert_dispatcher import (AlertDispatchFailure,
                                             AlertQueueFullError,
@@ -144,7 +145,9 @@ async def alerts_websocket(websocket: WebSocket) -> None:
                 camera_id = str(alert_payload.get("camera_id", "unknown"))
                 raw_timestamp = alert_payload.get("timestamp")
                 try:
-                    received_at = ensure_winnipeg(datetime.fromisoformat(str(raw_timestamp)))
+                    received_at = ensure_winnipeg(
+                        datetime.fromisoformat(str(raw_timestamp))
+                    )
                 except Exception:
                     received_at = now_in_winnipeg()
                 try:

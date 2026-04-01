@@ -26,6 +26,18 @@ def heartbeat_loop(
         stop_event.wait(interval_sec)
 
 
+def retry_loop(sender: ServerSender, interval_sec: int, stop_event: threading.Event):
+    """
+    Thread target for retrying queued alerts.
+    """
+    while not stop_event.is_set():
+        try:
+            sender.retry_queued_alerts()
+        except Exception:
+            logger.exception("Retry loop encountered an unexpected error")
+        stop_event.wait(interval_sec)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="BIL Security ML - Edge Agent (Area B)"
@@ -92,9 +104,18 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
         )
         heartbeat_thread.start()
 
+        # Start retry thread for queued alerts
+        retry_thread = threading.Thread(
+            target=retry_loop,
+            args=(sender, cfg.retry_interval_sec, stop_event),
+            daemon=True,
+        )
+        retry_thread.start()
+
         def _shutdown(code: int) -> int:
             stop_event.set()
             heartbeat_thread.join(timeout=1)
+            retry_thread.join(timeout=1)
             return code
 
         if args.http_serve:

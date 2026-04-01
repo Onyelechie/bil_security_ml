@@ -1,6 +1,6 @@
-from .base import ModelWrapper, COCO_CLASSES
-from .yolo import YOLOWrapper
+from .base import COCO_CLASSES, ModelWrapper
 from .registry import ModelRegistry
+from .yolo import YOLOWrapper
 
 __all__ = ["ModelWrapper", "COCO_CLASSES", "YOLOWrapper", "ModelRegistry"]
 # from .efficientdet import EfficientDetWrapper  # Optional: only if dependencies installed

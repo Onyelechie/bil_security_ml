@@ -20,7 +20,11 @@ class EfficientDetWrapper(ModelWrapper):
         self.model_name = name if not weights_path else weights_path
 
     def load(self):
-        print(f"Loading {self.name}...")
+        # Safeguard: if for some reason an integer size was passed instead of a string name
+        if isinstance(self.model_name, int) or self.model_name == "640":
+            self.model_name = "efficientdet_d0"
+
+        print(f"Loading {self.name} (Arch: {self.model_name})...")
         from effdet import create_model
 
         self.model = create_model(

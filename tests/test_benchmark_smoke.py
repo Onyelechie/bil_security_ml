@@ -38,6 +38,7 @@ def test_benchmark_smoke(monkeypatch):
                 self.warmup = 1
                 self.max_frames = 5
                 self.confidence = 0.25
+                self.production = False
 
         def mock_glob(path):
             return [str(dummy_video)]
@@ -45,15 +46,15 @@ def test_benchmark_smoke(monkeypatch):
         monkeypatch.setattr("glob.glob", mock_glob)
         monkeypatch.setattr("benchmark.benchmark_suite.VIDEO_EXTENSIONS", ["*.mp4"])
         monkeypatch.setattr(
-            "src.edge_agent.models.YOLOWrapper", lambda *args: MockWrapper(args[0])
+            "src.edge_agent.models.YOLOWrapper", lambda *args, **kwargs: MockWrapper(args[0])
         )
         monkeypatch.setattr(
             "src.edge_agent.models.efficientdet.EfficientDetWrapper",
-            lambda *args: MockWrapper("MockEffDet"),
+            lambda *args, **kwargs: MockWrapper("MockEffDet"),
         )
         monkeypatch.setattr(
             "src.edge_agent.models.ssd.TorchvisionSSDWrapper",
-            lambda *args: MockWrapper("MockSSD"),
+            lambda *args, **kwargs: MockWrapper("MockSSD"),
         )
 
         run_benchmark(MockArgs())
@@ -94,6 +95,7 @@ def test_benchmark_no_videos(monkeypatch, capsys):
         warmup = 0
         max_frames = 0
         confidence = 0.25
+        production = False
 
     # Mock glob to return empty list (no videos found)
     monkeypatch.setattr("glob.glob", lambda p: [])

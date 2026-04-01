@@ -35,7 +35,7 @@ The benchmark uses a curated set of real-world CCTV clips. These are not include
 | :--- | :--- | :--- | :--- |
 | YOLOv8-Nano | Ultralytics | `yolov8n.pt` | 640 |
 | YOLOv8-Small | Ultralytics | `yolov8s.pt` | 640 |
-| YOLOv5-Nano | Ultralytics | `yolov5n.pt` | 640 |
+| YOLOv5-Nano | Ultralytics | `yolov5nu.pt` | 640 |
 | EfficientDet-D0 | [effdet](https://github.com/rwightman/efficientdet-pytorch) | Pretrained | 512 |
 | SSD-MobileNet | [torchvision](https://pytorch.org/vision/stable/models.html) | `SSDLite320_MobileNet_V3_Large` | 320 |
 
@@ -58,13 +58,24 @@ If you don't have video clips, run the setup script to download real CCTV clips:
 python3 benchmark/setup_samples.py
 ```
 
-### 3. Run Benchmark
+### 3. Run Benchmark (Baseline)
 
-Execute the main suite:
+To run the 5 standard baseline models in pure PyTorch mode:
 
 ```bash
 python3 benchmark/benchmark_suite.py
 ```
+
+### 4. Run Production (Site-Tuned)
+
+To benchmark the site-specific YOLOv8 models with OpenVINO acceleration:
+
+```bash
+python3 benchmark/benchmark_suite.py --production
+```
+
+> [!TIP]
+> Production mode uses weights from `production_model/` and forces OpenVINO optimization, which is the exact configuration used by the live Edge Agent.
 
 ```bash
 export PYTHONPATH="$PWD/src:$PWD" && python3 -m pytest tests/test_benchmark_smoke.py
@@ -141,6 +152,15 @@ To balance version control with performance variability, we follow this policy:
 
 > [!TIP]
 > Always rename your `benchmark_report.md` if you intend to commit it as a new baseline for a different machine.
->
-> [!NOTE]
-> Detection counts represent the total number of bounding boxes found by the model and are NOT a count of unique individuals or vehicles.
+
+## OpenVINO & Hardware Acceleration
+
+The benchmark suite includes two operational modes:
+
+1. **Normal Mode**: Runs models in standard PyTorch. Best for unbiased baseline comparisons.
+2. **Production Mode (`--production`)**: Compiles YOLOv8 models to **OpenVINO Intermediate Representation**. 
+   - **On Intel hardware**: This significantly reduces latency ($2\times$ to $5\times$).
+   - **On Apple Silicon (M2/M3)**: Performance is similar to PyTorch but uses more CPU threads to prioritize throughput stability.
+
+> [!IMPORTANT]
+> If you see `moov atom not found` errors, your video samples are corrupted. Rerun `python3 benchmark/setup_samples.py` to automatically detect and refetch them.

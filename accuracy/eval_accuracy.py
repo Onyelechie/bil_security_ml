@@ -24,6 +24,9 @@ warnings.filterwarnings("ignore", category=UserWarning)
 OUTPUT_CSV = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "accuracy_results.csv"
 )
+OUTPUT_TXT = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "accuracy_results.txt"
+)
 
 
 # --- Monkeypatching the Wrappers to return raw boxes [x1, y1, x2, y2, conf, cls_name] ---
@@ -167,19 +170,47 @@ def run_accuracy_evaluation(args):
 
     # 1. Setup Models
     script_dir = project_root / "benchmark"
-    available_models = {
-        "YOLOv8-Nano": YOLOWrapper(
-            "YOLOv8-Nano", str(script_dir / "yolov8n.pt"), args.input_size
-        ),
-        "YOLOv8-Small": YOLOWrapper(
-            "YOLOv8-Small", str(script_dir / "yolov8s.pt"), args.input_size
-        ),
-        "YOLOv5-Nano": YOLOWrapper(
-            "YOLOv5-Nano", str(script_dir / "yolov5n.pt"), args.input_size
-        ),
-        "EfficientDet-D0": EfficientDetWrapper("efficientdet_d0", args.input_size),
-        "SSD-MobileNet": TorchvisionSSDWrapper("SSD-MobileNet", args.input_size),
-    }
+    production_dir = project_root / "production_model"
+    
+    if args.production:
+        print(f"Production Mode: Loading site-tuned models from {production_dir}")
+        available_models = {
+            "YOLOv8-Nano": YOLOWrapper(
+                "YOLOv8-Nano-Site",
+                str(production_dir / "yolov8n.pt"),
+                args.input_size,
+                use_openvino=True,
+            ),
+            "YOLOv8-Small": YOLOWrapper(
+                "YOLOv8-Small-Site",
+                str(production_dir / "yolov8s.pt"),
+                args.input_size,
+                use_openvino=True,
+            ),
+        }
+    else:
+        available_models = {
+            "YOLOv8-Nano": YOLOWrapper(
+                "YOLOv8-Nano",
+                str(script_dir / "yolov8n.pt"),
+                args.input_size,
+                use_openvino=False,
+            ),
+            "YOLOv8-Small": YOLOWrapper(
+                "YOLOv8-Small",
+                str(script_dir / "yolov8s.pt"),
+                args.input_size,
+                use_openvino=False,
+            ),
+            "YOLOv5-Nano": YOLOWrapper(
+                "YOLOv5-Nano",
+                str(script_dir / "yolov5n.pt"),
+                args.input_size,
+                use_openvino=False,
+            ),
+            "EfficientDet-D0": EfficientDetWrapper("efficientdet_d0", args.input_size),
+            "SSD-MobileNet": TorchvisionSSDWrapper("SSD-MobileNet", args.input_size),
+        }
 
     selected_model_names = (
         args.models.split(",")
@@ -202,13 +233,16 @@ def run_accuracy_evaluation(args):
         nonlocal _next_available_id
         name = label_str.lower()
 
-        # Standard COCO/YOLO mapping for our primary targets
-        if name in ["person", "0"]:
-            return 0
-        if name in ["car", "vehicle", "2"]:
+        # Map YOLO/COCO output names to our dataset's class IDs:
+        #   0 = objects (unused / background)
+        #   1 = Person
+        #   2 = Vehicle (car, truck, bus, motorcycle)
+        if name in ["person"]:
+            return 1
+        if name in ["car", "truck", "bus", "motorcycle", "vehicle"]:
             return 2
 
-        # Deterministic mapping for other unexpected labels
+        # Deterministic mapping for anything else
         if name not in _label_registry:
             _label_registry[name] = _next_available_id
             _next_available_id += 1
@@ -306,7 +340,15 @@ def run_accuracy_evaluation(args):
     if all_results:
         df = pd.DataFrame(all_results)
         df.to_csv(OUTPUT_CSV, index=False)
-        print(f"\nFinal Accuracy Results saved to {OUTPUT_CSV}")
+        
+        with open(OUTPUT_TXT, "w") as f:
+            f.write("Model Accuracy Evaluation Summary\n")
+            f.write("===============================\n")
+            f.write(f"Dataset: {args.dataset}\n\n")
+            f.write(df.to_string(index=False))
+            f.write("\n")
+            
+        print(f"\nFinal Accuracy Results saved to {OUTPUT_CSV} and {OUTPUT_TXT}")
         print("-" * 30)
         print(df.to_string(index=False))
 
@@ -318,7 +360,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset",
         type=str,
-        default="accuracy/labeled_data",
+        default="accuracy/labeled_data/val",
         help="Path to the YOLO-formatted dataset (must contain 'images' and 'labels' subfolders).",
     )
     parser.add_argument(
@@ -329,6 +371,11 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--input-size", type=int, default=640, help="Input resolution (imgsz)."
+    )
+    parser.add_argument(
+        "--production",
+        action="store_true",
+        help="Use site-tuned models from production_model/ directory.",
     )
 
     args = parser.parse_args()

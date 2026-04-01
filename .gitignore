@@ -104,9 +104,12 @@ benchmark/system_info.txt
 
 # Others
 docs/self_assessment_ebere.tex
-accuracy/dataset_frames/
-accuracy/labeled_data/
-
-# Whitelists (Must be at the end to override broad ignores)
-!src/server/models/
-!src/edge_agent/models/
+accuracy/dataset_frames
+accuracy/accuracy_results.csv
+accuracy/accuracy_results.txt
+benchmark/*_openvino_model/
+dataset_frames/
+accuracy/labeled_data
+accuracy/labeled_data/*
+labeled_data/
+!production_model/

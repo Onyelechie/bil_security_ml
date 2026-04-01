@@ -80,6 +80,10 @@ class EdgeSettings(BaseSettings):
     # --- Offline alert queue ---
     offline_queue_dir: str = "storage/offline_queue"
 
+    # --- Detector Selection ---
+    detector_model: str = "YOLOv8-Small"
+    detector_weights: str | None = None
+
     # --- Quarantine retention ---
     # Delete quarantined queue files older than this many days.
     queue_quarantine_retention_days: int = 7

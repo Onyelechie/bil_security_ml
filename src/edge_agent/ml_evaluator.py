@@ -1,3 +1,4 @@
+import os
 import logging
 
 import cv2
@@ -11,11 +12,20 @@ logger = logging.getLogger(__name__)
 COLOR_PERSON = (0, 255, 0)  # Green
 COLOR_VEHICLE = (255, 165, 0)  # Orange
 
+# Default production model paths
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+PRODUCTION_DIR = os.path.join(PROJECT_ROOT, "production_model")
+
+DEFAULT_MODEL_CONFIGS = {
+    "YOLOv8-Small": os.path.join(PRODUCTION_DIR, "yolov8s.pt"),
+    "YOLOv8-Nano": os.path.join(PRODUCTION_DIR, "yolov8n.pt"),
+}
+
 
 class MLEvaluator:
     """
     Evaluates a clip of frames (max 40, BGR format from RingBuffer)
-    using YOLOv8-Nano to determine if a person or vehicle is present
+    using YOLOv8-Small to determine if a person or vehicle is present
     with high enough confidence to trigger an alert.
 
     Returns the annotated frame with bounding box drawn on it.
@@ -24,20 +34,29 @@ class MLEvaluator:
     VEHICLE_LABELS = {"car", "truck", "bus", "motorcycle", "vehicle"}
 
     def __init__(
-        self, weights_path: str, person_conf: float = 0.5, vehicle_conf: float = 0.6
+        self,
+        model_name: str = "YOLOv8-Small",
+        weights_path: str | None = None,
+        person_conf: float = 0.5,
+        vehicle_conf: float = 0.6,
     ):
         self.person_conf = person_conf
         self.vehicle_conf = vehicle_conf
 
+        if weights_path is None:
+            weights_path = DEFAULT_MODEL_CONFIGS.get(model_name)
+            if not weights_path:
+                raise ValueError(f"No default weights defined for model type: {model_name}")
+
         # Use the registry to get a cached instance of YOLO
         self.model = ModelRegistry.get_model(
-            YOLOWrapper, "YOLOv8-Nano", weights_path, input_size=640
+            YOLOWrapper, model_name, weights_path, input_size=640
         )
         logger.info(f"MLEvaluator initialized with model from {weights_path}")
 
     def evaluate_frames(self, frames: list[np.ndarray]) -> dict | None:
         """
-        Runs YOLOv8-Nano on a list of frames (BGR or Grayscale, up to 40 from RingBuffer).
+        Runs the configured YOLO model on a list of frames.
         If frames are grayscale, they are converted to BGR for YOLO compatibility.
         Returns the best detection with an annotated frame (bounding box drawn),
         or None if no person/vehicle found.

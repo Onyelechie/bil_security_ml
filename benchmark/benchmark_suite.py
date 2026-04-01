@@ -15,6 +15,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 
 VIDEO_EXTENSIONS = ["cctv_samples/*.mp4"]
+PRODUCTION_DIR = os.path.join(PROJECT_ROOT, "production_model")
 OUTPUT_CSV = os.path.join(SCRIPT_DIR, "benchmark_results.csv")
 OUTPUT_SUMMARY = os.path.join(SCRIPT_DIR, "benchmark_summary.txt")
 DEFAULT_WARMUP = 10
@@ -39,19 +40,42 @@ def run_benchmark(args):
     from src.edge_agent.models.ssd import TorchvisionSSDWrapper
 
     # 1. Setup Models
-    available_models = {
-        "YOLOv8-Nano": YOLOWrapper(
-            "YOLOv8-Nano", os.path.join(SCRIPT_DIR, "yolov8n.pt"), args.input_size
-        ),
-        "YOLOv8-Small": YOLOWrapper(
-            "YOLOv8-Small", os.path.join(SCRIPT_DIR, "yolov8s.pt"), args.input_size
-        ),
-        "YOLOv5-Nano": YOLOWrapper(
-            "YOLOv5-Nano", os.path.join(SCRIPT_DIR, "yolov5n.pt"), args.input_size
-        ),
-        "EfficientDet-D0": EfficientDetWrapper("efficientdet_d0", args.input_size),
-        "SSD-MobileNet": TorchvisionSSDWrapper("SSD-MobileNet", args.input_size),
-    }
+    if args.production:
+        print(f"Production Mode: Loading site-tuned models from {PRODUCTION_DIR}")
+        available_models = {
+            "YOLOv8-Nano": YOLOWrapper(
+                "YOLOv8-Nano-Site",
+                os.path.join(PRODUCTION_DIR, "yolov8n.pt"),
+                args.input_size,
+                use_openvino=True,
+            ),
+            "YOLOv8-Small": YOLOWrapper(
+                "YOLOv8-Small-Site",
+                os.path.join(PRODUCTION_DIR, "yolov8s.pt"),
+                args.input_size,
+                use_openvino=True,
+            ),
+        }
+    else:
+        available_models = {
+            "YOLOv8-Nano": YOLOWrapper(
+                "YOLOv8-Nano",
+                os.path.join(SCRIPT_DIR, "yolov8n.pt"),
+                args.input_size,
+                use_openvino=False,
+            ),
+            "YOLOv8-Small": YOLOWrapper(
+                "YOLOv8-Small",
+                os.path.join(SCRIPT_DIR, "yolov8s.pt"),
+                args.input_size,
+                use_openvino=False,
+            ),
+            "YOLOv5-Nano": YOLOWrapper(
+                "YOLOv5-Nano", os.path.join(SCRIPT_DIR, "yolov5n.pt"), args.input_size
+            ),
+            "EfficientDet-D0": EfficientDetWrapper("efficientdet_d0", args.input_size),
+            "SSD-MobileNet": TorchvisionSSDWrapper("SSD-MobileNet", args.input_size),
+        }
 
     selected_model_names = (
         args.models.split(",")
@@ -245,6 +269,11 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--confidence", type=float, default=DEFAULT_CONF, help="Conf threshold."
+    )
+    parser.add_argument(
+        "--production",
+        action="store_true",
+        help="Use site-tuned models from production_model/ directory.",
     )
 
     args = parser.parse_args()

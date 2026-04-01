@@ -1,0 +1,10 @@
+# YOLOv8 Site-Specific Dataset Configuration
+path: labeled_data
+train: train/images
+val: val/images  # Properly held-out validation set
+
+# Classes
+names:
+  0: other
+  1: person
+  2: vehicle

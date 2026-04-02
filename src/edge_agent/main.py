@@ -96,6 +96,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Start Edge HTTP API server (/health, /heartbeat).",
     )
     parser.add_argument(
+        "--sample-video",
+        type=str,
+        help="Run a CCTV sample video directly through YOLO + alert sending, without RTSP.",
+    )
+    parser.add_argument(
         "--tcp-listen",
         action="store_true",
         help="Start TCP motion listener and print parsed motion events.",
@@ -363,6 +368,43 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 logger.info("Motion test stopped (Ctrl+C).")
             return _shutdown(0)
 
+        if args.sample_video:
+            from .ml_evaluator import MLEvaluator
+            from .pipeline_runner import PipelineRunner
+            from .sample_video_runner import run_sample_video
+
+            evaluator = MLEvaluator(
+                model_name=cfg.detector_model,
+                weights_path=cfg.detector_weights,
+                person_conf=cfg.detector_person_conf,
+                vehicle_conf=cfg.detector_vehicle_conf,
+                allowed_classes=cfg.detector_allowed_classes,
+            )
+
+            image_output_dir = cfg.shared_storage_root.strip() or "storage/ws_alert_images"
+
+            pipeline = PipelineRunner(
+                evaluator=evaluator,
+                sender=sender,
+                image_output_dir=image_output_dir,
+            )
+
+            sender.set_status("online")
+
+            run_sample_video(
+                video_path=args.sample_video,
+                pipeline=pipeline,
+                sender=sender,
+                camera_id=cfg.sample_camera_id,
+                window_sec=cfg.sample_window_sec,
+                stride_sec=cfg.sample_stride_sec,
+                target_fps=cfg.sample_target_fps,
+                max_frames=cfg.sample_max_frames,
+            )
+
+            sender.set_status("shutting_down")
+            return _shutdown(0)
+        
         if args.run:
 
             async def _run_main() -> None:
@@ -542,7 +584,7 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
             return _shutdown(0)
 
         logger.info(
-            "Nothing to do. Use --print-config, --http-serve, --tcp-listen, --run, --motion-test."
+            "Nothing to do. Use --print-config, --http-serve, --sample-video, --tcp-listen, --run, --motion-test."
         )
         return _shutdown(0)
 

@@ -94,3 +94,10 @@ class EdgeSettings(BaseSettings):
 
     # --- Shared storage (optional) ---
     shared_storage_root: str = ""
+
+    # --- Direct CCTV sample runner ---
+    sample_camera_id: str = "1"
+    sample_window_sec: float = 3.0
+    sample_stride_sec: float = 2.0
+    sample_target_fps: float = 5.0
+    sample_max_frames: int = 30

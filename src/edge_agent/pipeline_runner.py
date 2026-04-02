@@ -137,3 +137,78 @@ class PipelineRunner:
             ts = frame_timestamps[frame_index]
             return ts if ts.tzinfo is not None else ts.replace(tzinfo=timezone.utc)
         return None
+
+    def process_all_frames(
+        self,
+        camera_id: str,
+        frames: Union[List[np.ndarray], List[FrameItem]],
+        *,
+        frame_timestamps: Optional[List[datetime]] = None,
+    ) -> None:
+        """
+        Send alerts for every frame that contains valid detections.
+        """
+        if isinstance(frames, np.ndarray):
+            raise ValueError("frames must be a list of frames, not a single ndarray")
+        if not frames:
+            logger.debug("No frames provided to pipeline")
+            return
+
+        timestamps = frame_timestamps
+        if timestamps is None and isinstance(frames[0], FrameItem):
+            items: Sequence[FrameItem] = frames  # type: ignore[assignment]
+            frames = [it.frame for it in items]
+            timestamps = [it.ts for it in items]
+
+        if not isinstance(frames, list):
+            raise ValueError("frames must be provided as a list")
+        if not all(isinstance(f, np.ndarray) for f in frames):
+            raise ValueError("frames list must contain numpy arrays")
+
+        alerts_sent = 0
+
+        for idx, frame in enumerate(frames):
+            result = self.evaluator.evaluate_frame_all(frame)
+            if result is None:
+                continue
+
+            detections = result["detections"]
+            annotated_frame = result["frame"]
+
+            detections_payload = [
+                {
+                    "class": det["label"],
+                    "confidence": det["confidence"],
+                }
+                for det in detections
+            ]
+
+            image_path = self._save_frame(camera_id, annotated_frame)
+
+            timestamp = self._select_timestamp(timestamps, idx)
+            if timestamp is None:
+                timestamp = datetime.now(timezone.utc)
+
+            success = self.sender.send_alert(
+                camera_id=camera_id,
+                detections=detections_payload,
+                timestamp=timestamp,
+                image_path=image_path if image_path else None,
+            )
+
+            if success:
+                alerts_sent += 1
+                logger.info(
+                    "ALERT sent: camera=%s frame_idx=%d detections=%d",
+                    camera_id,
+                    idx,
+                    len(detections),
+                )
+            else:
+                logger.error(
+                    "Failed to send alert: camera=%s frame_idx=%d",
+                    camera_id,
+                    idx,
+                )
+
+        logger.info("process_all_frames complete: camera=%s alerts_sent=%d", camera_id, alerts_sent)

@@ -74,7 +74,6 @@ class PipelineRunner:
         frame = result["frame"]
         frame_index = result.get("frame_index", -1)
 
-        # Convert detection format for sender
         detections_payload = [
             {
                 "class": detection["label"],
@@ -82,14 +81,12 @@ class PipelineRunner:
             }
         ]
 
-        # Save annotated frame to disk
         image_path = self._save_frame(camera_id, frame)
 
         timestamp = self._select_timestamp(timestamps, frame_index)
         if timestamp is None:
             timestamp = datetime.now(timezone.utc)
 
-        # Send alert
         success = self.sender.send_alert(
             camera_id=camera_id,
             detections=detections_payload,
@@ -109,18 +106,19 @@ class PipelineRunner:
 
     def _save_frame(self, camera_id: str, frame: np.ndarray) -> Optional[str]:
         """
-        Save annotated frame as JPEG and return file path.
+        Save annotated frame as JPEG and return ABSOLUTE file path.
         """
         if not self.save_images or not self.image_output_dir:
             return None
         if frame is None:
             return None
 
-        os.makedirs(self.image_output_dir, exist_ok=True)
+        output_dir = os.path.abspath(self.image_output_dir)
+        os.makedirs(output_dir, exist_ok=True)
 
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
         filename = f"{camera_id}_{timestamp}_{uuid4().hex[:8]}.jpg"
-        path = os.path.join(self.image_output_dir, filename)
+        path = os.path.join(output_dir, filename)
 
         try:
             ok = cv2.imwrite(path, frame)

@@ -6,6 +6,7 @@ from contextlib import suppress
 from datetime import datetime, timezone
 from typing import Callable
 
+import cv2
 import numpy as np
 
 from ..config import EdgeSettings
@@ -29,6 +30,23 @@ def motion_score(prev: np.ndarray, curr: np.ndarray, *, pixel_delta: int) -> flo
     diff = np.abs(curr.astype(np.int16) - prev.astype(np.int16))
     changed = (diff > int(pixel_delta)).mean()
     return float(changed)
+
+
+def to_grayscale(frame: np.ndarray) -> np.ndarray:
+    """
+    Normalize a frame to 2D grayscale uint8 for cheap motion detection.
+    Accepts:
+    - HxW grayscale
+    - HxWx1 grayscale
+    - HxWx3 BGR
+    """
+    if frame.ndim == 2:
+        return frame
+    if frame.ndim == 3 and frame.shape[2] == 1:
+        return frame[:, :, 0]
+    if frame.ndim == 3 and frame.shape[2] == 3:
+        return cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    raise ValueError(f"Unsupported frame shape for motion detection: {frame.shape}")
 
 
 class LocalMotionTrigger:
@@ -90,13 +108,19 @@ class LocalMotionTrigger:
                 await asyncio.sleep(0.2)
                 continue
 
+            try:
+                curr_gray = to_grayscale(curr)
+            except ValueError:
+                await asyncio.sleep(period)
+                continue
+
             if self._prev is not None:
                 try:
                     score = motion_score(
-                        self._prev, curr, pixel_delta=self._cfg.motion_pixel_delta
+                        self._prev, curr_gray, pixel_delta=self._cfg.motion_pixel_delta
                     )
                 except ValueError:
-                    self._prev = curr
+                    self._prev = curr_gray
                     await asyncio.sleep(period)
                     continue
 
@@ -130,5 +154,5 @@ class LocalMotionTrigger:
                             score,
                         )
 
-            self._prev = curr
+            self._prev = curr_gray
             await asyncio.sleep(period)

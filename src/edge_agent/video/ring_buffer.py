@@ -11,7 +11,7 @@ import numpy as np
 @dataclass(frozen=True)
 class FrameItem:
     ts: datetime
-    frame: np.ndarray  # grayscale uint8 HxW
+    frame: np.ndarray  # uint8 frame, typically BGR HxWx3
 
 
 class RingBuffer:

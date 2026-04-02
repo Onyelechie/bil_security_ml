@@ -78,35 +78,74 @@ Edge Agent key variables (see `.env.example`):
 
 **Core**
 - `SITE_ID`, `EDGE_PC_ID`, `DEVICE_ID`, `SITE_NAME`
-- `TCP_HOST`, `TCP_PORT` (motion events)
+- `TCP_HOST`, `TCP_PORT` (external motion events)
 - `SERVER_BASE_URL` (central server)
 - `DEVICE_PRIVATE_KEY_B64` (required for signed heartbeat/alerts)
 
 Provisioning rule:
 - `DEVICE_ID` must equal `EDGE_PC_ID`, and the matching public key must be enrolled on the server before the edge agent starts.
 
+**Trigger source selection**
+- `ENABLE_TCP_MOTION` (`true`/`false`) - consume external TCP/VMS motion events
+- `ENABLE_LOCAL_MOTION` (`true`/`false`) - compute motion locally from RTSP frames
+
+You may enable either source or both. Both feed the same downstream incident / extraction / inference / alert pipeline.
+
 **Trigger control (rate limit / dedupe)**
-- `TRIGGER_COOLDOWN_SEC` (e.g., 10)
-- `TRIGGER_MERGE_WINDOW_SEC` (e.g., 2.0)
+- `TRIGGER_COOLDOWN_SEC` (e.g., `10`)
+- `TRIGGER_MERGE_WINDOW_SEC` (e.g., `2.0`)
 
-**RTSP ingest (low-res stream for analysis)**
-- `RTSP_URL_LOW` (low stream, e.g. /Streaming/Channels/102/)
-- `RING_BUFFER_SECONDS` (e.g., 10)
-- `ANALYSIS_FPS` (e.g., 5)
-- `FRAME_WIDTH`, `FRAME_HEIGHT` (e.g., 640x360)
+**RTSP ingest (low-res stream for analysis/inference)**
+- `RTSP_URL_LOW` (low stream, e.g. `/Streaming/Channels/102`)
+- `RING_BUFFER_SECONDS` (recommended single-camera starting point: `25`)
+- `ANALYSIS_FPS` (recommended: `5`)
+- `FRAME_WIDTH`, `FRAME_HEIGHT` (recommended: `640x360`)
 
-**Local motion trigger (lightweight)**
-- `MOTION_FPS` (e.g., 2)
-- `MOTION_PIXEL_DELTA` (e.g., 25-45)
-- `MOTION_THRESHOLD` (e.g., 0.02-0.08)
+**Frame handling**
+- The edge agent now keeps a **low-resolution color ring buffer** for extraction/inference.
+- Local motion detection still runs on **grayscale**, derived from the buffered color frames.
+- This keeps motion detection cheap while improving YOLO classification quality versus grayscale-only inference.
+
+**Local motion trigger**
+- `MOTION_FPS` (e.g., `1` to `2`)
+- `MOTION_PIXEL_DELTA` (e.g., `10` to `25`)
+- `MOTION_THRESHOLD` (e.g., `0.003` to `0.01`)
 - `DEFAULT_CAMERA_ID` (used for local motion labeling in single-camera mode)
+
+**Incident + extraction tuning**
+- `INCIDENT_QUIET_SEC`
+- `INCIDENT_MAX_SEC`
+- `WINDOW_PRE_SEC`
+- `WINDOW_POST_SEC`
+- `WINDOW_TARGET_FPS`
+- `WINDOW_MAX_FRAMES`
+- `WINDOW_WAIT_GRACE_SEC`
+
+Recommended indoor single-camera starting profile:
+- `RING_BUFFER_SECONDS=25`
+- `INCIDENT_MAX_SEC=12.0`
+- `WINDOW_PRE_SEC=1.5`
+- `WINDOW_POST_SEC=4.0`
+- `WINDOW_TARGET_FPS=5.0`
+- `WINDOW_MAX_FRAMES=40`
+
+**Detector configuration**
+- `DETECTOR_MODEL` (e.g. `YOLOv8-Small`)
+- `DETECTOR_WEIGHTS` (optional explicit path)
+- `DETECTOR_PERSON_CONF` (recommended indoor starting point: `0.40`)
+- `DETECTOR_VEHICLE_CONF` (recommended indoor starting point: `0.90`)
+- `DETECTOR_ALLOWED_CLASSES` (comma-separated, e.g. `person` or `person,vehicle`)
+
+Notes:
+- For cluttered indoor cameras, `DETECTOR_ALLOWED_CLASSES=person` is usually the best starting profile.
+- The evaluator prefers a valid **person** detection over a valid **vehicle** detection when both appear in the same extracted window.
 
 **Shared storage (optional)**
 - `SHARED_STORAGE_ROOT` (absolute path to a shared mount visible to both edge and server)
-- When set, queued alerts keep `image_path` only if the file exists and resolves under this root.
+- When set, alert snapshots saved under this root can be referenced by `image_path` and displayed by the server/dashboard.
+- Queued alerts keep `image_path` only if the file exists and resolves under this root.
 - Queued alerts that are invalid JSON or rejected with 4xx are quarantined under `OFFLINE_QUEUE_DIR/bad/`.
-- Quarantined payloads are deleted after `QUEUE_QUARANTINE_RETENTION_DAYS` (default 7).
-- `image_path` may be absolute or relative; when shared storage is enabled it must resolve within `SHARED_STORAGE_ROOT`.
+- Quarantined payloads are deleted after `QUEUE_QUARANTINE_RETENTION_DAYS` (default `7`).
 
 FFmpeg note:
 - The edge agent uses `imageio-ffmpeg`, which provides an ffmpeg binary automatically (no separate system ffmpeg install required).
@@ -427,78 +466,63 @@ The enrolled `device_id` must match the claimed `edge_pc_id`.
   - recent alerts + image previews (when available)
   - known edge PCs from heartbeat data
 
-## Recent Changes (March 2026)
+## Recent Changes (March-April 2026)
 
-Summary of notable updates made in the `Server` branch during March 2026:
+Summary of notable recent updates:
 
-- Per-site image storage: images are stored in a configurable `IMAGE_STORAGE_DIR` with automatic creation of per-site folders on site registration. Filenames include site/camera IDs and a timestamp for easy tracing.
-- Multipart HTTP upload endpoint: `POST /api/alerts/upload` accepts multipart metadata + image upload for edges that prefer HTTP ingestion.
-- Ingestion normalization: server now copies local/absolute image paths referenced by incoming alerts into the configured storage root and persists a storage-relative path in the DB. This prevents serving arbitrary files from the host filesystem.
-- Per-site retention & cleanup: per-site image retention settings are exposed to the dashboard and a background cleanup task deletes images older than their configured retention.
-- Dashboard changes: added protected dashboard login, a full-width `Settings` view for retention and edge enrollment, Overview cleanup, and fixed regressions in the alerts viewer.
-- Alert timestamps are normalized and displayed in `America/Winnipeg` for alert-related flows.
-- Compatibility: existing WebSocket ingestion (`/ws/alerts`) is still supported for clients that prefer it; the server accepts both legacy `WS_*` image storage env names and the new `IMAGE_*` names for backward compatibility.
-- Helper scripts: `scripts/test_alert_upload.py` (multipart uploader) remains available for manual upload testing.
+### Server / Dashboard
+- Per-site image storage: images are stored in a configurable `IMAGE_STORAGE_DIR` with automatic creation of per-site folders on site registration.
+- Multipart HTTP upload endpoint: `POST /api/alerts/upload` accepts multipart metadata + image upload.
+- Ingestion normalization: server copies local/absolute image paths referenced by incoming alerts into the configured storage root and persists a storage-relative path in the DB.
+- Per-site retention & cleanup: per-site image retention settings are exposed to the dashboard and background cleanup removes old images.
+- Dashboard updates: protected login, `Settings` view for retention and edge enrollment, Overview cleanup, and alerts viewer fixes.
+- Alert timestamps are normalized and displayed in `America/Winnipeg`.
 
-See the `docs/` folder for the Windows runbook and the current authentication/enrollment guide.
-  - recent server logs
-
-Note: `alerts.edge_pc_id` is now a required foreign key referencing `edge_pcs.edge_pc_id`.
-When upgrading older databases, a migration will insert a sentinel `edge_pcs` row with `edge_pc_id='edge-001'`
-and backfill existing alerts to reference this sentinel. If you prefer strict provenance, ensure
-edge agents include `EDGE_PC_ID` with alerts so the server can store the actual edge PC id.
-
-Postgres UUID defaults:
-- A follow-up, Postgres-only migration has been added to set a server-side UUID default for `alerts.id`.
-  This migration is no-op for SQLite and will only execute when the Alembic connection dialect is
-  PostgreSQL. If you rely on DB-level UUID defaults in production, ensure the target DB supports the
-  `uuid-ossp` extension or adapt the migration to your environment.
-
-Sentinel lifecycle recommendation:
-- The `edge-001` sentinel is intended as a compatibility measure during upgrade. After rolling out updated
-  edge agents, consider running a cleanup/backfill job to assign correct `edge_pc_id` values where possible
-  and to remove or reclassify sentinel-marked alerts for analytics purposes.
-
-Backfill / cleanup helper
-- A helper script `scripts/backfill_edge_001.py` is included to help migrate
-  `alerts` rows that were backfilled with `edge_pc_id='edge-001'`.
-
-Usage examples (from repo root):
-
-```
-# Dry run (report only)
-python scripts/backfill_edge_001.py --dry-run
-
-# Apply mappings from CSV (columns: site_id,camera_id,edge_pc_id)
-python scripts/backfill_edge_001.py --mapping mappings.csv
-
-# Assign a default edge PC for all sentinel ('edge-001') alerts
-python scripts/backfill_edge_001.py --assign-default edge-1234
-
-# Remove sentinel if no alerts reference it (manual operation)
-# Use the maintenance helper which will delete the sentinel only when confirmed:
-python scripts/remove_sentinel_if_safe.py --dry-run
-python scripts/remove_sentinel_if_safe.py --yes
-```
-
-The script connects using the repository's configured DB (via `src/server/db.py`).
-
----
-
-### Security & Production Notes
-- CORS is now restricted to `http://localhost:3000` and `http://localhost:8000` for development. **Update this for production deployments!**
-- Admin authentication and signed edge-device authentication are enabled. Set a dedicated `ADMIN_PASSWORD` and a strong `SECRET_KEY` before production deployments.
-- Alert listing filters are marked as TODO and will be implemented in future updates.
-
+### Edge Agent
+- Unified live runtime under `python -m edge_agent --run`.
+- Added motion-source selection:
+  - `ENABLE_TCP_MOTION`
+  - `ENABLE_LOCAL_MOTION`
+- Both TCP motion and local RTSP-derived motion now feed the same incident / extraction / inference / alert pipeline.
+- RTSP ingest now keeps a **low-resolution color ring buffer** for improved inference quality.
+- Local motion detection still runs on **grayscale**, derived from the color frames.
+- Added configurable detector controls:
+  - `DETECTOR_PERSON_CONF`
+  - `DETECTOR_VEHICLE_CONF`
+  - `DETECTOR_ALLOWED_CLASSES`
+- Evaluator now prefers valid **person** detections over valid **vehicle** detections when both are available.
+- Window frame selection has been improved to keep bounded compute while biasing more useful frames near the recent part of the incident.
+- Recommended indoor defaults were tightened to reduce oversized incident windows and improve latency on edge hardware.
 
 ## Edge Agent (Area B)
 
-The edge agent is the on-site Windows service that will:
+The edge agent is the on-site Windows service that can:
+
 - listen for motion events over TCP (from BIL software / VMS rules)
 - pull frames via RTSP into an in-memory ring buffer
-- run lightweight local motion detection (optional) + later YOLO burst inference
-- apply cooldown/deduplication to avoid flooding
-- send alerts + heartbeats to the central server (later steps)
+- optionally compute lightweight local motion from RTSP frames
+- merge/dedupe noisy triggers into incidents
+- extract bounded frame windows around incidents
+- run YOLO burst inference on selected frames
+- send signed alerts + heartbeats to the central server
+
+### Current runtime model
+
+The live edge pipeline is event-driven:
+
+`RTSP stream -> motion trigger(s) -> incident manager -> extraction worker -> ML evaluator -> pipeline runner -> server`
+
+Supported motion sources:
+- **TCP motion**: external XML motion events from BIL/VMS
+- **Local motion**: cheap frame-difference motion computed from RTSP frames on the edge
+
+Both motion sources can be enabled together and feed the same downstream pipeline.
+
+### Frame strategy
+
+- The RTSP reader stores **low-resolution color** frames in memory.
+- Local motion detection converts buffered frames to **grayscale** only for motion scoring.
+- Extracted frames sent to YOLO remain **color**, which improves person detection quality versus grayscale-only inference.
 
 ### Running the Edge Agent
 
@@ -509,15 +533,13 @@ The edge agent is the on-site Windows service that will:
 $env:PYTHONPATH = "$PWD\src"
 # On Unix/Mac:
 # export PYTHONPATH="$PWD/src"
-```
+````
 
 #### Print config
 
 ```powershell
 python -m edge_agent --print-config
 ```
-
-See `docs/area_b_edge_agent_context.md` for architecture + demo environment details.
 
 #### Run Edge HTTP API (install/debug)
 
@@ -541,25 +563,127 @@ python -m edge_agent --http-serve
 python -m edge_agent --tcp-listen
 ```
 
-#### Run RTSP + Local Motion live test (requires RTSP_URL_LOW)
+#### Run RTSP ingest test
+
+```powershell
+python -m edge_agent --rtsp-test
+```
+
+This validates:
+
+* RTSP connectivity
+* ffmpeg recovery/backoff
+* ring buffer fill behavior
+
+#### Run RTSP + local motion debug mode
 
 ```powershell
 python -m edge_agent --motion-test
 ```
 
-> This mode validates RTSP ingest + ring buffer + local motion; it does not send alerts to the central server yet.
+This validates:
 
-This starts:
+* RTSP ingest
+* local motion scoring
+* incident creation
+* extraction worker behavior
 
-* RTSP ingest (ffmpeg) -> ring buffer
-* local frame-diff motion trigger -> TriggerManager (cooldown/dedupe)
+#### Run the unified live pipeline
 
-Logs include RTSP recovery categories like `DISCONNECT`, `STALL`, and `STARTUP_TIMEOUT`, with automatic retry/backoff.
+```powershell
+python -m edge_agent --run
+```
 
----
+This is the main runtime entrypoint. Depending on `.env`, it can use:
 
+* TCP motion only
+* local motion only
+* both TCP and local motion
+
+The unified `--run` path handles:
+
+* trigger ingestion
+* incident merging
+* extraction
+* YOLO evaluation
+* alert sending to the server
+
+### Example: local-motion-only live run
+
+```powershell
+$env:PYTHONPATH="$PWD\src"
+$env:RTSP_URL_LOW="rtsp://<camera>/Streaming/Channels/102"
+$env:ENABLE_TCP_MOTION="false"
+$env:ENABLE_LOCAL_MOTION="true"
+$env:SHARED_STORAGE_ROOT=(Resolve-Path ".\storage\ws_alert_images").Path
+python -m edge_agent --run
+```
+
+### Example: TCP-motion-only live run
+
+```powershell
+$env:PYTHONPATH="$PWD\src"
+$env:ENABLE_TCP_MOTION="true"
+$env:ENABLE_LOCAL_MOTION="false"
+python -m edge_agent --run
+```
+
+### Example: both motion sources enabled
+
+```powershell
+$env:PYTHONPATH="$PWD\src"
+$env:ENABLE_TCP_MOTION="true"
+$env:ENABLE_LOCAL_MOTION="true"
+python -m edge_agent --run
+```
+
+### Detection notes
+
+The evaluator supports configurable alert classes and thresholds:
+
+* `DETECTOR_ALLOWED_CLASSES`
+* `DETECTOR_PERSON_CONF`
+* `DETECTOR_VEHICLE_CONF`
+
+Recommended indoor single-camera setup:
+
+* `DETECTOR_ALLOWED_CLASSES=person`
+* `DETECTOR_PERSON_CONF=0.40`
+* `DETECTOR_VEHICLE_CONF=0.90`
+
+This helps reduce false indoor “vehicle” detections in cluttered scenes.
+
+### Frame selection notes
+
+The extraction worker does **not** send an entire raw video file to YOLO.
+Instead it:
+
+1. pulls all buffered frames inside the incident window
+2. selects a bounded set of representative frames
+3. sends only those selected frames into the ML evaluator
+
+Selection is deterministic and now biases more frames toward the more recent portion of the incident while still keeping early/full-window context.
+
+### Performance notes
+
+For an i7-class edge PC, a good starting profile for one indoor camera is:
+
+* `FRAME_WIDTH=640`
+* `FRAME_HEIGHT=360`
+* `ANALYSIS_FPS=5`
+* `RING_BUFFER_SECONDS=25`
+* `WINDOW_MAX_FRAMES=40`
+
+This keeps the pipeline responsive while preserving enough information for event-driven inference.
+
+### Alert images
+
+* Confirmed alerts can save an annotated snapshot to disk.
+* If `SHARED_STORAGE_ROOT` is configured and visible to both edge and server, the alert payload can include a usable `image_path`.
+* The server/dashboard can then display the alert image.
 
 ## Running Tests
+
 ```bash
 # Set Python path for src/ layout
 # On Windows PowerShell:
@@ -573,12 +697,12 @@ python -m pytest
 # Edge agent tests only
 python -m pytest -q tests/edge_agent
 
-# Run only heartbeat tests
-python -m pytest tests/server/test_heartbeat.py -v
-
-# Run only edge API tests
-python -m pytest tests/edge_agent/test_edge_api.py -v
-```
+# Focused edge runtime tests
+python -m pytest tests/edge_agent/test_main.py -v
+python -m pytest tests/edge_agent/test_pipeline_runner.py -v
+python -m pytest tests/edge_agent/test_ml_evaluator.py -v
+python -m pytest tests/edge_agent/video/test_window_extractor.py -v
+````
 
 ### Testing Commands
 
@@ -595,62 +719,21 @@ python scripts/run_tests.py
 ```
 
 What both commands do:
-- Run `pytest -v` using repository test configuration.
-- Ensure both `src/` and project root are injected into `PYTHONPATH`.
+
+* Run `pytest -v` using repository test configuration.
+* Ensure both `src/` and project root are injected into `PYTHONPATH`.
 
 Prerequisites:
-- Install project dependencies before running tests: `pip install -r requirements.txt`.
-- Note: some ML packages (e.g. `torch`, `torchvision`) are large binary packages and may take time to download or require platform-specific wheels. If you only want to run server/unit tests (and avoid heavy ML packages), consider creating a lightweight `requirements-dev.txt` that omits the large ML deps.
+
+* Install project dependencies before running tests: `pip install -r requirements.txt`.
+* Some ML packages (`torch`, `torchvision`, `ultralytics`, OpenVINO-related tooling) are heavier and platform-sensitive. Use the project virtual environment when running edge tests.
 
 Troubleshooting:
-- If pytest fails with an error about `--cov` options, install `pytest-cov` (already included in `requirements.txt`):
 
-```bash
-pip install pytest-cov
-```
+* If pytest fails with an error about `--cov` options, install `pytest-cov`.
+* If imports fail because your global Python is being used instead of the virtual environment, activate `.venv` first or invoke `.\.venv\Scripts\python.exe` directly.
+* If you see import errors for top-level packages, run tests through the helper:
 
-- The test suite applies Alembic migrations to a dedicated test database in `tests/conftest.py`. If needed, you can still run migrations manually:
-
-```bash
-alembic upgrade head
-```
-
-- If you see import errors for top-level packages (for example `benchmark`), run tests through the helper:
-
-```bash
-python scripts/run_tests.py
-```
-
-`requirements-dev.txt` excludes heavy machine-learning and CV packages so you can install dev/test dependencies quickly.
-
-Quick start using the lightweight development dependencies:
-
-```bash
-# Install lightweight dev-only deps (fast)
-pip install -r requirements-dev.txt
-
-# Linux/macOS
-make test
-```
-
-On Windows:
-
-```powershell
-python scripts/run_tests.py
-```
-
-When you need full ML capabilities (training, model benchmarks, CV tooling) install the full pinned `requirements.txt` or use the conda instructions provided earlier.
-
-### Technical Notes
-
-- "Motion events" (from the problem statement) can be sent from our existing software via TCP.
-- Ideally, supported security cameras should be compliant with ONVIF Profile S and T standards:
-  - [ONVIF Profile S](https://www.onvif.org/profiles/profile-s/)
-  - [ONVIF Profile T](https://www.onvif.org/profiles/profile-t/)
-- These standards define connection protocols for streaming video, including RTSP.
-- Any cameras used will always follow one of these two profiles.
-
-### License
-
-This project is released as open source.
-
+  ```bash
+  python scripts/run_tests.py
+  ```

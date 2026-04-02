@@ -1,4 +1,5 @@
-﻿from datetime import datetime, timezone
+﻿import os
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -43,6 +44,23 @@ def test_pipeline_runner_uses_frameitem_timestamp(tmp_path):
     sender.send_alert.assert_called_once()
     _, kwargs = sender.send_alert.call_args
     assert kwargs["timestamp"] == ts1
+
+
+def test_save_frame_returns_absolute_path(tmp_path):
+    evaluator = MagicMock()
+    sender = MagicMock()
+
+    pipeline = PipelineRunner(
+        evaluator=evaluator,
+        sender=sender,
+        image_output_dir=str(tmp_path),
+    )
+
+    frame = np.zeros((10, 10, 3), dtype=np.uint8)
+    path = pipeline._save_frame("cam-1", frame)
+
+    assert path is not None
+    assert os.path.isabs(path)
 
 
 def test_pipeline_runner_skips_on_no_detection(tmp_path):

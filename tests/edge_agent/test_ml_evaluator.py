@@ -26,6 +26,50 @@ def mock_evaluator():
         yield evaluator
 
 
+def test_ml_evaluator_prefers_person_over_vehicle():
+    with patch("src.edge_agent.ml_evaluator.ModelRegistry.get_model") as mock_get:
+        mock_model = MagicMock(spec=YOLOWrapper)
+        mock_model.predict.return_value = [
+            (0, 0, 50, 50, 0.72, "car"),
+            (10, 10, 60, 60, 0.51, "person"),
+        ]
+        mock_get.return_value = mock_model
+
+        evaluator = MLEvaluator(
+            weights_path="mock_path.pt",
+            allowed_classes="person,vehicle",
+            person_conf=0.5,
+            vehicle_conf=0.6,
+        )
+
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        result = evaluator.evaluate_frames([frame])
+
+        assert result is not None
+        assert result["detection"]["label"].lower() == "person"
+
+
+def test_ml_evaluator_can_disable_vehicle_alerts():
+    with patch("src.edge_agent.ml_evaluator.ModelRegistry.get_model") as mock_get:
+        mock_model = MagicMock(spec=YOLOWrapper)
+        mock_model.predict.return_value = [
+            (0, 0, 50, 50, 0.95, "car"),
+        ]
+        mock_get.return_value = mock_model
+
+        evaluator = MLEvaluator(
+            weights_path="mock_path.pt",
+            allowed_classes="person",
+            person_conf=0.4,
+            vehicle_conf=0.6,
+        )
+
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        result = evaluator.evaluate_frames([frame])
+
+        assert result is None
+
+
 def create_dummy_image(color=(255, 255, 255)):
     """Creates a blank 640x640 image for testing."""
     return np.full((640, 640, 3), color, dtype=np.uint8)

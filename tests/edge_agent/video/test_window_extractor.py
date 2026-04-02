@@ -6,6 +6,27 @@ from edge_agent.video.ring_buffer import FrameItem
 from edge_agent.video.window_extractor import select_frames_evenly
 
 
+def test_select_frames_evenly_biases_recent_frames_but_stays_capped():
+    t0 = datetime(2026, 3, 2, 12, 0, tzinfo=timezone.utc)
+
+    items = [
+        FrameItem(ts=t0 + timedelta(seconds=i), frame=np.zeros((2, 2, 3), dtype=np.uint8))
+        for i in range(30)
+    ]
+
+    selected = select_frames_evenly(
+        items,
+        start=t0,
+        end=t0 + timedelta(seconds=29),
+        target_fps=5.0,
+        max_frames=10,
+    )
+
+    assert len(selected) <= 10
+    assert selected == sorted(selected, key=lambda it: it.ts)
+    assert selected[-1].ts >= t0 + timedelta(seconds=24)
+
+
 def test_select_frames_evenly_deterministic_and_capped():
     t0 = datetime(2026, 3, 2, 12, 0, tzinfo=timezone.utc)
     items = []

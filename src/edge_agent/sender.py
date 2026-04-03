@@ -136,8 +136,8 @@ class ServerSender:
             return True
         except requests.RequestException as e:
             status = None
-            if getattr(e, "response", None) is not None:
-                status = e.response.status_code
+            response = getattr(e, "response", None)
+            status = response.status_code if response is not None else None
 
             if status is not None and 400 <= status < 500:
                 logger.error(

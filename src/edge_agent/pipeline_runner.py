@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timezone
-from typing import List, Optional, Sequence, Union
+from typing import List, Optional, Union, cast
 from uuid import uuid4
 
 import cv2
@@ -54,55 +54,72 @@ class PipelineRunner:
             return
 
         timestamps = frame_timestamps
-        if timestamps is None and isinstance(frames[0], FrameItem):
-            items: Sequence[FrameItem] = frames  # type: ignore[assignment]
-            frames = [it.frame for it in items]
-            timestamps = [it.ts for it in items]
 
-        if not isinstance(frames, list):
-            raise ValueError("frames must be provided as a list")
-        if not all(isinstance(f, np.ndarray) for f in frames):
+        if isinstance(frames[0], FrameItem):
+            items = cast(list[FrameItem], frames)
+            np_frames = [it.frame for it in items]
+            timestamps = [it.ts for it in items]
+        else:
+            np_frames = cast(list[np.ndarray], frames)
+
+        if not all(isinstance(f, np.ndarray) for f in np_frames):
             raise ValueError("frames list must contain numpy arrays")
 
-        result = self.evaluator.evaluate_frames(frames)
+        results = self.evaluator.evaluate_frames_multi(np_frames)
 
-        if result is None:
+        if not results:
             logger.debug("No valid detection → no alert")
             return
 
-        detection = result["detection"]
-        frame = result["frame"]
-        frame_index = result.get("frame_index", -1)
+        alerts_sent = 0
 
-        detections_payload = [
-            {
-                "class": detection["label"],
-                "confidence": detection["confidence"],
-            }
-        ]
+        for result in results:
+            detection = result["detection"]
+            frame = result["frame"]
+            frame_index = result.get("frame_index", -1)
 
-        image_path = self._save_frame(camera_id, frame)
+            detections_payload = [
+                {
+                    "class": detection["label"],
+                    "confidence": detection["confidence"],
+                }
+            ]
 
-        timestamp = self._select_timestamp(timestamps, frame_index)
-        if timestamp is None:
-            timestamp = datetime.now(timezone.utc)
+            image_path = self._save_frame(camera_id, frame)
 
-        success = self.sender.send_alert(
-            camera_id=camera_id,
-            detections=detections_payload,
-            timestamp=timestamp,
-            image_path=image_path if image_path else None,
-        )
+            timestamp = self._select_timestamp(timestamps, frame_index)
+            if timestamp is None:
+                timestamp = datetime.now(timezone.utc)
 
-        if success:
-            logger.info(
-                "ALERT sent: camera=%s class=%s conf=%.2f",
-                camera_id,
-                detection["label"],
-                detection["confidence"],
+            success = self.sender.send_alert(
+                camera_id=camera_id,
+                detections=detections_payload,
+                timestamp=timestamp,
+                image_path=image_path if image_path else None,
             )
-        else:
-            logger.error("Failed to send alert")
+
+            if success:
+                alerts_sent += 1
+                logger.info(
+                    "ALERT sent: camera=%s class=%s conf=%.2f frame_idx=%d",
+                    camera_id,
+                    detection["label"],
+                    detection["confidence"],
+                    frame_index,
+                )
+            else:
+                logger.error(
+                    "Failed to send alert: camera=%s class=%s frame_idx=%d",
+                    camera_id,
+                    detection["label"],
+                    frame_index,
+                )
+
+        logger.info(
+            "process_frames complete: camera=%s alerts_sent=%d",
+            camera_id,
+            alerts_sent,
+        )
 
     def _save_frame(self, camera_id: str, frame: np.ndarray) -> Optional[str]:
         """
@@ -155,19 +172,20 @@ class PipelineRunner:
             return
 
         timestamps = frame_timestamps
-        if timestamps is None and isinstance(frames[0], FrameItem):
-            items: Sequence[FrameItem] = frames  # type: ignore[assignment]
-            frames = [it.frame for it in items]
-            timestamps = [it.ts for it in items]
 
-        if not isinstance(frames, list):
-            raise ValueError("frames must be provided as a list")
-        if not all(isinstance(f, np.ndarray) for f in frames):
+        if isinstance(frames[0], FrameItem):
+            items = cast(list[FrameItem], frames)
+            np_frames = [it.frame for it in items]
+            timestamps = [it.ts for it in items]
+        else:
+            np_frames = cast(list[np.ndarray], frames)
+
+        if not all(isinstance(f, np.ndarray) for f in np_frames):
             raise ValueError("frames list must contain numpy arrays")
 
         alerts_sent = 0
 
-        for idx, frame in enumerate(frames):
+        for idx, frame in enumerate(np_frames):
             result = self.evaluator.evaluate_frame_all(frame)
             if result is None:
                 continue

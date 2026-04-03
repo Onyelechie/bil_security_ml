@@ -87,6 +87,41 @@ class MLEvaluator:
         out = {p for p in out if p in cls.SUPPORTED_ALERT_CLASSES}
         return out or {"person", "vehicle"}
 
+    @staticmethod
+    def _person_candidate_score(
+        bbox: list[float],
+        conf: float,
+        frame_shape: tuple[int, ...],
+    ) -> float:
+        """
+        Rank person detections for alert selection.
+
+        We still care about confidence, but we also prefer:
+        - larger boxes
+        - boxes closer to the image center
+
+        This helps avoid choosing background clutter like hanging clothes.
+        """
+        h, w = frame_shape[:2]
+        x1, y1, x2, y2 = [float(v) for v in bbox]
+
+        bw = max(0.0, x2 - x1)
+        bh = max(0.0, y2 - y1)
+        box_area = bw * bh
+        frame_area = max(float(w * h), 1.0)
+        area_ratio = box_area / frame_area
+
+        cx = (x1 + x2) / 2.0
+        cy = (y1 + y2) / 2.0
+
+        dx = abs(cx - (w / 2.0)) / max(w / 2.0, 1.0)
+        dy = abs(cy - (h / 2.0)) / max(h / 2.0, 1.0)
+        center_penalty = (dx + dy) / 2.0
+
+        # Confidence is still dominant, but we bias toward
+        # larger / more central person boxes.
+        return float(conf) + (0.60 * area_ratio) - (0.25 * center_penalty)
+
     def evaluate_frames(self, frames: list[np.ndarray]) -> dict | None:
         """
         Runs YOLO on a list of frames.
@@ -97,7 +132,7 @@ class MLEvaluator:
         - otherwise choose the best valid VEHICLE
         """
         best_person = None
-        best_person_conf = -1.0
+        best_person_score = float("-inf")
 
         best_vehicle = None
         best_vehicle_conf = -1.0
@@ -114,7 +149,7 @@ class MLEvaluator:
             else:
                 frame_bgr = frame
 
-            detections = self.model.predict(frame_bgr)
+            detections = self.model.predict(frame_bgr) or []
 
             for det in detections:
                 x1, y1, x2, y2, conf, label = det
@@ -138,17 +173,26 @@ class MLEvaluator:
                     and conf >= self.vehicle_conf
                 )
 
-                if is_person and conf > best_person_conf:
-                    best_person_conf = conf
-                    best_person = {
-                        "detection": {
-                            "label": label,
-                            "confidence": conf,
-                            "bbox": [x1, y1, x2, y2],
-                        },
-                        "frame": frame_bgr,
-                        "frame_index": idx,
-                    }
+                bbox = [x1, y1, x2, y2]
+
+                if is_person:
+                    person_score = self._person_candidate_score(
+                        bbox,
+                        conf,
+                        frame_bgr.shape,
+                    )
+                    if person_score > best_person_score:
+                        best_person_score = person_score
+                        best_person = {
+                            "detection": {
+                                "label": label,
+                                "confidence": conf,
+                                "bbox": bbox,
+                            },
+                            "frame": frame_bgr,
+                            "frame_index": idx,
+                            "selection_score": person_score,
+                        }
 
                 elif is_vehicle and conf > best_vehicle_conf:
                     best_vehicle_conf = conf
@@ -156,7 +200,7 @@ class MLEvaluator:
                         "detection": {
                             "label": label,
                             "confidence": conf,
-                            "bbox": [x1, y1, x2, y2],
+                            "bbox": bbox,
                         },
                         "frame": frame_bgr,
                         "frame_index": idx,
@@ -175,10 +219,11 @@ class MLEvaluator:
 
         logger.info(
             "Chosen detection: class=%s conf=%.2f frame_index=%d "
-            "best_person_any=%.2f best_vehicle_any=%.2f total_frames=%d",
+            "selection_score=%s best_person_any=%.2f best_vehicle_any=%.2f total_frames=%d",
             chosen["detection"]["label"],
             chosen["detection"]["confidence"],
             chosen["frame_index"],
+            f'{chosen.get("selection_score", 0.0):.3f}' if chosen["detection"]["label"].lower() == "person" else "n/a",
             best_person_any,
             best_vehicle_any,
             len(frames),
@@ -195,6 +240,102 @@ class MLEvaluator:
             "frame": annotated,
             "frame_index": chosen["frame_index"],
         }
+
+    def evaluate_frames_multi(self, frames: list[np.ndarray]) -> list[dict]:
+        """
+        Return up to two alert candidates from a window:
+        - one best person
+        - one best vehicle
+
+        This lets the pipeline send both alerts if both are present.
+        """
+        best_person = None
+        best_person_score = float("-inf")
+
+        best_vehicle = None
+        best_vehicle_conf = -1.0
+
+        for idx, frame in enumerate(frames):
+            if frame is None:
+                continue
+
+            if frame.ndim == 2 or (frame.ndim == 3 and frame.shape[2] == 1):
+                frame_bgr = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+            else:
+                frame_bgr = frame
+
+            detections = self.model.predict(frame_bgr) or []
+
+            for det in detections:
+                x1, y1, x2, y2, conf, label = det
+                label_lower = label.lower()
+                conf = float(conf)
+                bbox = [x1, y1, x2, y2]
+
+                is_person = (
+                    "person" in self.allowed_classes
+                    and label_lower == "person"
+                    and conf >= self.person_conf
+                )
+
+                is_vehicle = (
+                    "vehicle" in self.allowed_classes
+                    and label_lower in self.VEHICLE_LABELS
+                    and conf >= self.vehicle_conf
+                )
+
+                if is_person:
+                    person_score = self._person_candidate_score(
+                        bbox,
+                        conf,
+                        frame_bgr.shape,
+                    )
+                    if person_score > best_person_score:
+                        best_person_score = person_score
+                        best_person = {
+                            "detection": {
+                                "label": label,
+                                "confidence": conf,
+                                "bbox": bbox,
+                            },
+                            "frame": frame_bgr,
+                            "frame_index": idx,
+                            "selection_score": person_score,
+                        }
+
+                elif is_vehicle and conf > best_vehicle_conf:
+                    best_vehicle_conf = conf
+                    best_vehicle = {
+                        "detection": {
+                            "label": label,
+                            "confidence": conf,
+                            "bbox": bbox,
+                        },
+                        "frame": frame_bgr,
+                        "frame_index": idx,
+                    }
+
+        results = []
+
+        if best_person is not None:
+            best_person["frame"] = self._draw_bbox(
+                best_person["frame"],
+                best_person["detection"]["bbox"],
+                best_person["detection"]["label"],
+                best_person["detection"]["confidence"],
+            )
+            results.append(best_person)
+
+        if best_vehicle is not None:
+            best_vehicle["frame"] = self._draw_bbox(
+                best_vehicle["frame"],
+                best_vehicle["detection"]["bbox"],
+                best_vehicle["detection"]["label"],
+                best_vehicle["detection"]["confidence"],
+            )
+            results.append(best_vehicle)
+
+        return results
 
     @staticmethod
     def _draw_bbox(
@@ -252,7 +393,7 @@ class MLEvaluator:
         else:
             frame_bgr = frame
 
-        raw_detections = self.model.predict(frame_bgr)
+        raw_detections = self.model.predict(frame_bgr) or []
         valid_detections = []
 
         for det in raw_detections:

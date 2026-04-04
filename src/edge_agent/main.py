@@ -404,7 +404,7 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
 
             sender.set_status("shutting_down")
             return _shutdown(0)
-        
+
         if args.run:
 
             async def _run_main() -> None:

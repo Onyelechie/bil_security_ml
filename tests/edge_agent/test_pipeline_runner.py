@@ -16,11 +16,13 @@ def _no_disk_writes(mocker):
 
 def test_pipeline_runner_uses_frameitem_timestamp(tmp_path):
     evaluator = MagicMock()
-    evaluator.evaluate_frames.return_value = {
-        "detection": {"label": "person", "confidence": 0.9},
-        "frame": np.zeros((10, 10, 3), dtype=np.uint8),
-        "frame_index": 1,
-    }
+    evaluator.evaluate_frames_multi.return_value = [
+        {
+            "detection": {"label": "person", "confidence": 0.9},
+            "frame": np.zeros((10, 10, 3), dtype=np.uint8),
+            "frame_index": 1,
+        }
+    ]
 
     sender = MagicMock()
     sender.send_alert.return_value = True
@@ -65,7 +67,7 @@ def test_save_frame_returns_absolute_path(tmp_path):
 
 def test_pipeline_runner_skips_on_no_detection(tmp_path):
     evaluator = MagicMock()
-    evaluator.evaluate_frames.return_value = None
+    evaluator.evaluate_frames_multi.return_value = []
 
     sender = MagicMock()
 
@@ -84,11 +86,13 @@ def test_pipeline_runner_skips_on_no_detection(tmp_path):
 
 def test_pipeline_runner_save_images_disabled(tmp_path):
     evaluator = MagicMock()
-    evaluator.evaluate_frames.return_value = {
-        "detection": {"label": "person", "confidence": 0.9},
-        "frame": np.zeros((10, 10, 3), dtype=np.uint8),
-        "frame_index": 0,
-    }
+    evaluator.evaluate_frames_multi.return_value = [
+        {
+            "detection": {"label": "person", "confidence": 0.9},
+            "frame": np.zeros((10, 10, 3), dtype=np.uint8),
+            "frame_index": 0,
+        }
+    ]
 
     sender = MagicMock()
     sender.send_alert.return_value = True
@@ -149,3 +153,37 @@ def test_save_frame_avoids_filename_collisions(tmp_path, mocker):
     path2 = pipeline._save_frame("cam-1", frame)
 
     assert path1 != path2
+
+
+def test_pipeline_runner_sends_two_alerts_when_multi_results(tmp_path):
+    evaluator = MagicMock()
+    evaluator.evaluate_frames_multi.return_value = [
+        {
+            "detection": {"label": "person", "confidence": 0.9},
+            "frame": np.zeros((10, 10, 3), dtype=np.uint8),
+            "frame_index": 0,
+        },
+        {
+            "detection": {"label": "truck", "confidence": 0.8},
+            "frame": np.zeros((10, 10, 3), dtype=np.uint8),
+            "frame_index": 1,
+        },
+    ]
+
+    sender = MagicMock()
+    sender.send_alert.return_value = True
+
+    pipeline = PipelineRunner(
+        evaluator=evaluator,
+        sender=sender,
+        image_output_dir=str(tmp_path),
+    )
+
+    frames = [
+        np.zeros((10, 10), dtype=np.uint8),
+        np.zeros((10, 10), dtype=np.uint8),
+    ]
+
+    pipeline.process_frames("cam-1", frames)
+
+    assert sender.send_alert.call_count == 2

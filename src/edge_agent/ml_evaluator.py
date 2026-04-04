@@ -11,9 +11,6 @@ logger = logging.getLogger(__name__)
 COLOR_PERSON = (0, 255, 0)
 COLOR_VEHICLE = (255, 165, 0)
 
-best_person_any = -1.0
-best_vehicle_any = -1.0
-
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 PRODUCTION_DIR = os.path.join(PROJECT_ROOT, "production_model")
 

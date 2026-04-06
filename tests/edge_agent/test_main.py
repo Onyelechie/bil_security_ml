@@ -374,7 +374,8 @@ def test_run_mode_builds_evaluator_pipeline_and_local_trigger(monkeypatch):
 
     class _Queue:
         async def get(self):
-            raise KeyboardInterrupt()
+            # Simulate an empty queue without bubbling KeyboardInterrupt into asyncio.
+            await asyncio.sleep(10)
 
     class FakeTcpTrigger:
         def __init__(self, cfg):
@@ -395,12 +396,15 @@ def test_run_mode_builds_evaluator_pipeline_and_local_trigger(monkeypatch):
 
     class FakeIncidentManager:
         def __init__(self, *args, **kwargs):
-            pass
+            self._tick_count = 0
 
         def ingest(self, evt, *, accepted):
             return None
 
         def tick(self, now):
+            self._tick_count += 1
+            if self._tick_count == 1:
+                raise KeyboardInterrupt()
             return []
 
     class FakeWorker:
@@ -497,3 +501,4 @@ def test_run_mode_builds_evaluator_pipeline_and_local_trigger(monkeypatch):
     assert created["person_conf"] == cfg.detector_person_conf
     assert created["vehicle_conf"] == cfg.detector_vehicle_conf
     assert created["allowed_classes"] == cfg.detector_allowed_classes
+

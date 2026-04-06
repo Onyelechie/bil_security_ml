@@ -501,4 +501,3 @@ def test_run_mode_builds_evaluator_pipeline_and_local_trigger(monkeypatch):
     assert created["person_conf"] == cfg.detector_person_conf
     assert created["vehicle_conf"] == cfg.detector_vehicle_conf
     assert created["allowed_classes"] == cfg.detector_allowed_classes
-

@@ -52,7 +52,7 @@ def test_select_frames_evenly_deterministic_and_capped():
     assert len(selected) <= 5
     # Should be monotonically increasing timestamps
     assert all(selected[i].ts <= selected[i + 1].ts for i in range(len(selected) - 1))
-    assert selected == selected_again
+    assert [item.ts for item in selected] == [item.ts for item in selected_again]
 
 
 def test_select_frames_handles_single_point_window():

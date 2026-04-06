@@ -86,8 +86,8 @@ class EdgeSettings(BaseSettings):
     detector_model: str = "YOLOv8-Small"
     detector_weights: str | None = None
     detector_person_conf: float = 0.40
-    detector_vehicle_conf: float = 0.90
-    detector_allowed_classes: str = "person"
+    detector_vehicle_conf: float = 0.50
+    detector_allowed_classes: str = "person,vehicle"
 
     # --- Quarantine retention ---
     queue_quarantine_retention_days: int = 7

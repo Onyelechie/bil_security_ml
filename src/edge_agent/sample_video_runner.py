@@ -33,7 +33,8 @@ def run_sample_video(
     - load the FULL video first
     - split into sequential chunks by frame index
     - analyze ALL frames in each chunk
-    - send at most one best alert per chunk
+    - send up to two alerts per chunk:
+      one best person alert and one best vehicle alert
     """
     path = Path(video_path)
     if not path.exists():

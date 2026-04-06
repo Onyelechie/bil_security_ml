@@ -99,4 +99,3 @@ def test_select_frames_sorts_unsorted_inputs():
     )
 
     assert selected == sorted(selected, key=lambda it: it.ts)
-

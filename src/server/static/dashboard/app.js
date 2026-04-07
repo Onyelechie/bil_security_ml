@@ -134,8 +134,9 @@
       this.dom.settingsDeviceRefresh = document.getElementById("settings-device-refresh");
       this.dom.settingsDeviceMessage = document.getElementById("settings-device-message");
       this.dom.settingsDeviceList = document.getElementById("settings-device-list");
-      this.dom.alertsSortReceived = document.getElementById("alerts-sort-received");
-      this.dom.alertsSortTimestamp = document.getElementById("alerts-sort-timestamp");
+      this.dom.alertsSortSelect = document.getElementById("alerts-sort-select");
+      this.dom.alertsViewCompact = document.getElementById("alerts-view-compact");
+      this.dom.alertsViewList = document.getElementById("alerts-view-list");
       this.dom.settingsViewButtons = Array.from(
         document.querySelectorAll(".settings-subnav-btn[data-settings-view]")
       );
@@ -185,17 +186,16 @@
 
       this.dom.refreshSelectedBtn.addEventListener("click", () => this.refreshSelected());
       this.dom.refreshAllBtn.addEventListener("click", () => this.refreshAll());
-      this.dom.alertsViewCompact.addEventListener("click", () => this._setAlertListView("compact"));
-      this.dom.alertsViewList.addEventListener("click", () => this._setAlertListView("list"));
-      if (this.dom.alertsSortReceived) {
-        this.dom.alertsSortReceived.addEventListener("click", () =>
-          this._setAlertSortBy("received_at")
-        );
+      if (this.dom.alertsViewCompact) {
+        this.dom.alertsViewCompact.addEventListener("click", () => this._setAlertListView("compact"));
       }
-      if (this.dom.alertsSortTimestamp) {
-        this.dom.alertsSortTimestamp.addEventListener("click", () =>
-          this._setAlertSortBy("timestamp")
-        );
+      if (this.dom.alertsViewList) {
+        this.dom.alertsViewList.addEventListener("click", () => this._setAlertListView("list"));
+      }
+      if (this.dom.alertsSortSelect) {
+        this.dom.alertsSortSelect.addEventListener("change", (event) => {
+          this._setAlertSortBy(event.target.value);
+        });
       }
       if (this.dom.settingsSaveSite) {
         this.dom.settingsSaveSite.addEventListener("click", async () => {
@@ -693,8 +693,12 @@
     _renderAlertViewToggle() {
       const isListView = this.state.alertListView === "list";
       this.dom.alertsList.classList.toggle("list-view", isListView);
-      this.dom.alertsViewCompact.classList.toggle("is-active", !isListView);
-      this.dom.alertsViewList.classList.toggle("is-active", isListView);
+      if (this.dom.alertsViewCompact) {
+        this.dom.alertsViewCompact.classList.toggle("is-active", !isListView);
+      }
+      if (this.dom.alertsViewList) {
+        this.dom.alertsViewList.classList.toggle("is-active", isListView);
+      }
       this._renderAlertSortToggle();
     }
 
@@ -708,11 +712,8 @@
 
     _renderAlertSortToggle() {
       const sortBy = this.state.alertSortBy || "received_at";
-      if (this.dom.alertsSortReceived) {
-        this.dom.alertsSortReceived.classList.toggle("is-active", sortBy === "received_at");
-      }
-      if (this.dom.alertsSortTimestamp) {
-        this.dom.alertsSortTimestamp.classList.toggle("is-active", sortBy === "timestamp");
+      if (this.dom.alertsSortSelect) {
+        this.dom.alertsSortSelect.value = sortBy;
       }
     }
 
@@ -1464,8 +1465,6 @@
         selectedAlertStage: document.getElementById("selected-alert-stage"),
         selectedAlertDetails: document.getElementById("selected-alert-details"),
         alertFeedCount: document.getElementById("alert-feed-count"),
-        alertsViewCompact: document.getElementById("alerts-view-compact"),
-        alertsViewList: document.getElementById("alerts-view-list"),
         alertsList: document.getElementById("alerts-list"),
         edgeList: document.getElementById("edge-list"),
         logsList: document.getElementById("logs-list"),

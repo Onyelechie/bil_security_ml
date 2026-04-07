@@ -416,16 +416,23 @@
       </p>
       <div class="rail-controls">
         <div class="rail-control-group">
-          <p class="eyebrow">Sort Alerts</p>
-          <div class="view-switcher sort-switcher" role="group" aria-label="Alert sort order">
-            <button id="alerts-sort-received" class="view-switch is-active" type="button">Received</button>
-            <button id="alerts-sort-timestamp" class="view-switch" type="button">Alert Time</button>
+          <label class="rail-select-label" for="alerts-sort-select">Sort Alerts</label>
+          <select id="alerts-sort-select" class="rail-select" aria-label="Alert sort order">
+            <option value="received_at">Received</option>
+            <option value="timestamp">Alert Time</option>
+          </select>
+        </div>
+        <div class="rail-control-group rail-control-group-icons">
+          <span class="rail-select-label">Layout</span>
+          <div class="view-switcher icon-switcher" role="group" aria-label="Alert list view">
+            <button id="alerts-view-compact" class="view-switch icon-switch is-active" type="button" aria-label="Compact layout" title="Compact layout">
+              <span aria-hidden="true">▦</span>
+            </button>
+            <button id="alerts-view-list" class="view-switch icon-switch" type="button" aria-label="List layout" title="List layout">
+              <span aria-hidden="true">☰</span>
+            </button>
           </div>
         </div>
-      </div>
-      <div class="view-switcher" role="group" aria-label="Alert list view">
-        <button id="alerts-view-compact" class="view-switch is-active" type="button">Compact</button>
-        <button id="alerts-view-list" class="view-switch" type="button">List</button>
       </div>
       <div id="alerts-list" class="alerts-list"></div>
     </aside>

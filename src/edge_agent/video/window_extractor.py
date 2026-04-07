@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from bisect import bisect_left
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 
 from .ring_buffer import FrameItem
@@ -32,6 +32,26 @@ def _ensure_sorted(items: list[FrameItem]) -> list[FrameItem]:
     return sorted(items, key=lambda it: it.ts)
 
 
+def _closest_index(ts_list: list[datetime], target: datetime) -> int:
+    j = bisect_left(ts_list, target)
+    if j <= 0:
+        return 0
+    if j >= len(ts_list):
+        return len(ts_list) - 1
+
+    left = ts_list[j - 1]
+    right = ts_list[j]
+    return (j - 1) if (target - left) <= (right - target) else j
+
+
+def _build_targets(start: datetime, end: datetime, n: int) -> list[datetime]:
+    if n <= 0:
+        return []
+    if n == 1 or end <= start:
+        return [end]
+    return [start + (end - start) * (i / (n - 1)) for i in range(n)]
+
+
 def select_frames_evenly(
     items: list[FrameItem],
     *,
@@ -41,10 +61,12 @@ def select_frames_evenly(
     max_frames: int,
 ) -> list[FrameItem]:
     """
-    Deterministic selection:
-    - build evenly spaced target timestamps from [start..end]
-    - pick the closest available frame to each target
-    - dedupe and cap
+    Smarter deterministic selection:
+    - keeps some early context
+    - covers the full incident
+    - biases more frames toward the end/recent motion
+
+    This is still deterministic and capped, but improves over purely even sampling.
     """
     if not items or max_frames <= 0:
         return []
@@ -54,44 +76,39 @@ def select_frames_evenly(
 
     duration_s = (end - start).total_seconds()
     if duration_s <= 0:
-        # pick the closest frame to start
-        idx = bisect_left(ts_list, start)
-        if idx <= 0:
-            return [items[0]]
-        if idx >= len(items):
-            return [items[-1]]
-        # choose nearer neighbor
-        left = items[idx - 1]
-        right = items[idx]
-        return [left if (start - left.ts) <= (right.ts - start) else right]
+        idx = _closest_index(ts_list, start)
+        return [items[idx]]
 
     step = 1.0 / max(float(target_fps), 0.1)
-    # number of targets: inclusive of both ends-ish, and bounded by max_frames
-    n_targets = int(duration_s / step) + 1
-    n_targets = max(1, min(n_targets, int(max_frames)))
+    theoretical_targets = int(duration_s / step) + 1
+    n_total = max(1, min(theoretical_targets, int(max_frames)))
 
-    # If max_frames is smaller than theoretical targets, increase step accordingly
-    if n_targets == max_frames:
-        step = max(duration_s / max_frames, step)
+    if n_total <= 3:
+        targets = _build_targets(start, end, n_total)
+    else:
+        recent_n = max(1, int(round(n_total * 0.50)))
+        full_n = max(1, int(round(n_total * 0.30)))
+        early_n = max(0, n_total - recent_n - full_n)
 
-    chosen_idx: list[int] = []
-    for i in range(n_targets):
-        t = start + (end - start) * (i / max(n_targets - 1, 1))
-        j = bisect_left(ts_list, t)
+        recent_span_s = min(max(duration_s * 0.40, 2.0), 6.0, duration_s)
+        early_span_s = min(max(duration_s * 0.20, 1.0), 3.0, duration_s)
 
-        if j <= 0:
-            pick = 0
-        elif j >= len(items):
-            pick = len(items) - 1
-        else:
-            left = items[j - 1]
-            right = items[j]
-            pick = (j - 1) if (t - left.ts) <= (right.ts - t) else j
+        recent_start = end - timedelta(seconds=recent_span_s)
+        early_end = start + timedelta(seconds=early_span_s)
 
-        if not chosen_idx or chosen_idx[-1] != pick:
-            chosen_idx.append(pick)
+        targets = []
+        targets.extend(_build_targets(start, early_end, early_n))
+        targets.extend(_build_targets(start, end, full_n))
+        targets.extend(_build_targets(recent_start, end, recent_n))
 
+    chosen_idx: set[int] = set()
+    for t in targets:
+        chosen_idx.add(_closest_index(ts_list, t))
         if len(chosen_idx) >= max_frames:
             break
 
-    return [items[i] for i in chosen_idx]
+    ordered_idx = sorted(chosen_idx)
+    if len(ordered_idx) > max_frames:
+        ordered_idx = ordered_idx[:max_frames]
+
+    return [items[i] for i in ordered_idx]

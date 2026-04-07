@@ -113,3 +113,4 @@ accuracy/labeled_data
 accuracy/labeled_data/*
 labeled_data/
 !production_model/
+kernel.errors.txt

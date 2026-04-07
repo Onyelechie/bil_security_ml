@@ -73,7 +73,7 @@ async def test_extraction_worker_drops_when_no_frames_in_window():
         res = await asyncio.wait_for(worker.results.get(), timeout=1.0)
 
         assert res.status.value == "dropped"
-        assert res.reason == "no_frames"
+        assert res.reason == "buffer_underflow"
     finally:
         await worker.stop()
 

@@ -48,6 +48,7 @@ def test_websocket_alert_ingestion_ack():
             assert ack["alert"]["edge_pc_id"] == "edge-ws-1"
             assert ack["alert"]["site_id"] == "site_ws_1"
             assert "id" in ack["alert"]
+            assert "received_at" in ack["alert"]
 
 
 def test_websocket_alert_validation_error():

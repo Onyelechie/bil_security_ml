@@ -2,6 +2,7 @@
   const STORAGE_KEY = "bil_server_dashboard_targets_v1";
   const VISITED_STORAGE_KEY = "bil_server_dashboard_alert_visits_v1";
   const ALERT_VIEW_STORAGE_KEY = "bil_server_dashboard_alert_view_v1";
+  const ALERT_SORT_STORAGE_KEY = "bil_server_dashboard_alert_sort_v1";
   const AUTH_STORAGE_KEY = "bil_server_dashboard_admin_tokens_v1";
   const SETTINGS_VIEW_STORAGE_KEY = "bil_server_dashboard_settings_view_v1";
   const ALERT_TIME_ZONE = "America/Winnipeg";
@@ -109,8 +110,11 @@
         selectedAlerts: new Map(),
         visitedAlerts: this._loadVisitedAlerts(),
         alertListView: this._loadAlertListView(),
+        alertSortBy: this._loadAlertSortBy(),
         authTokens: this._loadAuthTokens(),
         settingsView: this._loadSettingsView(),
+        managedDevices: [],
+        managedDevicesLoadedFor: null,
       };
       this.dom = this._getDom();
       this.dom.settingsSiteSelect = document.getElementById("settings-site-select");
@@ -125,6 +129,12 @@
       this.dom.settingsPublicKey = document.getElementById("settings-public-key");
       this.dom.settingsEnrollDevice = document.getElementById("settings-enroll-device");
       this.dom.settingsEnrollMessage = document.getElementById("settings-enroll-message");
+      this.dom.settingsDeviceCount = document.getElementById("settings-device-count");
+      this.dom.settingsDeviceRefresh = document.getElementById("settings-device-refresh");
+      this.dom.settingsDeviceMessage = document.getElementById("settings-device-message");
+      this.dom.settingsDeviceList = document.getElementById("settings-device-list");
+      this.dom.alertsSortReceived = document.getElementById("alerts-sort-received");
+      this.dom.alertsSortTimestamp = document.getElementById("alerts-sort-timestamp");
       this.dom.settingsViewButtons = Array.from(
         document.querySelectorAll(".settings-subnav-btn[data-settings-view]")
       );
@@ -176,6 +186,16 @@
       this.dom.refreshAllBtn.addEventListener("click", () => this.refreshAll());
       this.dom.alertsViewCompact.addEventListener("click", () => this._setAlertListView("compact"));
       this.dom.alertsViewList.addEventListener("click", () => this._setAlertListView("list"));
+      if (this.dom.alertsSortReceived) {
+        this.dom.alertsSortReceived.addEventListener("click", () =>
+          this._setAlertSortBy("received_at")
+        );
+      }
+      if (this.dom.alertsSortTimestamp) {
+        this.dom.alertsSortTimestamp.addEventListener("click", () =>
+          this._setAlertSortBy("timestamp")
+        );
+      }
       if (this.dom.settingsSaveSite) {
         this.dom.settingsSaveSite.addEventListener("click", async () => {
           const sel = this.dom.settingsSiteSelect;
@@ -244,6 +264,7 @@
             this._renderSettingsAdminState();
             this._setSettingsMessage("Admin access unlocked for this target.", false);
             await this.refreshSelected();
+            await this._refreshManagedDevices(true);
           } catch (err) {
             console.error(err);
             this._setSettingsMessage("Failed to unlock admin access.", true);
@@ -255,8 +276,11 @@
           const active = this.store.getActive();
           if (!active) return;
           this._clearAuthToken(active.id);
+          this.state.managedDevices = [];
+          this.state.managedDevicesLoadedFor = null;
           this._renderSettingsAdminState();
           this._setSettingsMessage("Stored admin token cleared for this target.", false);
+          this._renderManagedDevices();
           await this.refreshSelected();
         });
       }
@@ -295,9 +319,54 @@
               throw new Error(payload.detail || "Failed to enroll device");
             }
             this._setEnrollMessage(`Device ${deviceId} enrolled successfully.`, false);
+            await this._refreshManagedDevices(true);
           } catch (err) {
             console.error(err);
             this._setEnrollMessage(err.message || "Failed to enroll device.", true);
+          }
+        });
+      }
+      if (this.dom.settingsDeviceRefresh) {
+        this.dom.settingsDeviceRefresh.addEventListener("click", async () => {
+          await this._refreshManagedDevices(true);
+        });
+      }
+      if (this.dom.settingsDeviceList) {
+        this.dom.settingsDeviceList.addEventListener("click", async (event) => {
+          const button = event.target.closest("[data-device-revoke]");
+          if (!button) return;
+          const deviceId = button.dataset.deviceRevoke || "";
+          if (!deviceId) return;
+          const active = this.store.getActive();
+          if (!active) {
+            this._setDeviceMessage("Select an active target first.", true);
+            return;
+          }
+          const token = this._getAuthToken(active.id);
+          if (!token) {
+            this._setDeviceMessage("Unlock admin access before revoking a device.", true);
+            return;
+          }
+          if (!window.confirm(`Revoke device ${deviceId}?`)) {
+            return;
+          }
+          try {
+            const response = await fetch(
+              `${this._baseUrl(active)}/api/devices/${encodeURIComponent(deviceId)}/revoke`,
+              {
+                method: "POST",
+                headers: this._authHeaders(active),
+              }
+            );
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(payload.detail || "Failed to revoke device");
+            }
+            this._setDeviceMessage(`Device ${deviceId} revoked successfully.`, false);
+            await this._refreshManagedDevices(true);
+          } catch (err) {
+            console.error(err);
+            this._setDeviceMessage(err.message || "Failed to revoke device.", true);
           }
         });
       }
@@ -323,6 +392,9 @@
       await this._loadSnapshot(active);
       this._renderTargets();
       this._renderMain();
+      if (document.body.getAttribute("data-view") === "settings") {
+        await this._refreshManagedDevices();
+      }
     }
 
     _scheduleLiveRefresh() {
@@ -412,7 +484,9 @@
       const base = this._baseUrl(target);
       const [healthResult, alertsResult, edgesResult, logsResult, serverInfoResult] = await Promise.allSettled([
         this._fetchJson(`${base}/`),
-        this._fetchJson(`${base}/api/alerts?limit=60`),
+        this._fetchJson(
+          `${base}/api/alerts?limit=60&sort_by=${encodeURIComponent(this.state.alertSortBy || "received_at")}`
+        ),
         this._fetchJson(`${base}/api/heartbeat`),
         this._fetchJson(`${base}/api/logs?limit=200`, { headers: this._authHeaders(target) }),
         this._fetchJson(`${base}/api/server-info`),
@@ -496,6 +570,15 @@
       }
     }
 
+    _loadAlertSortBy() {
+      try {
+        const raw = localStorage.getItem(ALERT_SORT_STORAGE_KEY);
+        return raw === "timestamp" ? "timestamp" : "received_at";
+      } catch (_err) {
+        return "received_at";
+      }
+    }
+
     _loadAuthTokens() {
       try {
         const raw = localStorage.getItem(AUTH_STORAGE_KEY);
@@ -567,6 +650,25 @@
       this.dom.alertsList.classList.toggle("list-view", isListView);
       this.dom.alertsViewCompact.classList.toggle("is-active", !isListView);
       this.dom.alertsViewList.classList.toggle("is-active", isListView);
+      this._renderAlertSortToggle();
+    }
+
+    _setAlertSortBy(sortBy) {
+      const nextSort = sortBy === "timestamp" ? "timestamp" : "received_at";
+      this.state.alertSortBy = nextSort;
+      localStorage.setItem(ALERT_SORT_STORAGE_KEY, nextSort);
+      this._renderAlertSortToggle();
+      this.refreshSelected();
+    }
+
+    _renderAlertSortToggle() {
+      const sortBy = this.state.alertSortBy || "received_at";
+      if (this.dom.alertsSortReceived) {
+        this.dom.alertsSortReceived.classList.toggle("is-active", sortBy === "received_at");
+      }
+      if (this.dom.alertsSortTimestamp) {
+        this.dom.alertsSortTimestamp.classList.toggle("is-active", sortBy === "timestamp");
+      }
     }
 
     _getVisitedAlerts(targetId) {
@@ -645,11 +747,21 @@
     }
 
     _getSortedAlerts(alerts) {
+      const sortBy = this.state.alertSortBy || "received_at";
       return [...alerts].sort((a, b) => {
-        const ta = new Date(a.timestamp || 0).getTime();
-        const tb = new Date(b.timestamp || 0).getTime();
+        const ta = this._alertSortValue(a, sortBy);
+        const tb = this._alertSortValue(b, sortBy);
         return tb - ta;
       });
+    }
+
+    _alertSortValue(alert, sortBy) {
+      const rawValue =
+        sortBy === "timestamp"
+          ? (alert.timestamp || alert.received_at)
+          : (alert.received_at || alert.timestamp);
+      const value = new Date(rawValue || 0).getTime();
+      return Number.isFinite(value) ? value : 0;
     }
 
     _renderTargets() {
@@ -689,6 +801,9 @@
           this.store.setActive(target.id);
           this._renderTargets();
           this._renderMain();
+          this._renderSettingsAdminState();
+          this._renderSettingsSummary();
+          void this._refreshManagedDevices(true);
           this.refreshSelected();
           this._connectLiveEvents();
         });
@@ -701,6 +816,9 @@
           this._saveVisitedAlerts();
           this._renderTargets();
           this._renderMain();
+          this._renderSettingsAdminState();
+          this._renderSettingsSummary();
+          void this._refreshManagedDevices(true);
           this._connectLiveEvents();
         });
 
@@ -819,6 +937,10 @@
       const detailCards = [
         { label: "Alert ID", value: selectedAlert.id || "unknown" },
         { label: "Detected At", value: this._fmtAlertTs(selectedAlert.timestamp) },
+        {
+          label: "Received At",
+          value: this._fmtAlertTs(selectedAlert.received_at || selectedAlert.timestamp),
+        },
         { label: "Site", value: selectedAlert.site_id || "unknown" },
         { label: "Camera", value: selectedAlert.camera_id || "unknown" },
         { label: "Edge PC", value: selectedAlert.edge_pc_id || "unknown" },
@@ -906,7 +1028,8 @@
               '<div class="alert-row-top">',
               '<div class="alert-row-list-main">',
               `<p class="alert-row-title">${this._escape(alert.site_id || "Unknown site")}</p>`,
-              `<p class="alert-row-time">${this._escape(this._fmtAlertTs(alert.timestamp))}</p>`,
+              `<p class="alert-row-time">Alert time: ${this._escape(this._fmtAlertTs(alert.timestamp))}</p>`,
+              `<p class="alert-row-time">Received: ${this._escape(this._fmtAlertTs(alert.received_at || alert.timestamp))}</p>`,
               "</div>",
               `<span class="status-pill ${isVisited ? "visited" : "pending"}">${isVisited ? "Visited" : "New"}</span>`,
               "</div>",
@@ -919,7 +1042,8 @@
               "</div>",
               `<span class="status-pill ${isVisited ? "visited" : "pending"}">${isVisited ? "Visited" : "New"}</span>`,
               "</div>",
-              `<p class="alert-row-meta">${this._escape(this._fmtAlertTs(alert.timestamp))}</p>`,
+              `<p class="alert-row-meta">Alert time: ${this._escape(this._fmtAlertTs(alert.timestamp))}</p>`,
+              `<p class="alert-row-meta">Received: ${this._escape(this._fmtAlertTs(alert.received_at || alert.timestamp))}</p>`,
               `<p class="alert-row-meta">${this._escape(this._formatDetections(alert) || "No detections reported")}</p>`,
               `<p class="alert-row-foot">${this._escape(alert.edge_pc_id || "unknown edge")} - ${alert.image_path ? "image ready" : "no image"}</p>`,
             ].join("");
@@ -1066,6 +1190,108 @@
         this.dom.settingsActiveSection.textContent =
           labels[this.state.settingsView] || "Security";
       }
+      this._renderManagedDevices();
+    }
+
+    async _refreshManagedDevices(force = false) {
+      const active = this.store.getActive();
+      const hasToken = !!(active && this._getAuthToken(active.id));
+      if (!active || !hasToken) {
+        this.state.managedDevices = [];
+        this.state.managedDevicesLoadedFor = null;
+        this._renderManagedDevices();
+        return;
+      }
+      if (!force && this.state.managedDevicesLoadedFor === active.id) {
+        this._renderManagedDevices();
+        return;
+      }
+      try {
+        const response = await fetch(`${this._baseUrl(active)}/api/devices`, {
+          headers: this._authHeaders(active),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.detail || "Failed to load devices");
+        }
+        this.state.managedDevices = Array.isArray(payload.devices) ? payload.devices : [];
+        this.state.managedDevicesLoadedFor = active.id;
+        this._renderManagedDevices();
+      } catch (err) {
+        console.error(err);
+        this.state.managedDevices = [];
+        this.state.managedDevicesLoadedFor = null;
+        this._setDeviceMessage(err.message || "Failed to load devices.", true);
+        this._renderManagedDevices();
+      }
+    }
+
+    _renderManagedDevices() {
+      const active = this.store.getActive();
+      const hasToken = !!(active && this._getAuthToken(active.id));
+      const devices = Array.isArray(this.state.managedDevices)
+        ? [...this.state.managedDevices]
+        : [];
+      devices.sort((a, b) => {
+        if (a.active !== b.active) {
+          return a.active ? -1 : 1;
+        }
+        return String(a.device_id || "").localeCompare(String(b.device_id || ""));
+      });
+
+      if (this.dom.settingsDeviceCount) {
+        this.dom.settingsDeviceCount.textContent = `${devices.length} device${devices.length === 1 ? "" : "s"}`;
+      }
+
+      if (!this.dom.settingsDeviceList) {
+        return;
+      }
+
+      if (!active) {
+        this.dom.settingsDeviceList.innerHTML = '<div class="empty">No target selected.</div>';
+        this._setDeviceMessage("Select an active target to manage devices.", true);
+        return;
+      }
+      if (!hasToken) {
+        this.dom.settingsDeviceList.innerHTML = '<div class="empty">Admin access is locked.</div>';
+        this._setDeviceMessage("Unlock admin access to load and manage devices.", true);
+        return;
+      }
+      if (devices.length === 0) {
+        this.dom.settingsDeviceList.innerHTML = '<div class="empty">No enrolled devices yet.</div>';
+        this._setDeviceMessage(`No enrolled devices found for ${active.name}.`, false);
+        return;
+      }
+
+      this.dom.settingsDeviceList.innerHTML = devices.map((device) => {
+        const isActive = !!device.active;
+        const statusLabel = isActive ? "Active" : "Revoked";
+        const statusClass = isActive ? "ok" : "err";
+        const revokeButton = isActive
+          ? `<button class="btn ghost" type="button" data-device-revoke="${this._escape(device.device_id)}">Revoke</button>`
+          : '<button class="btn ghost" type="button" disabled>Revoked</button>';
+        return [
+          '<article class="device-card">',
+          '<div class="section-heading device-card-heading">',
+          '<div>',
+          `<p class="eyebrow">${isActive ? "Authorized Edge" : "Revoked Edge"}</p>`,
+          `<h3>${this._escape(device.device_id || "unknown device")}</h3>`,
+          "</div>",
+          `<span class="status-pill ${statusClass}">${statusLabel}</span>`,
+          "</div>",
+          '<div class="device-card-meta">',
+          `<p><strong>Enrolled:</strong> ${this._escape(this._fmtTs(device.enrolled_at))}</p>`,
+          `<p><strong>Revoked:</strong> ${this._escape(this._fmtTs(device.revoked_at))}</p>`,
+          `<p><strong>Last key rotation:</strong> ${this._escape(this._fmtTs(device.last_key_rotation_at))}</p>`,
+          "</div>",
+          '<div class="action-row">',
+          revokeButton,
+          "</div>",
+          "</article>",
+        ].join("");
+      }).join("");
+
+      this._setDeviceMessage(`Showing enrolled devices for ${active.name}.`, false);
     }
 
     _setSettingsMessage(message, isError) {
@@ -1079,6 +1305,13 @@
       this.dom.settingsEnrollMessage.textContent = message;
       this.dom.settingsEnrollMessage.classList.toggle("danger-text", !!isError);
       this.dom.settingsEnrollMessage.classList.toggle("ok-text", !isError);
+    }
+
+    _setDeviceMessage(message, isError) {
+      if (!this.dom.settingsDeviceMessage) return;
+      this.dom.settingsDeviceMessage.textContent = message;
+      this.dom.settingsDeviceMessage.classList.toggle("danger-text", !!isError);
+      this.dom.settingsDeviceMessage.classList.toggle("ok-text", !isError);
     }
 
     _alertLabel(alert) {
@@ -1211,6 +1444,7 @@
           app._renderSettingsAdminState();
           app._renderSettingsView();
           app._renderSettingsSummary();
+          void app._refreshManagedDevices();
         } catch (_e) {
           // ignore
         }
@@ -1226,6 +1460,7 @@
     const initial = saved || (defaultBtn && defaultBtn.dataset.view) || "overview";
     app._renderSettingsView();
     app._renderSettingsSummary();
+    void app._refreshManagedDevices();
     setView(initial);
   });
 })();

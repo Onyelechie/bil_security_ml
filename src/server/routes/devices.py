@@ -1,5 +1,5 @@
 import base64
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -30,6 +30,36 @@ class DeviceRotate(BaseModel):
     public_key_b64: str
 
 
+@router.get("")
+def list_devices(
+    db: Session = Depends(get_db),
+    _admin: str = Depends(get_current_admin),
+):
+    devices = (
+        db.query(Device)
+        .order_by(Device.enrolled_at.desc(), Device.device_id.asc())
+        .all()
+    )
+    return {
+        "devices": [
+            {
+                "device_id": device.device_id,
+                "enrolled_at": device.enrolled_at.isoformat(),
+                "active": device.active,
+                "revoked_at": (
+                    device.revoked_at.isoformat() if device.revoked_at else None
+                ),
+                "last_key_rotation_at": (
+                    device.last_key_rotation_at.isoformat()
+                    if device.last_key_rotation_at
+                    else None
+                ),
+            }
+            for device in devices
+        ]
+    }
+
+
 @router.post("/enroll", status_code=status.HTTP_201_CREATED)
 def enroll_device(
     payload: DeviceCreate,
@@ -57,7 +87,7 @@ def enroll_device(
     dev = Device(
         device_id=payload.device_id,
         public_key_b64=payload.public_key_b64,
-        enrolled_at=datetime.utcnow(),
+        enrolled_at=datetime.now(timezone.utc),
         active=True,
     )
     db.add(dev)
@@ -102,7 +132,7 @@ def revoke_device(
             "revoked_at": d.revoked_at.isoformat() if d.revoked_at else None,
         }
     d.active = False
-    d.revoked_at = datetime.utcnow()
+    d.revoked_at = datetime.now(timezone.utc)
     db.add(d)
     db.commit()
     return {

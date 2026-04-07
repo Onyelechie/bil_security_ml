@@ -323,6 +323,44 @@ body[data-view="settings"] .dashboard-shell {
   line-height: 1.55;
 }
 
+.device-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.device-card {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(138, 163, 187, 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 30%),
+    rgba(8, 18, 31, 0.74);
+  display: grid;
+  gap: 12px;
+}
+
+.device-card-heading {
+  align-items: start;
+}
+
+.device-card h3 {
+  margin: 2px 0 0;
+  font-size: 1rem;
+}
+
+.device-card-meta {
+  display: grid;
+  gap: 6px;
+  color: #dce8f3;
+  font-size: 0.92rem;
+}
+
+.device-card-meta p {
+  margin: 0;
+  line-height: 1.5;
+}
+
 .settings-form-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 220px;
@@ -783,6 +821,17 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.rail-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rail-control-group {
+  display: grid;
+  gap: 8px;
 }
 
 .view-switcher {

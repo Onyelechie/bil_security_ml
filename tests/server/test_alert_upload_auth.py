@@ -68,6 +68,7 @@ def test_alert_upload_accepts_registered_edge():
         body = response.json()
         assert body["edge_pc_id"] == edge_pc_id
         assert "id" in body
+        assert "received_at" in body
         uploaded_ts = datetime.fromisoformat(body["timestamp"])
         assert uploaded_ts.utcoffset() == ZoneInfo("America/Winnipeg").utcoffset(
             uploaded_ts

@@ -2,6 +2,8 @@ import uuid
 
 from sqlalchemy import JSON, Column, DateTime, ForeignKey, String
 
+from bil_time import now_in_winnipeg
+
 from .base import Base
 
 
@@ -16,5 +18,6 @@ class Alert(Base):
         nullable=False,
     )
     timestamp = Column(DateTime, nullable=False)
+    received_at = Column(DateTime, nullable=True, default=now_in_winnipeg)
     detections = Column(JSON, nullable=False)
     image_path = Column(String, nullable=True)

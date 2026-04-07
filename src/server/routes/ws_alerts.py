@@ -236,6 +236,7 @@ async def alerts_websocket(websocket: WebSocket) -> None:
                         "camera_id": alert_out.get("camera_id"),
                         "edge_pc_id": alert_out.get("edge_pc_id"),
                         "timestamp": alert_out.get("timestamp"),
+                        "received_at": alert_out.get("received_at"),
                     },
                 )
                 continue
@@ -380,6 +381,7 @@ async def alerts_websocket(websocket: WebSocket) -> None:
                     "camera_id": alert_out.get("camera_id"),
                     "edge_pc_id": alert_out.get("edge_pc_id"),
                     "timestamp": alert_out.get("timestamp"),
+                    "received_at": alert_out.get("received_at"),
                 },
             )
     finally:

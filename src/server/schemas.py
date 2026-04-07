@@ -38,6 +38,11 @@ class AlertOut(AlertCreate):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    received_at: datetime | None = None
+
+    @field_serializer("received_at")
+    def serialize_received_at(self, value: datetime | None) -> str | None:
+        return isoformat_winnipeg(value) if value else None
 
 
 # Heartbeat schemas

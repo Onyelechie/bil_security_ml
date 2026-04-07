@@ -240,6 +240,25 @@
         <p id="settings-enroll-message" class="muted">The dashboard will call `/api/devices/enroll` on the active target.</p>
       </section>
 
+      <section class="panel settings-card settings-card-wide" data-settings-panel="security">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Device Management</p>
+            <h2>Managed Edge Devices</h2>
+          </div>
+          <span id="settings-device-count" class="status-pill neutral">0 devices</span>
+        </div>
+        <p class="muted">
+          Review enrolled devices for the active target and revoke any edge that should no longer be trusted.
+          Revocation takes effect immediately for future heartbeats and alerts.
+        </p>
+        <div class="action-row">
+          <button id="settings-device-refresh" class="btn ghost" type="button">Refresh Devices</button>
+        </div>
+        <p id="settings-device-message" class="muted">Unlock admin access to load the device list.</p>
+        <div id="settings-device-list" class="device-list"></div>
+      </section>
+
       <section class="panel settings-card settings-card-wide" data-settings-panel="guide">
         <div class="section-heading">
           <div>
@@ -395,6 +414,15 @@
       <p class="muted">
         Click an alert to bring its image into the center console, open the detail view, and mark it as visited.
       </p>
+      <div class="rail-controls">
+        <div class="rail-control-group">
+          <p class="eyebrow">Sort Alerts</p>
+          <div class="view-switcher sort-switcher" role="group" aria-label="Alert sort order">
+            <button id="alerts-sort-received" class="view-switch is-active" type="button">Received</button>
+            <button id="alerts-sort-timestamp" class="view-switch" type="button">Alert Time</button>
+          </div>
+        </div>
+      </div>
       <div class="view-switcher" role="group" aria-label="Alert list view">
         <button id="alerts-view-compact" class="view-switch is-active" type="button">Compact</button>
         <button id="alerts-view-list" class="view-switch" type="button">List</button>

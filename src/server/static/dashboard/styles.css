@@ -561,6 +561,12 @@ textarea {
   background: rgba(11, 20, 33, 0.82);
 }
 
+.btn.ghost.danger {
+  color: var(--danger);
+  border-color: rgba(251, 113, 133, 0.35);
+  background: rgba(251, 113, 133, 0.12);
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;

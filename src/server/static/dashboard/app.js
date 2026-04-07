@@ -115,6 +115,7 @@
         settingsView: this._loadSettingsView(),
         managedDevices: [],
         managedDevicesLoadedFor: null,
+        pendingDeviceRevoke: null,
       };
       this.dom = this._getDom();
       this.dom.settingsSiteSelect = document.getElementById("settings-site-select");
@@ -275,12 +276,8 @@
         this.dom.settingsAuthClear.addEventListener("click", async () => {
           const active = this.store.getActive();
           if (!active) return;
-          this._clearAuthToken(active.id);
-          this.state.managedDevices = [];
-          this.state.managedDevicesLoadedFor = null;
-          this._renderSettingsAdminState();
+          this._handleAuthExpired(active, "Stored admin token cleared for this target.", false);
           this._setSettingsMessage("Stored admin token cleared for this target.", false);
-          this._renderManagedDevices();
           await this.refreshSelected();
         });
       }
@@ -315,6 +312,11 @@
               }),
             });
             const payload = await response.json().catch(() => ({}));
+            if (response.status === 401) {
+              this._handleAuthExpired(active, "Admin token expired. Unlock admin again.", true);
+              this._setEnrollMessage("Admin token expired. Unlock admin again.", true);
+              return;
+            }
             if (!response.ok) {
               throw new Error(payload.detail || "Failed to enroll device");
             }
@@ -334,7 +336,14 @@
       if (this.dom.settingsDeviceList) {
         this.dom.settingsDeviceList.addEventListener("click", async (event) => {
           const button = event.target.closest("[data-device-revoke]");
-          if (!button) return;
+          const cancelButton = event.target.closest("[data-device-revoke-cancel]");
+          if (!button && !cancelButton) return;
+          if (cancelButton) {
+            this.state.pendingDeviceRevoke = null;
+            this._setDeviceMessage("Revocation cancelled.", false);
+            this._renderManagedDevices();
+            return;
+          }
           const deviceId = button.dataset.deviceRevoke || "";
           if (!deviceId) return;
           const active = this.store.getActive();
@@ -347,7 +356,13 @@
             this._setDeviceMessage("Unlock admin access before revoking a device.", true);
             return;
           }
-          if (!window.confirm(`Revoke device ${deviceId}?`)) {
+          if (this.state.pendingDeviceRevoke !== deviceId) {
+            this.state.pendingDeviceRevoke = deviceId;
+            this._setDeviceMessage(
+              `Click \"Confirm revoke\" to revoke ${deviceId}, or cancel to keep it active.`,
+              true
+            );
+            this._renderManagedDevices();
             return;
           }
           try {
@@ -359,9 +374,15 @@
               }
             );
             const payload = await response.json().catch(() => ({}));
+            if (response.status === 401) {
+              this._handleAuthExpired(active, "Admin token expired. Unlock admin again.", true);
+              this._setDeviceMessage("Admin token expired. Unlock admin again.", true);
+              return;
+            }
             if (!response.ok) {
               throw new Error(payload.detail || "Failed to revoke device");
             }
+            this.state.pendingDeviceRevoke = null;
             this._setDeviceMessage(`Device ${deviceId} revoked successfully.`, false);
             await this._refreshManagedDevices(true);
           } catch (err) {
@@ -488,7 +509,10 @@
           `${base}/api/alerts?limit=60&sort_by=${encodeURIComponent(this.state.alertSortBy || "received_at")}`
         ),
         this._fetchJson(`${base}/api/heartbeat`),
-        this._fetchJson(`${base}/api/logs?limit=200`, { headers: this._authHeaders(target) }),
+        this._fetchJson(`${base}/api/logs?limit=200`, {
+          headers: this._authHeaders(target),
+          authTarget: target,
+        }),
         this._fetchJson(`${base}/api/server-info`),
       ]);
 
@@ -539,6 +563,14 @@
           },
           signal: controller.signal,
         });
+        if (response.status === 401 && options.authTarget) {
+          this._handleAuthExpired(
+            options.authTarget,
+            "Admin token expired. Unlock admin again.",
+            true
+          );
+          throw new Error("Admin token expired");
+        }
         if (!response.ok) {
           throw new Error(`${response.status} ${response.statusText}`);
         }
@@ -619,6 +651,19 @@
       if (!targetId) return;
       delete this.state.authTokens[targetId];
       this._saveAuthTokens();
+    }
+
+    _handleAuthExpired(target, message, isError = true) {
+      if (!target) return;
+      this._clearAuthToken(target.id);
+      this.state.managedDevices = [];
+      this.state.managedDevicesLoadedFor = null;
+      this.state.pendingDeviceRevoke = null;
+      this._renderSettingsAdminState();
+      this._renderManagedDevices();
+      if (message) {
+        this._setSettingsMessage(message, isError);
+      }
     }
 
     _authHeaders(target) {
@@ -1199,6 +1244,7 @@
       if (!active || !hasToken) {
         this.state.managedDevices = [];
         this.state.managedDevicesLoadedFor = null;
+        this.state.pendingDeviceRevoke = null;
         this._renderManagedDevices();
         return;
       }
@@ -1211,16 +1257,23 @@
           headers: this._authHeaders(active),
         });
         const payload = await response.json().catch(() => ({}));
+        if (response.status === 401) {
+          this._handleAuthExpired(active, "Admin token expired. Unlock admin again.", true);
+          this._setDeviceMessage("Admin token expired. Unlock admin again.", true);
+          return;
+        }
         if (!response.ok) {
           throw new Error(payload.detail || "Failed to load devices");
         }
         this.state.managedDevices = Array.isArray(payload.devices) ? payload.devices : [];
         this.state.managedDevicesLoadedFor = active.id;
+        this.state.pendingDeviceRevoke = null;
         this._renderManagedDevices();
       } catch (err) {
         console.error(err);
         this.state.managedDevices = [];
         this.state.managedDevicesLoadedFor = null;
+        this.state.pendingDeviceRevoke = null;
         this._setDeviceMessage(err.message || "Failed to load devices.", true);
         this._renderManagedDevices();
       }
@@ -1267,9 +1320,13 @@
         const isActive = !!device.active;
         const statusLabel = isActive ? "Active" : "Revoked";
         const statusClass = isActive ? "ok" : "err";
+        const isPendingRevoke = this.state.pendingDeviceRevoke === device.device_id;
         const revokeButton = isActive
-          ? `<button class="btn ghost" type="button" data-device-revoke="${this._escape(device.device_id)}">Revoke</button>`
+          ? `<button class="btn ghost${isPendingRevoke ? " danger" : ""}" type="button" data-device-revoke="${this._escape(device.device_id)}">${isPendingRevoke ? "Confirm revoke" : "Revoke"}</button>`
           : '<button class="btn ghost" type="button" disabled>Revoked</button>';
+        const cancelButton = isActive && isPendingRevoke
+          ? '<button class="btn ghost" type="button" data-device-revoke-cancel="true">Cancel</button>'
+          : "";
         return [
           '<article class="device-card">',
           '<div class="section-heading device-card-heading">',
@@ -1286,6 +1343,7 @@
           "</div>",
           '<div class="action-row">',
           revokeButton,
+          cancelButton,
           "</div>",
           "</article>",
         ].join("");

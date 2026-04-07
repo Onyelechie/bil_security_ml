@@ -37,10 +37,12 @@ class AlertIngestionService:
             image_path_val = alert.image_path
             try:
                 repo_root = Path(__file__).resolve().parents[3]
-                storage_root = Path(settings.image_storage_dir)
-                if not storage_root.is_absolute():
-                    storage_root = repo_root / storage_root
-                storage_root = storage_root.resolve()
+                storage_root_setting = Path(settings.image_storage_dir)
+
+                if storage_root_setting.is_absolute():
+                    storage_root = storage_root_setting.resolve()
+                else:
+                    storage_root = (repo_root / storage_root_setting).resolve()
 
                 def _sanitize_part(value: str) -> str:
                     return (
@@ -95,12 +97,17 @@ class AlertIngestionService:
                                         dst = cand
                                         break
                             shutil.copy2(str(src), str(dst))
-                            # store relative path under repo (use forward slashes)
+                            # Store path relative to the configured storage root when possible.
+                            # This keeps default relative-storage behavior unchanged, but also works
+                            # when the storage root is an absolute path outside the repo.
                             try:
-                                rel = dst.relative_to(repo_root).as_posix()
+                                rel_to_storage = dst.relative_to(storage_root).as_posix()
+                                if storage_root_setting.is_absolute():
+                                    image_path_val = rel_to_storage
+                                else:
+                                    image_path_val = (storage_root_setting / rel_to_storage).as_posix()
                             except Exception:
-                                rel = dst.as_posix()
-                            image_path_val = rel
+                                image_path_val = dst.as_posix()
                         else:
                             # file not found; clear the image path to avoid storing external refs
                             image_path_val = None

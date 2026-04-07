@@ -11,7 +11,6 @@ class EdgeSettings(BaseSettings):
     to replay from the offline queue.
     """
 
-    # Tell pydantic-settings to load environment variables from .env if present.
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=False,
@@ -22,7 +21,6 @@ class EdgeSettings(BaseSettings):
     site_id: str = "site_demo"
 
     # --- Motion events input (BIL software -> Edge Agent) ---
-    # Edge agent will listen on this host/port for TCP motion events.
     tcp_host: str = "127.0.0.1"
     tcp_port: int = 8127
 
@@ -30,9 +28,9 @@ class EdgeSettings(BaseSettings):
     server_base_url: str = "http://127.0.0.1:8000"
 
     # --- Periodic timers (seconds) ---
-    heartbeat_interval_sec: int = 60  # how often we send "I'm alive" to the server
-    update_interval_sec: int = 300  # how often we check for model/config updates
-    retry_interval_sec: int = 30  # how often we retry sending queued alerts
+    heartbeat_interval_sec: int = 60
+    update_interval_sec: int = 300
+    retry_interval_sec: int = 30
 
     # --- Logging ---
     log_level: str = "INFO"
@@ -47,35 +45,39 @@ class EdgeSettings(BaseSettings):
     device_id: str | None = None
     device_private_key_b64: str = ""
 
+    # --- Trigger source selection ---
+    enable_tcp_motion: bool = True
+    enable_local_motion: bool = False
+
     # --- Trigger control (rate limit / dedupe) ---
     trigger_cooldown_sec: int = 10
     trigger_merge_window_sec: float = 2.0
 
     # --- RTSP ingest (low-res stream for analysis) ---
-    rtsp_url_low: str = ""  # set in .env
-    ring_buffer_seconds: int = 30  # keep last N seconds of frames
+    rtsp_url_low: str = ""
+    ring_buffer_seconds: int = 25
 
     # Frame sampling / scaling for motion detection and window extraction
-    analysis_fps: float = 5.0  # frames per second stored in ring buffer
+    analysis_fps: float = 5.0
     frame_width: int = 640
     frame_height: int = 360
 
     # --- Local motion trigger (cheap) ---
-    motion_fps: float = 1.0  # how often we check for motion
-    motion_pixel_delta: int = 15  # per-pixel diff threshold (0..255)
-    motion_threshold: float = 0.005  # ratio of changed pixels required to trigger
-    default_camera_id: str = "1"  # used for local motion events to match TCP camera_id
+    motion_fps: float = 1.0
+    motion_pixel_delta: int = 15
+    motion_threshold: float = 0.005
+    default_camera_id: str = "1"
 
     # --- Incident merging + window extraction ---
-    incident_quiet_sec: float = 2.0  # how long it must be “quiet” before we finalize
-    incident_max_sec: float = 20.0  # hard cap in storms
-    incident_tick_interval_sec: float = 0.2  # how often we check quiet/max finalize
+    incident_quiet_sec: float = 2.0
+    incident_max_sec: float = 12.0
+    incident_tick_interval_sec: float = 0.2
 
-    window_pre_sec: float = 2.0  # pre-roll
-    window_post_sec: float = 6.0  # post-roll
-    window_target_fps: float = 5.0  # selection sampling rate
-    window_max_frames: int = 40  # cap selected frames
-    window_wait_grace_sec: float = 1.5  # extra wait time before calling it PARTIAL
+    window_pre_sec: float = 1.5
+    window_post_sec: float = 4.0
+    window_target_fps: float = 5.0
+    window_max_frames: int = 40
+    window_wait_grace_sec: float = 1.5
 
     # --- Offline alert queue ---
     offline_queue_dir: str = "storage/offline_queue"
@@ -83,14 +85,19 @@ class EdgeSettings(BaseSettings):
     # --- Detector Selection ---
     detector_model: str = "YOLOv8-Small"
     detector_weights: str | None = None
+    detector_person_conf: float = 0.40
+    detector_vehicle_conf: float = 0.50
+    detector_allowed_classes: str = "person,vehicle"
 
     # --- Quarantine retention ---
-    # Delete quarantined queue files older than this many days.
     queue_quarantine_retention_days: int = 7
 
     # --- Shared storage (optional) ---
-    # If set, image_path values under this root are safe to replay from the offline queue.
     shared_storage_root: str = ""
 
-
-settings = EdgeSettings()
+    # --- Direct CCTV sample runner ---
+    sample_camera_id: str = "1"
+    sample_window_sec: float = 3.0
+    sample_stride_sec: float = 2.0
+    sample_target_fps: float = 5.0
+    sample_max_frames: int = 30

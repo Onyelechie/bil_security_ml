@@ -108,6 +108,15 @@ class ExtractionWorker:
             items = ring.window(job.window_start, job.window_end)
 
             if not items:
+                latest = ring.latest_ts()
+                if latest is not None and latest.tzinfo is None:
+                    latest = latest.replace(tzinfo=timezone.utc)
+
+                if not ok:
+                    reason = "buffer_underflow"
+                else:
+                    reason = "no_frames"
+
                 res = WindowResult(
                     incident_id=job.incident_id,
                     camera_id=job.camera_id,
@@ -115,13 +124,17 @@ class ExtractionWorker:
                     window_end=job.window_end,
                     selected=[],
                     status=WindowStatus.DROPPED,
-                    reason="no_frames",
+                    reason=reason,
                 )
                 self._put_result(res)
                 logger.warning(
-                    "WINDOW(dropped): incident=%s camera=%s reason=no_frames",
+                    "WINDOW(dropped): incident=%s camera=%s reason=%s latest_ts=%s window_start=%s window_end=%s",
                     job.incident_id,
                     job.camera_id,
+                    reason,
+                    latest.isoformat() if latest else None,
+                    job.window_start.isoformat(),
+                    job.window_end.isoformat(),
                 )
                 continue
 

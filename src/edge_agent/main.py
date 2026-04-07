@@ -5,6 +5,7 @@ import asyncio
 import logging
 import threading
 import time
+from contextlib import suppress
 from datetime import datetime, timezone
 
 from .config import EdgeSettings
@@ -12,6 +13,48 @@ from .logging import configure_logging
 from .sender import ServerSender
 
 logger = logging.getLogger(__name__)
+
+
+async def consume_extraction_results(worker, pipeline) -> None:
+    """
+    Consume ExtractionWorker results and forward usable windows into the
+    blocking ML + alert pipeline without blocking the main asyncio loop.
+    """
+    from .video.window_extractor import WindowStatus
+
+    while True:
+        res = await worker.results.get()
+
+        if res.status == WindowStatus.DROPPED:
+            logger.warning(
+                "WINDOW(skip): incident=%s camera=%s status=%s reason=%s",
+                res.incident_id,
+                res.camera_id,
+                res.status.value,
+                res.reason,
+            )
+            continue
+
+        if not res.selected:
+            logger.warning(
+                "WINDOW(skip): incident=%s camera=%s reason=empty_selection",
+                res.incident_id,
+                res.camera_id,
+            )
+            continue
+
+        try:
+            await asyncio.to_thread(
+                pipeline.process_frames,
+                res.camera_id,
+                list(res.selected),
+            )
+        except Exception:
+            logger.exception(
+                "Pipeline processing failed: incident=%s camera=%s",
+                res.incident_id,
+                res.camera_id,
+            )
 
 
 def heartbeat_loop(
@@ -53,6 +96,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Start Edge HTTP API server (/health, /heartbeat).",
     )
     parser.add_argument(
+        "--sample-video",
+        type=str,
+        help="Run a CCTV sample video directly through YOLO + alert sending, without RTSP.",
+    )
+    parser.add_argument(
         "--tcp-listen",
         action="store_true",
         help="Start TCP motion listener and print parsed motion events.",
@@ -60,7 +108,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--run",
         action="store_true",
-        help="Run the PR6 pipeline (incident merge + window extraction).",
+        help="Run the unified edge pipeline (RTSP + optional motion sources + alerts).",
     )
     parser.add_argument(
         "--rtsp-test",
@@ -70,7 +118,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--motion-test",
         action="store_true",
-        help="Run RTSP reader + local motion trigger (live test).",
+        help="Run RTSP reader + local motion trigger (debug mode, no alerts).",
     )
     return parser
 
@@ -94,9 +142,9 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
             print(cfg.model_dump())
             return 0
 
-        # Start heartbeat thread (runs regardless of mode to ensure server knows we're alive)
         sender = ServerSender(cfg)
         stop_event = threading.Event()
+
         heartbeat_thread = threading.Thread(
             target=heartbeat_loop,
             args=(sender, cfg.heartbeat_interval_sec, stop_event),
@@ -104,7 +152,6 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
         )
         heartbeat_thread.start()
 
-        # Start retry thread for queued alerts
         retry_thread = threading.Thread(
             target=retry_loop,
             args=(sender, cfg.retry_interval_sec, stop_event),
@@ -163,7 +210,6 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 sender.set_status("online")
 
             def _join_interruptible(t: threading.Thread, poll: float = 0.2) -> None:
-                # Keep main thread responsive to Ctrl+C
                 while t.is_alive():
                     t.join(timeout=poll)
 
@@ -172,6 +218,7 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
             except KeyboardInterrupt:
                 server.should_exit = True
                 _join_interruptible(server_thread)
+
             if server.started:
                 sender.set_status("shutting_down")
             return _shutdown(0)
@@ -269,8 +316,7 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                     max_incident_sec=cfg.incident_max_sec,
                 )
 
-                # Single-ring provider for now (multi-cam ready)
-                def ring_provider(camera_id: str) -> RingBuffer | None:
+                def ring_provider(camera_id: str):
                     return ring
 
                 worker = ExtractionWorker(
@@ -293,7 +339,6 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 try:
                     last_tick = datetime.now(timezone.utc)
                     while True:
-                        # tick incidents even if no new events
                         now = datetime.now(timezone.utc)
                         if (
                             now - last_tick
@@ -323,20 +368,65 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 logger.info("Motion test stopped (Ctrl+C).")
             return _shutdown(0)
 
+        if args.sample_video:
+            from .ml_evaluator import MLEvaluator
+            from .pipeline_runner import PipelineRunner
+            from .sample_video_runner import run_sample_video
+
+            evaluator = MLEvaluator(
+                model_name=cfg.detector_model,
+                weights_path=cfg.detector_weights,
+                person_conf=cfg.detector_person_conf,
+                vehicle_conf=cfg.detector_vehicle_conf,
+                allowed_classes=cfg.detector_allowed_classes,
+            )
+
+            image_output_dir = cfg.shared_storage_root.strip() or "storage/ws_alert_images"
+
+            pipeline = PipelineRunner(
+                evaluator=evaluator,
+                sender=sender,
+                image_output_dir=image_output_dir,
+            )
+
+            sender.set_status("online")
+
+            run_sample_video(
+                video_path=args.sample_video,
+                pipeline=pipeline,
+                sender=sender,
+                camera_id=cfg.sample_camera_id,
+                window_sec=cfg.sample_window_sec,
+                stride_sec=cfg.sample_stride_sec,
+                target_fps=cfg.sample_target_fps,
+                max_frames=cfg.sample_max_frames,
+            )
+
+            sender.set_status("shutting_down")
+            return _shutdown(0)
+
         if args.run:
 
             async def _run_main() -> None:
+                from .ml_evaluator import MLEvaluator
+                from .pipeline_runner import PipelineRunner
                 from .triggers.incident_manager import IncidentManager
+                from .triggers.local_motion_trigger import LocalMotionTrigger
                 from .triggers.tcp_trigger import TcpMotionTrigger
                 from .triggers.trigger_manager import TriggerManager
                 from .video.extraction_worker import ExtractionWorker
                 from .video.ring_buffer import RingBuffer
                 from .video.rtsp_reader import RtspReader
 
+                if not cfg.enable_tcp_motion and not cfg.enable_local_motion:
+                    logger.warning(
+                        "No motion source enabled. Set ENABLE_TCP_MOTION and/or ENABLE_LOCAL_MOTION."
+                    )
+                    return
+
                 ring = RingBuffer(seconds=cfg.ring_buffer_seconds)
                 reader = RtspReader(cfg, ring)
 
-                trigger = TcpMotionTrigger(cfg)
                 mgr = TriggerManager(
                     cooldown_sec=cfg.trigger_cooldown_sec,
                     merge_window_sec=cfg.trigger_merge_window_sec,
@@ -349,8 +439,7 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                     max_incident_sec=cfg.incident_max_sec,
                 )
 
-                # Single-ring provider for now (multi-cam ready: switch to dict[camera_id, RingBuffer])
-                def ring_provider(camera_id: str) -> RingBuffer | None:
+                def ring_provider(camera_id: str):
                     return ring
 
                 worker = ExtractionWorker(
@@ -360,17 +449,60 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                     wait_grace_sec=cfg.window_wait_grace_sec,
                 )
 
+                evaluator = MLEvaluator(
+                    model_name=cfg.detector_model,
+                    weights_path=cfg.detector_weights,
+                    person_conf=cfg.detector_person_conf,
+                    vehicle_conf=cfg.detector_vehicle_conf,
+                    allowed_classes=cfg.detector_allowed_classes,
+                )
+
+                image_output_dir = cfg.shared_storage_root.strip() or "storage/ws_alert_images"
+
+                pipeline = PipelineRunner(
+                    evaluator=evaluator,
+                    sender=sender,
+                    image_output_dir=image_output_dir,
+                )
+
+                pipeline_task = asyncio.create_task(
+                    consume_extraction_results(worker, pipeline),
+                    name="pipeline-consumer",
+                )
+
+                tcp_trigger = TcpMotionTrigger(cfg) if cfg.enable_tcp_motion else None
+
+                def on_motion(evt, accepted: bool) -> None:
+                    incidents.ingest(evt, accepted=accepted)
+
+                local_trigger = (
+                    LocalMotionTrigger(cfg, ring, mgr, on_motion=on_motion)
+                    if cfg.enable_local_motion
+                    else None
+                )
+
                 if not cfg.rtsp_url_low:
                     logger.warning(
                         "RTSP_URL_LOW is not set. Windows will likely be DROPPED (no frames)."
                     )
 
+                logger.info(
+                    "Unified run enabled: tcp_motion=%s local_motion=%s",
+                    cfg.enable_tcp_motion,
+                    cfg.enable_local_motion,
+                )
+
                 await reader.start()
-                await trigger.start()
                 await worker.start()
+
+                if tcp_trigger is not None:
+                    await tcp_trigger.start()
+
+                if local_trigger is not None:
+                    await local_trigger.start()
+
                 sender.set_status("online")
 
-                # Warn if window could exceed ring size
                 max_window_s = (
                     cfg.window_pre_sec + cfg.incident_max_sec + cfg.window_post_sec
                 )
@@ -388,25 +520,31 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
 
                 try:
                     while True:
-                        # Pull motion events with a short timeout so we can tick even when quiet
-                        try:
-                            evt = await asyncio.wait_for(
-                                trigger.queue.get(),
-                                timeout=cfg.incident_tick_interval_sec,
-                            )
-                            accepted = mgr.accept(evt)
-                            incidents.ingest(evt, accepted=accepted)
-
-                            if accepted:
-                                logger.info(
-                                    "INCIDENT_MOTION(accepted): source=%s camera_id=%s policy=%s user=%s",
-                                    evt.source,
-                                    evt.camera_id,
-                                    evt.policy_name,
-                                    evt.user_string,
+                        if tcp_trigger is not None:
+                            try:
+                                evt = await asyncio.wait_for(
+                                    tcp_trigger.queue.get(),
+                                    timeout=cfg.incident_tick_interval_sec,
                                 )
-                        except asyncio.TimeoutError:
-                            pass
+                                accepted = mgr.accept(evt)
+                                incidents.ingest(evt, accepted=accepted)
+
+                                if accepted:
+                                    logger.info(
+                                        "TCP MOTION(accepted): camera_id=%s policy=%s user=%s",
+                                        evt.camera_id,
+                                        evt.policy_name,
+                                        evt.user_string,
+                                    )
+                                else:
+                                    logger.debug(
+                                        "TCP MOTION(dropped): camera_id=%s",
+                                        evt.camera_id,
+                                    )
+                            except asyncio.TimeoutError:
+                                pass
+                        else:
+                            await asyncio.sleep(cfg.incident_tick_interval_sec)
 
                         now = datetime.now(timezone.utc)
                         if (
@@ -425,8 +563,18 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                             last_tick = now
 
                 finally:
+                    pipeline_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await pipeline_task
+
+                    if local_trigger is not None:
+                        await local_trigger.stop()
+
                     await worker.stop()
-                    await trigger.stop()
+
+                    if tcp_trigger is not None:
+                        await tcp_trigger.stop()
+
                     await reader.stop()
 
             try:
@@ -436,7 +584,7 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
             return _shutdown(0)
 
         logger.info(
-            "Nothing to do. Use --print-config, --http-serve, --tcp-listen, --run, --motion-test."
+            "Nothing to do. Use --print-config, --http-serve, --sample-video, --tcp-listen, --run, --motion-test."
         )
         return _shutdown(0)
 
@@ -445,6 +593,8 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
         if "stop_event" in locals():
             stop_event.set()
             heartbeat_thread.join(timeout=1)
+            retry_thread.join(timeout=1)
+
         debug_mode = bool(getattr(cfg, "debug", False)) or (
             getattr(cfg, "log_level", "").upper() == "DEBUG"
         )

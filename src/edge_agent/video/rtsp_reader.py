@@ -54,12 +54,12 @@ class RtspReader:
         w = int(self._cfg.frame_width)
         h = int(self._cfg.frame_height)
         fps = float(self._cfg.analysis_fps)
-        frame_bytes = w * h  # grayscale
+        frame_bytes = w * h * 3  # BGR24
 
         stream = self._stream_label(self._cfg.rtsp_url_low)
 
         attempt = 0
-        backoff_s = 2.0  # exponential backoff up to 10s
+        backoff_s = 2.0
 
         while not self._stop.is_set():
             attempt += 1
@@ -75,7 +75,6 @@ class RtspReader:
                 logger.info("RTSP connect attempt=%d stream=%s", attempt, stream)
 
                 while not self._stop.is_set():
-                    # Give extra time for the *first* decoded frame (keyframe wait), then tighter stall checks.
                     timeout_s = 30.0 if first_frame else 5.0
 
                     try:
@@ -84,7 +83,6 @@ class RtspReader:
                             timeout=timeout_s,
                         )
                     except asyncio.TimeoutError:
-                        # More user-friendly classification
                         if first_frame:
                             raise RuntimeError(
                                 f"STARTUP_TIMEOUT: no first frame within {timeout_s:.0f}s"
@@ -96,7 +94,7 @@ class RtspReader:
                     if not buf or len(buf) < frame_bytes:
                         raise RuntimeError("DISCONNECT: ffmpeg stream ended")
 
-                    frame = np.frombuffer(buf, dtype=np.uint8).reshape((h, w))
+                    frame = np.frombuffer(buf, dtype=np.uint8).reshape((h, w, 3))
                     self._ring.push(datetime.now(timezone.utc), frame)
 
                     if first_frame:
@@ -106,7 +104,6 @@ class RtspReader:
                             attempt,
                         )
                         first_frame = False
-                        # reset backoff after success
                         backoff_s = 2.0
 
             except Exception as exc:
@@ -150,11 +147,11 @@ class RtspReader:
             "-i",
             url,
             "-vf",
-            f"fps={fps},scale={w}:{h},format=gray",
+            f"fps={fps},scale={w}:{h}",
             "-f",
             "rawvideo",
             "-pix_fmt",
-            "gray",
+            "bgr24",
             "pipe:1",
         ]
         logger.debug("Starting ffmpeg: %s", " ".join(cmd))
@@ -173,10 +170,6 @@ class RtspReader:
 
     @staticmethod
     def _stream_label(url: str) -> str:
-        """
-        Return a safe label like: 192.168.2.100:8554/Streaming/Channels/102/
-        (no username/password)
-        """
         try:
             p = urlparse(url)
             host = p.hostname or "unknown-host"
@@ -187,10 +180,6 @@ class RtspReader:
             return "unknown-stream"
 
     def _read_stderr_if_exited_short(self) -> str:
-        """
-        Read a short stderr snippet only if ffmpeg has exited.
-        Prevents blocking on stderr when process is still running.
-        """
         if not self._proc or not self._proc.stderr:
             return ""
         if self._proc.poll() is None:
@@ -201,5 +190,4 @@ class RtspReader:
             return ""
         if not txt:
             return ""
-        # keep only first line (demo-friendly)
         return txt.splitlines()[0][:300]

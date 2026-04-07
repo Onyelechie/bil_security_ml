@@ -26,6 +26,50 @@ def mock_evaluator():
         yield evaluator
 
 
+def test_ml_evaluator_prefers_person_over_vehicle():
+    with patch("src.edge_agent.ml_evaluator.ModelRegistry.get_model") as mock_get:
+        mock_model = MagicMock(spec=YOLOWrapper)
+        mock_model.predict.return_value = [
+            (0, 0, 50, 50, 0.72, "car"),
+            (10, 10, 60, 60, 0.51, "person"),
+        ]
+        mock_get.return_value = mock_model
+
+        evaluator = MLEvaluator(
+            weights_path="mock_path.pt",
+            allowed_classes="person,vehicle",
+            person_conf=0.5,
+            vehicle_conf=0.6,
+        )
+
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        result = evaluator.evaluate_frames([frame])
+
+        assert result is not None
+        assert result["detection"]["label"].lower() == "person"
+
+
+def test_ml_evaluator_can_disable_vehicle_alerts():
+    with patch("src.edge_agent.ml_evaluator.ModelRegistry.get_model") as mock_get:
+        mock_model = MagicMock(spec=YOLOWrapper)
+        mock_model.predict.return_value = [
+            (0, 0, 50, 50, 0.95, "car"),
+        ]
+        mock_get.return_value = mock_model
+
+        evaluator = MLEvaluator(
+            weights_path="mock_path.pt",
+            allowed_classes="person",
+            person_conf=0.4,
+            vehicle_conf=0.6,
+        )
+
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        result = evaluator.evaluate_frames([frame])
+
+        assert result is None
+
+
 def create_dummy_image(color=(255, 255, 255)):
     """Creates a blank 640x640 image for testing."""
     return np.full((640, 640, 3), color, dtype=np.uint8)
@@ -51,6 +95,7 @@ def test_ml_evaluator_model_switching():
             "YOLOv8-Small",
             DEFAULT_MODEL_CONFIGS["YOLOv8-Small"],
             input_size=640,
+            use_openvino=False,
         )
 
         # 2. Test Nano explicitly
@@ -61,6 +106,7 @@ def test_ml_evaluator_model_switching():
             "YOLOv8-Nano",
             DEFAULT_MODEL_CONFIGS["YOLOv8-Nano"],
             input_size=640,
+            use_openvino=False,
         )
 
         # 3. Test Custom Path (overrides default for given name)
@@ -68,7 +114,11 @@ def test_ml_evaluator_model_switching():
         custom_path = "/tmp/custom.pt"
         MLEvaluator(weights_path=custom_path)
         mock_get.assert_called_with(
-            YOLOWrapper, "YOLOv8-Small", custom_path, input_size=640
+            YOLOWrapper,
+            "YOLOv8-Small",
+            custom_path,
+            input_size=640,
+            use_openvino=False,
         )
 
         # 4. Test Invalid Model Name
@@ -170,7 +220,7 @@ def test_ml_evaluator_grayscale_3d_mocked(mock_evaluator):
         ("C3HighRes - Car_frame_0.jpg", "car", 0.5, 0.3, True),
         ("C4HighRes - Human_frame_60.jpg", "person", 0.5, 0.6, True),
         ("C5HighResPTZ - Car_frame_90.jpg", "car", 0.5, 0.3, True),
-        ("C1HighRes - Human_frame_216.jpg", "truck", 0.05, 0.05, True),
+        ("C1HighRes - Human_frame_216.jpg", "person", 0.05, 0.05, True),
     ],
 )
 def test_ml_evaluator_specific_frames_integration(

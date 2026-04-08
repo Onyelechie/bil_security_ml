@@ -31,7 +31,7 @@ def test_ml_evaluator_prefers_person_over_vehicle():
         mock_model = MagicMock(spec=YOLOWrapper)
         mock_model.predict.return_value = [
             (0, 0, 50, 50, 0.72, "car"),
-            (10, 10, 60, 60, 0.51, "person"),
+            (10, 10, 30, 90, 0.85, "person"),
         ]
         mock_get.return_value = mock_model
 
@@ -160,7 +160,7 @@ def test_ml_evaluator_mocked_detection(mock_evaluator):
     # Format: (x1, y1, x2, y2, conf, label)
     mock_evaluator.model_mock.predict.side_effect = [
         [],  # Frame 1: nothing
-        [(10, 10, 100, 100, 0.9, "person")],  # Frame 2: person
+        [(10, 10, 50, 150, 0.9, "person")],  # Frame 2: person (tall/thin)
         [],  # Frame 3: nothing
     ]
 
@@ -170,7 +170,7 @@ def test_ml_evaluator_mocked_detection(mock_evaluator):
     assert result is not None
     assert result["detection"]["label"] == "person"
     assert result["detection"]["confidence"] == 0.9
-    assert result["detection"]["bbox"] == [10, 10, 100, 100]
+    assert result["detection"]["bbox"] == [10, 10, 50, 150]
     assert result["frame_index"] == 1  # Detected on second frame
     # Check that it drew a box (annotated frame should be different from original)
     assert not np.array_equal(result["frame"], clip[1])

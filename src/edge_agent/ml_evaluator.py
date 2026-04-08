@@ -38,7 +38,7 @@ class MLEvaluator:
         self,
         model_name: str = "YOLOv8-Small",
         weights_path: str | None = None,
-        person_conf: float = 0.5,
+        person_conf: float = 0.65,
         vehicle_conf: float = 0.6,
         allowed_classes: str | list[str] | set[str] | None = "person,vehicle",
     ):
@@ -115,9 +115,18 @@ class MLEvaluator:
         dy = abs(cy - (h / 2.0)) / max(h / 2.0, 1.0)
         center_penalty = (dx + dy) / 2.0
 
-        # Confidence is still dominant, but we bias toward
-        # larger / more central person boxes.
-        return float(conf) + (0.60 * area_ratio) - (0.25 * center_penalty)
+        # --- False Positive Filter: Aspect Ratio ---
+        # Humans are taller than they are wide.
+        # clothes/clutter are often wider or irregular.
+        aspect_ratio = bw / max(bh, 1.0)
+        if aspect_ratio > 0.85:
+            # Not human-shaped (too wide)
+            return float("-inf")
+
+        # Confidence is still dominant.
+        # We've reduced the 'area_ratio' bonus to avoid prioritizing 
+        # large static background objects (like piles of clothes).
+        return float(conf) + (0.15 * area_ratio) - (0.35 * center_penalty)
 
     def evaluate_frames(self, frames: list[np.ndarray]) -> dict | None:
         """

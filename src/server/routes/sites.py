@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -7,6 +8,7 @@ from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/sites", tags=["sites"])
 logger = logging.getLogger(__name__)
+SITE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
 
 
 class SiteSettingsIn(BaseModel):
@@ -18,12 +20,18 @@ class SiteSettingsOut(BaseModel):
     image_retention_hours: int | None = None
 
 
+def _validated_site_name(site_name: str) -> str:
+    if not isinstance(site_name, str) or not SITE_NAME_PATTERN.fullmatch(site_name):
+        logger.warning("Rejected invalid site_name for settings path: %r", site_name)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid site name",
+        )
+    return site_name
+
+
 def _site_settings_path(root: Path, site_name: str) -> Path:
-    safe = "unknown"
-    try:
-        safe = Path(site_name).name
-    except (TypeError, ValueError):
-        logger.warning("Invalid site_name for settings path: %r", site_name)
+    safe = _validated_site_name(site_name)
     return root / safe / ".site_settings.json"
 
 

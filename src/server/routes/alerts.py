@@ -62,6 +62,15 @@ def _alert_sort_key(alert: Alert, sort_by: str) -> datetime:
     return ensure_winnipeg(candidate)
 
 
+def _persist_alert(alert: AlertCreate) -> AlertOut:
+    db = SessionLocal()
+    try:
+        db_alert = alert_ingestion_service.ingest(db, alert)
+        return AlertOut.model_validate(db_alert)
+    finally:
+        db.close()
+
+
 def get_db() -> Session:
     """Database dependency for getting a session."""
     db = SessionLocal()
@@ -96,8 +105,7 @@ async def receive_alert(
     _ensure_edge_sender_authorized(db, alert.edge_pc_id)
 
     try:
-        db_alert = alert_ingestion_service.ingest(db, alert)
-        alert_out = AlertOut.model_validate(db_alert)
+        alert_out = await asyncio.to_thread(_persist_alert, alert)
         publish_dashboard_event(
             request.app,
             "alert_received",
@@ -199,8 +207,7 @@ async def upload_alert(
     )
 
     try:
-        db_alert = alert_ingestion_service.ingest(db, alert_payload)
-        alert_out = AlertOut.model_validate(db_alert)
+        alert_out = await asyncio.to_thread(_persist_alert, alert_payload)
         publish_dashboard_event(
             request.app,
             "alert_received",

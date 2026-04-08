@@ -124,7 +124,7 @@ class MLEvaluator:
             return float("-inf")
 
         # Confidence is still dominant.
-        # We've reduced the 'area_ratio' bonus to avoid prioritizing 
+        # We've reduced the 'area_ratio' bonus to avoid prioritizing
         # large static background objects (like piles of clothes).
         return float(conf) + (0.15 * area_ratio) - (0.35 * center_penalty)
 

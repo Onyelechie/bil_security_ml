@@ -7,6 +7,13 @@ import pytest
 
 from edge_agent.pipeline_runner import PipelineRunner
 from edge_agent.video.ring_buffer import FrameItem
+from tests.temp_dirs import repo_temp_dir
+
+
+@pytest.fixture
+def tmp_path():
+    with repo_temp_dir("pipeline_runner_") as path:
+        yield path
 
 
 @pytest.fixture(autouse=True)

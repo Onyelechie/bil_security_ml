@@ -1,9 +1,12 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager, suppress
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from alembic import command
+from alembic.config import Config
 
 try:
     from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
@@ -35,6 +38,14 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+def _run_startup_migrations() -> None:
+    """Apply Alembic migrations before runtime DB initialization."""
+    project_root = Path(__file__).resolve().parents[2]
+    alembic_cfg = Config(str(project_root / "alembic.ini"))
+    alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
+    command.upgrade(alembic_cfg, "head")
 
 
 async def _run_ws_image_cleanup(
@@ -83,6 +94,13 @@ async def lifespan(app: FastAPI):
     except Exception:
         # If config can't be imported for some reason, continue and let other errors surface
         logger.debug("Could not verify SECRET_KEY at startup")
+
+    if settings.auto_apply_migrations:
+        logger.info("Applying database migrations...")
+        _run_startup_migrations()
+        logger.info("Database migrations applied successfully")
+    else:
+        logger.info("AUTO_APPLY_MIGRATIONS is disabled; skipping startup migrations")
 
     logger.info("Initializing database...")
     init_db()

@@ -8,6 +8,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from bil_time import now_in_winnipeg
+
 from ..config import settings
 from ..models.alert import Alert
 from ..schemas import AlertCreate
@@ -118,6 +120,7 @@ class AlertIngestionService:
                 camera_id=alert.camera_id,
                 edge_pc_id=edge_id,
                 timestamp=alert.timestamp,
+                received_at=now_in_winnipeg(),
                 detections=[d.model_dump(by_alias=True) for d in alert.detections],
                 image_path=image_path_val,
             )

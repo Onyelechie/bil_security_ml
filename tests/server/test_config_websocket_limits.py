@@ -9,6 +9,11 @@ def test_debug_accepts_release_string():
     assert cfg.debug is False
 
 
+def test_auto_apply_migrations_defaults_to_true():
+    cfg = Settings()
+    assert cfg.auto_apply_migrations is True
+
+
 def test_ws_worker_count_must_be_positive():
     with pytest.raises(ValueError, match="WS_ALERT_WORKER_COUNT"):
         Settings(ws_alert_worker_count=0)

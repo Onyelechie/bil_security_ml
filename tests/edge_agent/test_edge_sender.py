@@ -13,6 +13,13 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from edge_agent.config import EdgeSettings
 from edge_agent.sender import ServerSender
+from tests.temp_dirs import repo_temp_dir
+
+
+@pytest.fixture
+def tmp_path():
+    with repo_temp_dir("edge_sender_") as path:
+        yield path
 
 
 @pytest.fixture

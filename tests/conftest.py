@@ -52,3 +52,21 @@ def setup_test_db():
 
     command.upgrade(alembic_cfg, "head")
     yield
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_app_state(setup_test_db):
+    """
+    Initialize the app state needed by tests that import TestClient(app)
+    without entering the client context manager.
+    """
+    from server.config import settings
+    from server.main import app
+    from server.services.image_storage import ImageStorageService
+
+    storage = ImageStorageService(settings.image_storage_dir)
+    storage.ensure_ready()
+    app.state.image_storage = storage
+    app.state.ws_image_storage = storage
+    app.state.ws_max_image_bytes = settings.ws_max_image_bytes
+    yield

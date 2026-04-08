@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8000
     debug: bool = False
+    auto_apply_migrations: bool = True
 
     @field_validator("debug", mode="before")
     @classmethod

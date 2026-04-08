@@ -2,8 +2,9 @@ import asyncio
 import hashlib
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 from fastapi import (APIRouter, Depends, File, Form, HTTPException, Query,
                      Request, UploadFile, status)
@@ -11,7 +12,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from bil_time import isoformat_winnipeg
+from bil_time import ensure_winnipeg
 
 from ..config import settings
 from ..db import SessionLocal
@@ -52,6 +53,24 @@ def _ensure_edge_sender_authorized(db: Session, edge_pc_id: str | None) -> str:
     return resolved_edge_id
 
 
+def _alert_sort_key(alert: Alert, sort_by: str) -> datetime:
+    primary = alert.received_at if sort_by == "received_at" else alert.timestamp
+    secondary = alert.timestamp if sort_by == "received_at" else alert.received_at
+    candidate = primary or secondary
+    if candidate is None:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    return ensure_winnipeg(candidate)
+
+
+def _persist_alert(alert: AlertCreate) -> AlertOut:
+    db = SessionLocal()
+    try:
+        db_alert = alert_ingestion_service.ingest(db, alert)
+        return AlertOut.model_validate(db_alert)
+    finally:
+        db.close()
+
+
 def get_db() -> Session:
     """Database dependency for getting a session."""
     db = SessionLocal()
@@ -86,23 +105,13 @@ async def receive_alert(
     _ensure_edge_sender_authorized(db, alert.edge_pc_id)
 
     try:
-        db_alert = alert_ingestion_service.ingest(db, alert)
+        alert_out = await asyncio.to_thread(_persist_alert, alert)
         publish_dashboard_event(
             request.app,
             "alert_received",
-            {
-                "id": db_alert.id,
-                "site_id": db_alert.site_id,
-                "camera_id": db_alert.camera_id,
-                "edge_pc_id": db_alert.edge_pc_id,
-                "timestamp": (
-                    isoformat_winnipeg(db_alert.timestamp)
-                    if db_alert.timestamp
-                    else None
-                ),
-            },
+            alert_out.model_dump(mode="json", by_alias=True),
         )
-        return db_alert
+        return alert_out
     except AlertPersistenceError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -198,23 +207,13 @@ async def upload_alert(
     )
 
     try:
-        db_alert = alert_ingestion_service.ingest(db, alert_payload)
+        alert_out = await asyncio.to_thread(_persist_alert, alert_payload)
         publish_dashboard_event(
             request.app,
             "alert_received",
-            {
-                "id": db_alert.id,
-                "site_id": db_alert.site_id,
-                "camera_id": db_alert.camera_id,
-                "edge_pc_id": db_alert.edge_pc_id,
-                "timestamp": (
-                    isoformat_winnipeg(db_alert.timestamp)
-                    if db_alert.timestamp
-                    else None
-                ),
-            },
+            alert_out.model_dump(mode="json", by_alias=True),
         )
-        return db_alert
+        return alert_out
     except AlertPersistenceError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -225,6 +224,10 @@ async def upload_alert(
 @router.get("")
 def list_alerts(
     db: Session = Depends(get_db),
+    sort_by: Literal["received_at", "timestamp"] = Query(
+        default="received_at",
+        description="Sort alerts by either the server received time or the alert timestamp.",
+    ),
     limit: int | None = Query(default=None, ge=1, le=1000),
 ):
     """
@@ -235,8 +238,9 @@ def list_alerts(
     try:
         # TODO: Implement alert listing with filters
         alerts = db.query(Alert).all()
+        alerts = sorted(alerts, key=lambda alert: _alert_sort_key(alert, sort_by), reverse=True)
         if limit is not None:
-            alerts = alerts[-limit:]
+            alerts = alerts[:limit]
         return {"alerts": [AlertOut.model_validate(alert) for alert in alerts]}
     except SQLAlchemyError as e:
         raise HTTPException(

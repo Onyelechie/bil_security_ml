@@ -108,5 +108,6 @@ def test_dashboard_ws_receives_alert_event():
 
                 alert_event = _receive_until(websocket, "alert_received")
                 assert alert_event["payload"]["edge_pc_id"] == edge_pc_id
+                assert "received_at" in alert_event["payload"]
     finally:
         settings.admin_password = original_admin_password

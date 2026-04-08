@@ -240,6 +240,25 @@
         <p id="settings-enroll-message" class="muted">The dashboard will call `/api/devices/enroll` on the active target.</p>
       </section>
 
+      <section class="panel settings-card settings-card-wide" data-settings-panel="security">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Device Management</p>
+            <h2>Managed Edge Devices</h2>
+          </div>
+          <span id="settings-device-count" class="status-pill neutral">0 devices</span>
+        </div>
+        <p class="muted">
+          Review enrolled devices for the active target and revoke any edge that should no longer be trusted.
+          Revocation takes effect immediately for future heartbeats and alerts.
+        </p>
+        <div class="action-row">
+          <button id="settings-device-refresh" class="btn ghost" type="button">Refresh Devices</button>
+        </div>
+        <p id="settings-device-message" class="muted">Unlock admin access to load the device list.</p>
+        <div id="settings-device-list" class="device-list"></div>
+      </section>
+
       <section class="panel settings-card settings-card-wide" data-settings-panel="guide">
         <div class="section-heading">
           <div>
@@ -395,9 +414,25 @@
       <p class="muted">
         Click an alert to bring its image into the center console, open the detail view, and mark it as visited.
       </p>
-      <div class="view-switcher" role="group" aria-label="Alert list view">
-        <button id="alerts-view-compact" class="view-switch is-active" type="button">Compact</button>
-        <button id="alerts-view-list" class="view-switch" type="button">List</button>
+      <div class="rail-controls">
+        <div class="rail-control-group">
+          <label class="rail-select-label" for="alerts-sort-select">Sort Alerts</label>
+          <select id="alerts-sort-select" class="rail-select" aria-label="Alert sort order">
+            <option value="received_at">Received</option>
+            <option value="timestamp">Alert Time</option>
+          </select>
+        </div>
+        <div class="rail-control-group rail-control-group-icons">
+          <span class="rail-select-label">Layout</span>
+          <div class="view-switcher icon-switcher" role="group" aria-label="Alert list view">
+            <button id="alerts-view-compact" class="view-switch icon-switch is-active" type="button" aria-label="Compact layout" title="Compact layout">
+              <span aria-hidden="true">▦</span>
+            </button>
+            <button id="alerts-view-list" class="view-switch icon-switch" type="button" aria-label="List layout" title="List layout">
+              <span aria-hidden="true">☰</span>
+            </button>
+          </div>
+        </div>
       </div>
       <div id="alerts-list" class="alerts-list"></div>
     </aside>

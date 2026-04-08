@@ -10,8 +10,12 @@ from alembic import context
 # access to the values within the .ini file in use.
 config = context.config
 
-# Interpret the config file for Python logging. This line sets up loggers.
-if config.config_file_name is not None:
+# Interpret the config file for Python logging unless the caller explicitly
+# disables it (useful for in-process startup migrations where we want to keep
+# the application's existing logging configuration intact).
+if config.config_file_name is not None and config.attributes.get(
+    "configure_logger", True
+):
     fileConfig(config.config_file_name)
 
 # Allow overriding the SQLAlchemy URL from environment for CI/containers/local dev.

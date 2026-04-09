@@ -268,6 +268,11 @@
             await this._refreshManagedDevices(true);
           } catch (err) {
             console.error(err);
+            this._handleAuthExpired(
+              active,
+              "Failed to unlock admin access.",
+              true
+            );
             this._setSettingsMessage("Failed to unlock admin access.", true);
           }
         });
@@ -1280,6 +1285,28 @@
       }
     }
 
+    async _validateAdminToken(target) {
+      if (!target) {
+        return false;
+      }
+      const token = this._getAuthToken(target.id);
+      if (!token) {
+        return false;
+      }
+      try {
+        await this._fetchJson(`${this._baseUrl(target)}/api/logs?limit=1`, {
+          headers: this._authHeaders(target),
+          authTarget: target,
+        });
+        return true;
+      } catch (err) {
+        if (String(err && err.message || err) === "Admin token expired") {
+          return false;
+        }
+        return true;
+      }
+    }
+
     _renderManagedDevices() {
       const active = this.store.getActive();
       const hasToken = !!(active && this._getAuthToken(active.id));
@@ -1479,7 +1506,7 @@
     const NAV_KEY = "dashboard_view";
     const navButtons = Array.from(document.querySelectorAll(".nav-btn[data-view]"));
 
-    function setView(view) {
+    async function setView(view) {
       const allowed = ["overview", "alerts", "settings"];
       if (!allowed.includes(view)) view = "overview";
       document.body.setAttribute("data-view", view);
@@ -1497,6 +1524,8 @@
       // populate settings UI when opening settings
       if (view === "settings") {
         try {
+          const active = app.store.getActive();
+          await app._validateAdminToken(active);
           app._populateSettingsSites();
           app._renderSettingsAdminState();
           app._renderSettingsView();
@@ -1509,7 +1538,9 @@
     }
 
     navButtons.forEach((btn) => {
-      btn.addEventListener("click", () => setView(btn.dataset.view));
+      btn.addEventListener("click", () => {
+        void setView(btn.dataset.view);
+      });
     });
 
     const saved = localStorage.getItem(NAV_KEY);
@@ -1518,6 +1549,6 @@
     app._renderSettingsView();
     app._renderSettingsSummary();
     void app._refreshManagedDevices();
-    setView(initial);
+    void setView(initial);
   });
 })();

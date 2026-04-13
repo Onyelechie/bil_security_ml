@@ -379,6 +379,8 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 person_conf=cfg.detector_person_conf,
                 vehicle_conf=cfg.detector_vehicle_conf,
                 allowed_classes=cfg.detector_allowed_classes,
+                include_polygons=cfg.motion_include_polygons,
+                exclude_polygons=cfg.motion_exclude_polygons,
             )
 
             image_output_dir = cfg.shared_storage_root.strip() or "storage/ws_alert_images"
@@ -455,6 +457,8 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                     person_conf=cfg.detector_person_conf,
                     vehicle_conf=cfg.detector_vehicle_conf,
                     allowed_classes=cfg.detector_allowed_classes,
+                    include_polygons=cfg.motion_include_polygons,
+                    exclude_polygons=cfg.motion_exclude_polygons,
                 )
 
                 image_output_dir = cfg.shared_storage_root.strip() or "storage/ws_alert_images"

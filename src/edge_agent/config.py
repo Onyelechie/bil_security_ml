@@ -101,3 +101,9 @@ class EdgeSettings(BaseSettings):
     sample_stride_sec: float = 2.0
     sample_target_fps: float = 5.0
     sample_max_frames: int = 30
+
+    # --- Motion zones / masking ---
+    # Polygons use normalized coordinates in the range 0..1:
+    # [[[x1, y1], [x2, y2], [x3, y3], ...], ...]
+    motion_include_polygons: list[list[list[float]]] = []
+    motion_exclude_polygons: list[list[list[float]]] = []

@@ -262,10 +262,7 @@ def get_alert_image(alert_id: str, db: Session = Depends(get_db)):
         )
 
     repo_root = Path(__file__).resolve().parents[3]
-    image_path = Path(alert.image_path)
-    if not image_path.is_absolute():
-        image_path = repo_root / image_path
-    image_path = image_path.resolve()
+    stored_path = Path(alert.image_path)
 
     # Accept either the new unified `image_storage_dir` or the legacy `ws_image_storage_dir`.
     storage_dirs = [settings.image_storage_dir, settings.ws_image_storage_dir]
@@ -277,17 +274,42 @@ def get_alert_image(alert_id: str, db: Session = Depends(get_db)):
         try:
             resolved_roots.append(root.resolve())
         except OSError:
-            # ignore invalid roots
             continue
 
-    # Ensure image_path is inside at least one of the configured storage roots
-    for root in resolved_roots:
+    candidate_paths = []
+
+    if stored_path.is_absolute():
         try:
-            image_path.relative_to(root)
-            break
-        except ValueError:
-            continue
+            candidate_paths.append(stored_path.resolve())
+        except OSError:
+            pass
     else:
+        # First try resolving relative to each configured storage root.
+        for root in resolved_roots:
+            try:
+                candidate_paths.append((root / stored_path).resolve())
+            except OSError:
+                continue
+
+        # Then try repo-root relative for backward compatibility.
+        try:
+            candidate_paths.append((repo_root / stored_path).resolve())
+        except OSError:
+            pass
+
+    image_path = None
+    for candidate in candidate_paths:
+        for root in resolved_roots:
+            try:
+                candidate.relative_to(root)
+                image_path = candidate
+                break
+            except ValueError:
+                continue
+        if image_path is not None:
+            break
+
+    if image_path is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Image path is outside configured storage directory",
@@ -297,4 +319,6 @@ def get_alert_image(alert_id: str, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Image file not found"
         )
+
     return FileResponse(image_path)
+    

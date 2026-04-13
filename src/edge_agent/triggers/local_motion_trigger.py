@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import suppress
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 import cv2
@@ -153,6 +153,9 @@ class LocalMotionTrigger:
         self._score_mask: np.ndarray | None = None
         self._score_mask_shape: tuple[int, int] | None = None
 
+        self._ptz_hits = 0
+        self._ptz_suppress_until: datetime | None = None
+
     @property
     def queue(self) -> asyncio.Queue[MotionEvent]:
         return self._queue
@@ -181,6 +184,37 @@ class LocalMotionTrigger:
         )
 
         return mask
+
+    def _ptz_active(self, now: datetime) -> bool:
+        return self._ptz_suppress_until is not None and now < self._ptz_suppress_until
+
+    def _mark_ptz_motion(self, now: datetime, global_score: float) -> None:
+        self._ptz_hits += 1
+        required_hits = max(int(self._cfg.ptz_consecutive_frames), 1)
+
+        if self._ptz_hits < required_hits:
+            logger.debug(
+                "PTZ candidate: score=%.4f hit=%d/%d",
+                global_score,
+                self._ptz_hits,
+                required_hits,
+            )
+            return
+
+        suppress_for = max(float(self._cfg.ptz_suppress_sec), 0.0)
+        new_until = now + timedelta(seconds=suppress_for)
+
+        should_log = (
+            self._ptz_suppress_until is None or new_until > self._ptz_suppress_until
+        )
+        self._ptz_suppress_until = new_until
+
+        if should_log:
+            logger.warning(
+                "PTZ/global camera motion detected: score=%.4f suppressing_local_motion_for=%.1fs",
+                global_score,
+                suppress_for,
+            )
 
     async def start(self) -> None:
         if self._task and not self._task.done():
@@ -218,7 +252,38 @@ class LocalMotionTrigger:
                 await asyncio.sleep(period)
                 continue
 
+            now = datetime.now(timezone.utc)
+
             if self._prev is not None:
+                try:
+                    global_score = motion_score(
+                        self._prev,
+                        curr_gray,
+                        pixel_delta=self._cfg.motion_pixel_delta,
+                        score_mask=None,
+                    )
+                except ValueError:
+                    self._prev = curr_gray
+                    await asyncio.sleep(period)
+                    continue
+
+                if global_score >= self._cfg.ptz_global_motion_threshold:
+                    self._mark_ptz_motion(now, global_score)
+                    self._prev = curr_gray
+                    await asyncio.sleep(period)
+                    continue
+
+                self._ptz_hits = 0
+
+                if self._ptz_active(now):
+                    logger.debug(
+                        "LOCAL MOTION(suppressed_ptz): camera_id=%s",
+                        self._cfg.default_camera_id,
+                    )
+                    self._prev = curr_gray
+                    await asyncio.sleep(period)
+                    continue
+
                 try:
                     score = motion_score(
                         self._prev,
@@ -233,7 +298,7 @@ class LocalMotionTrigger:
 
                 if score >= self._cfg.motion_threshold:
                     evt = MotionEvent(
-                        received_at_utc=datetime.now(timezone.utc),
+                        received_at_utc=now,
                         site_id=self._cfg.site_id,
                         edge_pc_id=self._cfg.edge_pc_id,
                         camera_id=self._cfg.default_camera_id,

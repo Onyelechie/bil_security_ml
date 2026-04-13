@@ -438,12 +438,16 @@ def test_run_mode_builds_evaluator_pipeline_and_local_trigger(monkeypatch):
             person_conf=None,
             vehicle_conf=None,
             allowed_classes=None,
+            include_polygons=None,
+            exclude_polygons=None,
         ):
             created["model_name"] = model_name
             created["weights_path"] = weights_path
             created["person_conf"] = person_conf
             created["vehicle_conf"] = vehicle_conf
             created["allowed_classes"] = allowed_classes
+            created["include_polygons"] = include_polygons
+            created["exclude_polygons"] = exclude_polygons
 
     class FakePipeline:
         def __init__(
@@ -488,6 +492,8 @@ def test_run_mode_builds_evaluator_pipeline_and_local_trigger(monkeypatch):
         incident_tick_interval_sec=0.01,
         enable_tcp_motion=True,
         enable_local_motion=True,
+        motion_include_polygons=[[[0.0, 0.0], [0.5, 0.0], [0.5, 0.5], [0.0, 0.5]]],
+        motion_exclude_polygons=[[[0.8, 0.8], [1.0, 0.8], [1.0, 1.0], [0.8, 1.0]]],
     )
 
     code = run(argv=["--run"], cfg=cfg)
@@ -501,3 +507,5 @@ def test_run_mode_builds_evaluator_pipeline_and_local_trigger(monkeypatch):
     assert created["person_conf"] == cfg.detector_person_conf
     assert created["vehicle_conf"] == cfg.detector_vehicle_conf
     assert created["allowed_classes"] == cfg.detector_allowed_classes
+    assert created["include_polygons"] == cfg.motion_include_polygons
+    assert created["exclude_polygons"] == cfg.motion_exclude_polygons

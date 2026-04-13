@@ -68,6 +68,13 @@ class EdgeSettings(BaseSettings):
     motion_threshold: float = 0.005
     default_camera_id: str = "1"
 
+    # --- PTZ / camera-motion suppression ---
+    # If a very large fraction of the full frame changes, it is likely
+    # camera movement rather than scene motion.
+    ptz_global_motion_threshold: float = 0.35
+    ptz_consecutive_frames: int = 2
+    ptz_suppress_sec: float = 3.0
+
     # --- Incident merging + window extraction ---
     incident_quiet_sec: float = 2.0
     incident_max_sec: float = 12.0

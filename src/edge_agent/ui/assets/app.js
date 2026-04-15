@@ -6,8 +6,25 @@
   const ringCount = document.getElementById("ring-count");
   const previewStage = document.getElementById("preview-stage");
   const settingsGroups = document.getElementById("settings-groups");
+  const zoneModeIncludeBtn = document.getElementById("zone-mode-include");
+  const zoneModeExcludeBtn = document.getElementById("zone-mode-exclude");
+  const zoneFinishBtn = document.getElementById("zone-finish-btn");
+  const zoneUndoBtn = document.getElementById("zone-undo-btn");
+  const zoneClearModeBtn = document.getElementById("zone-clear-mode-btn");
+  const zoneResetBtn = document.getElementById("zone-reset-btn");
+  const zoneSaveBtn = document.getElementById("zone-save-btn");
+  const zonesMsg = document.getElementById("zones-msg");
 
   let latestSettings = null;
+
+  const zoneState = {
+    mode: "include",
+    includePolygons: [],
+    excludePolygons: [],
+    draftPoints: [],
+    dirty: false,
+    latestPreviewImage: null,
+  };
 
   function escapeHtml(value) {
     return String(value)
@@ -16,6 +33,194 @@
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;");
   }
+
+  function cloneJson(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function setZonesMessage(text, cssClass = "muted") {
+    if (!zonesMsg) return;
+    zonesMsg.textContent = text;
+    zonesMsg.className = cssClass;
+  }
+
+  function polygonPointsToSvg(points) {
+    return points.map(([x, y]) => `${x * 1000},${y * 1000}`).join(" ");
+  }
+
+  function syncZonesFromPreview(preview) {
+    if (zoneState.dirty) {
+      return;
+    }
+
+    zoneState.includePolygons = cloneJson(preview.include_polygons || []);
+    zoneState.excludePolygons = cloneJson(preview.exclude_polygons || []);
+    zoneState.draftPoints = [];
+  }
+
+  function updateZoneModeButtons() {
+    if (zoneModeIncludeBtn) {
+      zoneModeIncludeBtn.classList.toggle("is-active", zoneState.mode === "include");
+    }
+    if (zoneModeExcludeBtn) {
+      zoneModeExcludeBtn.classList.toggle("is-active", zoneState.mode === "exclude");
+    }
+  }
+
+  function renderZoneOverlay() {
+    const svg = document.getElementById("preview-overlay");
+    if (!svg) return;
+
+    const includeMarkup = zoneState.includePolygons.map((poly) => `
+      <polygon class="zone-polygon-include" points="${polygonPointsToSvg(poly)}"></polygon>
+    `).join("");
+
+    const excludeMarkup = zoneState.excludePolygons.map((poly) => `
+      <polygon class="zone-polygon-exclude" points="${polygonPointsToSvg(poly)}"></polygon>
+    `).join("");
+
+    const draftLine = zoneState.draftPoints.length > 0
+      ? `<polyline class="zone-draft" points="${polygonPointsToSvg(zoneState.draftPoints)}"></polyline>`
+      : "";
+
+    const draftPoints = zoneState.draftPoints.map(([x, y]) => `
+      <circle class="zone-point" cx="${x * 1000}" cy="${y * 1000}" r="7"></circle>
+    `).join("");
+
+    svg.innerHTML = `
+      ${includeMarkup}
+      ${excludeMarkup}
+      ${draftLine}
+      ${draftPoints}
+    `;
+
+    setZonesMessage(
+      `Counting zones: ${zoneState.includePolygons.length}   Ignored zones: ${zoneState.excludePolygons.length}   Draft points: ${zoneState.draftPoints.length}`,
+      "muted"
+    );
+  }
+
+  function handleZoneClick(event) {
+    const svg = event.currentTarget;
+    const rect = svg.getBoundingClientRect();
+
+    if (!rect.width || !rect.height) return;
+
+    const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+
+    zoneState.draftPoints.push([
+      Number(x.toFixed(4)),
+      Number(y.toFixed(4)),
+    ]);
+    zoneState.dirty = true;
+    renderZoneOverlay();
+  }
+
+  function finishZonePolygon() {
+    if (zoneState.draftPoints.length < 3) {
+      setZonesMessage("Finish shape needs at least 3 points.", "danger-text");
+      return;
+    }
+
+    const poly = cloneJson(zoneState.draftPoints);
+
+    if (zoneState.mode === "include") {
+      zoneState.includePolygons.push(poly);
+    } else {
+      zoneState.excludePolygons.push(poly);
+    }
+
+    zoneState.draftPoints = [];
+    zoneState.dirty = true;
+    renderZoneOverlay();
+    setZonesMessage("Shape added. Save zones to apply and store it.", "ok-text");
+  }
+
+  function undoZonePoint() {
+    if (zoneState.draftPoints.length === 0) {
+      setZonesMessage("There is no draft point to remove.", "muted");
+      return;
+    }
+
+    zoneState.draftPoints.pop();
+    zoneState.dirty = true;
+    renderZoneOverlay();
+  }
+
+  function clearCurrentZoneType() {
+    if (zoneState.mode === "include") {
+      zoneState.includePolygons = [];
+    } else {
+      zoneState.excludePolygons = [];
+    }
+
+    zoneState.draftPoints = [];
+    zoneState.dirty = true;
+    renderZoneOverlay();
+    setZonesMessage(
+      zoneState.mode === "include"
+        ? "All counted zones were cleared."
+        : "All ignored zones were cleared.",
+      "ok-text"
+    );
+  }
+
+  async function reloadSavedZones() {
+    try {
+      const [settings, preview] = await Promise.all([
+        fetch(`/api/settings?ts=${Date.now()}`, { cache: "no-store" }).then((r) => r.json()),
+        fetch(`/api/preview?ts=${Date.now()}`, { cache: "no-store" }).then((r) => r.json()),
+      ]);
+
+      latestSettings = settings;
+      zoneState.dirty = false;
+      syncZonesFromSettings(settings);
+
+      renderPreview(preview);
+      renderSettings(settings);
+
+      setZonesMessage("Saved zones were reloaded.", "muted");
+    } catch (err) {
+      setZonesMessage(err.message || "Failed to reload saved zones.", "danger-text");
+    }
+ }
+
+ async function saveZones() {
+  try {
+    const response = await fetch("/api/zones", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        motion_include_polygons: zoneState.includePolygons,
+        motion_exclude_polygons: zoneState.excludePolygons,
+      }),
+      cache: "no-store",
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.detail || "Failed to save zones.");
+    }
+
+    const [settings, preview] = await Promise.all([
+      fetch(`/api/settings?ts=${Date.now()}`, { cache: "no-store" }).then((r) => r.json()),
+      fetch(`/api/preview?ts=${Date.now()}`, { cache: "no-store" }).then((r) => r.json()),
+    ]);
+
+    latestSettings = settings;
+    zoneState.dirty = false;
+    syncZonesFromSettings(settings);
+
+    renderPreview(preview);
+    renderSettings(settings);
+
+    setZonesMessage(result.message || "Zones saved successfully.", "ok-text");
+  } catch (err) {
+    setZonesMessage(err.message || "Failed to save zones.", "danger-text");
+  }
+}
 
   function fieldMeta() {
     return {
@@ -99,14 +304,39 @@
       return;
     }
 
+    zoneState.latestPreviewImage = preview.image_jpeg_b64;
+    syncZonesFromPreview(preview);
+
     previewStage.classList.remove("empty");
     previewStage.innerHTML = `
-      <img
-        class="preview-image"
-        src="data:image/jpeg;base64,${preview.image_jpeg_b64}"
-        alt="Latest edge preview frame"
-      >
+      <div class="preview-stack">
+        <img
+          id="preview-image"
+          class="preview-image"
+          src="data:image/jpeg;base64,${preview.image_jpeg_b64}"
+          alt="Latest edge preview frame"
+        >
+        <svg
+          id="preview-overlay"
+          class="preview-overlay"
+          viewBox="0 0 1000 1000"
+          preserveAspectRatio="none"
+        ></svg>
+      </div>
+      <div class="zone-badge">
+        <span class="status-pill ok">Counted zones: ${zoneState.includePolygons.length}</span>
+        <span class="status-pill err">Ignored zones: ${zoneState.excludePolygons.length}</span>
+        <span class="status-pill neutral">Drawing: ${zoneState.mode === "include" ? "Count motion here" : "Ignore motion here"}</span>
+      </div>
     `;
+
+    const svg = document.getElementById("preview-overlay");
+    if (svg) {
+      svg.addEventListener("click", handleZoneClick);
+    }
+
+    updateZoneModeButtons();
+    renderZoneOverlay();
   }
 
   async function restartPipeline() {
@@ -370,32 +600,84 @@
   return next;
 }
 
-  async function loadAll() {
-    const [runtimeRes, previewRes, settingsRes] = await Promise.all([
-        fetch(`/api/runtime?ts=${Date.now()}`, { cache: "no-store" }),
-        fetch(`/api/preview?ts=${Date.now()}`, { cache: "no-store" }),
-        fetch(`/api/settings?ts=${Date.now()}`, { cache: "no-store" }),
-    ]);
+function syncZonesFromSettings(settings) {
+  const zones = settings?.zones || {};
+  zoneState.includePolygons = cloneJson(zones.motion_include_polygons || []);
+  zoneState.excludePolygons = cloneJson(zones.motion_exclude_polygons || []);
+  zoneState.draftPoints = [];
+}
 
-    const runtime = await runtimeRes.json();
-    const preview = await previewRes.json();
-    const settings = await settingsRes.json();
+async function loadAll() {
+  const [runtimeRes, previewRes, settingsRes] = await Promise.all([
+    fetch(`/api/runtime?ts=${Date.now()}`, { cache: "no-store" }),
+    fetch(`/api/preview?ts=${Date.now()}`, { cache: "no-store" }),
+    fetch(`/api/settings?ts=${Date.now()}`, { cache: "no-store" }),
+  ]);
+
+  const runtime = await runtimeRes.json();
+  const preview = await previewRes.json();
+  const settings = await settingsRes.json();
+
+  latestSettings = settings;
+  syncZonesFromSettings(settings);
+
+  renderRuntime(runtime);
+  renderPreview(preview);
+  renderSettings(settings);
+}
+
+  if (zoneModeIncludeBtn) {
+    zoneModeIncludeBtn.addEventListener("click", () => {
+      zoneState.mode = "include";
+      updateZoneModeButtons();
+      renderZoneOverlay();
+    });
+  }
+
+  if (zoneModeExcludeBtn) {
+    zoneModeExcludeBtn.addEventListener("click", () => {
+      zoneState.mode = "exclude";
+      updateZoneModeButtons();
+      renderZoneOverlay();
+    });
+  }
+
+  if (zoneFinishBtn) {
+    zoneFinishBtn.addEventListener("click", finishZonePolygon);
+  }
+
+  if (zoneUndoBtn) {
+    zoneUndoBtn.addEventListener("click", undoZonePoint);
+  }
+
+  if (zoneClearModeBtn) {
+    zoneClearModeBtn.addEventListener("click", clearCurrentZoneType);
+  }
+
+  if (zoneResetBtn) {
+    zoneResetBtn.addEventListener("click", reloadSavedZones);
+  }
+
+  if (zoneSaveBtn) {
+    zoneSaveBtn.addEventListener("click", saveZones);
+  }
+
+  await loadAll();
+setInterval(async () => {
+  try {
+    const runtime = await fetch(`/api/runtime?ts=${Date.now()}`, {
+      cache: "no-store",
+    }).then((r) => r.json());
+
+    const preview = await fetch(`/api/preview?ts=${Date.now()}`, {
+      cache: "no-store",
+    }).then((r) => r.json());
 
     renderRuntime(runtime);
     renderPreview(preview);
-    renderSettings(settings);
- }
-
-  await loadAll();
-  setInterval(async () => {
-    try {
-        const runtime = await fetch("/api/runtime").then((r) => r.json());
-        const preview = await fetch("/api/preview").then((r) => r.json());
-        renderRuntime(runtime);
-        renderPreview(preview);
-    } catch (_err) {
-        runtimePill.textContent = "Offline";
-        runtimePill.className = "status-pill err";
-    }
-  }, 3000);
+  } catch (_err) {
+    runtimePill.textContent = "Offline";
+    runtimePill.className = "status-pill err";
+  }
+}, 3000);
 })();

@@ -59,8 +59,37 @@
           </div>
         </div>
         <p class="muted">
-          This preview will be used for zoning so the operator can draw areas visually instead of typing coordinates.
+          Draw areas directly on the latest frame. Green areas count toward motion. Red areas are ignored.
         </p>
+
+        <div class="zone-toolbar">
+          <button id="zone-mode-include" class="btn ghost is-active" type="button">
+            Count motion here
+          </button>
+          <button id="zone-mode-exclude" class="btn ghost" type="button">
+            Ignore motion here
+          </button>
+          <button id="zone-finish-btn" class="btn ghost" type="button">
+            Finish shape
+          </button>
+          <button id="zone-undo-btn" class="btn ghost" type="button">
+            Undo point
+          </button>
+          <button id="zone-clear-mode-btn" class="btn ghost" type="button">
+            Clear current type
+          </button>
+          <button id="zone-reset-btn" class="btn ghost" type="button">
+            Reload saved zones
+          </button>
+          <button id="zone-save-btn" class="btn primary" type="button">
+            Save zones
+          </button>
+        </div>
+
+        <p id="zones-msg" class="muted">
+          Click on the image to place points. Use Finish shape after at least 3 points.
+        </p>
+
         <div id="preview-stage" class="preview-stage empty">
           <p>No preview frame yet.</p>
         </div>

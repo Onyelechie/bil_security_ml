@@ -63,7 +63,7 @@ class AlertIngestionService:
                     # persisted by the websocket storage instance and should not be
                     # copied into the main storage root again.
                     elif image_path_val.startswith("ws://"):
-                        src = Path(image_path_val[len("ws://"):])
+                        src = Path(image_path_val[len("ws://") :])
                         if not src.is_absolute():
                             # if a relative path was returned, resolve it against cwd
                             src = src.resolve()

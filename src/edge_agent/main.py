@@ -58,6 +58,45 @@ async def consume_extraction_results(worker, pipeline) -> None:
             )
 
 
+def _start_console_server(cfg, sender, runtime_state):
+    import uvicorn
+
+    from .edge_api import create_app
+
+    app = create_app(cfg, sender, runtime_state)
+    config = uvicorn.Config(
+        app,
+        host=cfg.edge_http_host,
+        port=cfg.edge_http_port,
+        log_level=cfg.log_level.lower(),
+    )
+    server = uvicorn.Server(config)
+
+    def _run_server() -> None:
+        server.run()
+
+    server_thread = threading.Thread(target=_run_server, daemon=True)
+    server_thread.start()
+
+    startup_deadline = time.monotonic() + 10.0
+    while not server.started and not server.should_exit:
+        if time.monotonic() >= startup_deadline:
+            server.should_exit = True
+            server_thread.join(timeout=1)
+            raise RuntimeError("Edge console failed to start within 10s")
+        time.sleep(0.05)
+
+    return server, server_thread
+
+
+def _stop_console_server(server, server_thread) -> None:
+    if server is None or server_thread is None:
+        return
+    server.should_exit = True
+    while server_thread.is_alive():
+        server_thread.join(timeout=0.2)
+
+
 def heartbeat_loop(
     sender: ServerSender, interval_sec: int, stop_event: threading.Event
 ):
@@ -462,216 +501,298 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 from .video.ring_buffer import RingBuffer
                 from .video.rtsp_reader import RtspReader
 
-                if not cfg.enable_tcp_motion and not cfg.enable_local_motion:
-                    logger.warning(
-                        "No motion source enabled. Set ENABLE_TCP_MOTION and/or ENABLE_LOCAL_MOTION."
-                    )
-                    return
+                active_cfg = cfg
+                restart_event = asyncio.Event()
+                loop = asyncio.get_running_loop()
 
-                ring = RingBuffer(seconds=cfg.ring_buffer_seconds)
-                reader = RtspReader(cfg, ring)
-                server = None
-                server_thread = None
+                def request_restart() -> dict:
+                    loop.call_soon_threadsafe(restart_event.set)
+                    return {
+                        "accepted": True,
+                        "message": "Restart requested. The edge pipeline will rebuild shortly.",
+                    }
 
-                mgr = TriggerManager(
-                    cooldown_sec=cfg.trigger_cooldown_sec,
-                    merge_window_sec=cfg.trigger_merge_window_sec,
-                )
-
-                incidents = IncidentManager(
-                    pre_sec=cfg.window_pre_sec,
-                    post_sec=cfg.window_post_sec,
-                    quiet_sec=cfg.incident_quiet_sec,
-                    max_incident_sec=cfg.incident_max_sec,
-                )
-
-                def ring_provider(camera_id: str):
-                    return ring
-
-                worker = ExtractionWorker(
-                    ring_provider=ring_provider,
-                    target_fps=cfg.window_target_fps,
-                    max_frames=cfg.window_max_frames,
-                    wait_grace_sec=cfg.window_wait_grace_sec,
-                )
-
-                evaluator = MLEvaluator(
-                    model_name=cfg.detector_model,
-                    weights_path=cfg.detector_weights,
-                    person_conf=cfg.detector_person_conf,
-                    vehicle_conf=cfg.detector_vehicle_conf,
-                    allowed_classes=cfg.detector_allowed_classes,
-                    include_polygons=cfg.motion_include_polygons,
-                    exclude_polygons=cfg.motion_exclude_polygons,
-                )
-
-                runtime_state.update(
-                    pipeline_mode="running",
-                    stream_state="connecting",
-                    ring_buffer_frames=0,
-                    sender_status=sender.get_status(),
-                    latest_frame_item=None,
-                    last_error=None,
-                )
-
-                image_output_dir = (
-                    cfg.shared_storage_root.strip() or "storage/ws_alert_images"
-                )
-
-                pipeline = PipelineRunner(
-                    evaluator=evaluator,
-                    sender=sender,
-                    image_output_dir=image_output_dir,
-                )
-
-                pipeline_task = asyncio.create_task(
-                    consume_extraction_results(worker, pipeline),
-                    name="pipeline-consumer",
-                )
-
-                tcp_trigger = TcpMotionTrigger(cfg) if cfg.enable_tcp_motion else None
-
-                def on_motion(evt, accepted: bool) -> None:
-                    incidents.ingest(evt, accepted=accepted)
-
-                local_trigger = (
-                    LocalMotionTrigger(cfg, ring, mgr, on_motion=on_motion)
-                    if cfg.enable_local_motion
-                    else None
-                )
-
-                if not cfg.rtsp_url_low:
-                    logger.warning(
-                        "RTSP_URL_LOW is not set. Windows will likely be DROPPED (no frames)."
-                    )
-
-                logger.info(
-                    "Unified run enabled: tcp_motion=%s local_motion=%s",
-                    cfg.enable_tcp_motion,
-                    cfg.enable_local_motion,
-                )
-
-                await reader.start()
-                await worker.start()
+                runtime_state.set_restart_pipeline_fn(request_restart)
 
                 try:
-                    server, server_thread = start_edge_http_server(
-                        cfg, sender, runtime_state
-                    )
+                    while True:
+                        current_cfg = active_cfg
 
-                    if tcp_trigger is not None:
-                        await tcp_trigger.start()
+                        if (
+                            not current_cfg.enable_tcp_motion
+                            and not current_cfg.enable_local_motion
+                        ):
+                            logger.warning(
+                                "No motion source enabled. Set ENABLE_TCP_MOTION and/or ENABLE_LOCAL_MOTION."
+                            )
+                            return
 
-                    if local_trigger is not None:
-                        await local_trigger.start()
+                        sender.settings = current_cfg
+                        sender.queue_dir = current_cfg.offline_queue_dir
 
-                    sender.set_status("online")
-                    runtime_state.update(sender_status=sender.get_status())
+                        ring = RingBuffer(seconds=current_cfg.ring_buffer_seconds)
+                        reader = RtspReader(current_cfg, ring)
 
-                    max_window_s = (
-                        cfg.window_pre_sec + cfg.incident_max_sec + cfg.window_post_sec
-                    )
-                    if max_window_s > cfg.ring_buffer_seconds:
-                        logger.warning(
-                            (
-                                "Configured window span (%.1fs) > ring_buffer_seconds (%ds). "
-                                "Expect PARTIAL windows unless ring buffer is increased."
-                            ),
-                            max_window_s,
-                            cfg.ring_buffer_seconds,
+                        mgr = TriggerManager(
+                            cooldown_sec=current_cfg.trigger_cooldown_sec,
+                            merge_window_sec=current_cfg.trigger_merge_window_sec,
                         )
 
-                    last_tick = datetime.now(timezone.utc)
+                        incidents = IncidentManager(
+                            pre_sec=current_cfg.window_pre_sec,
+                            post_sec=current_cfg.window_post_sec,
+                            quiet_sec=current_cfg.incident_quiet_sec,
+                            max_incident_sec=current_cfg.incident_max_sec,
+                        )
 
-                    while True:
-                        if tcp_trigger is not None:
-                            try:
-                                evt = await asyncio.wait_for(
-                                    tcp_trigger.queue.get(),
-                                    timeout=cfg.incident_tick_interval_sec,
+                        def ring_provider(camera_id: str):
+                            return ring
+
+                        worker = ExtractionWorker(
+                            ring_provider=ring_provider,
+                            target_fps=current_cfg.window_target_fps,
+                            max_frames=current_cfg.window_max_frames,
+                            wait_grace_sec=current_cfg.window_wait_grace_sec,
+                        )
+
+                        evaluator = MLEvaluator(
+                            model_name=current_cfg.detector_model,
+                            weights_path=current_cfg.detector_weights,
+                            person_conf=current_cfg.detector_person_conf,
+                            vehicle_conf=current_cfg.detector_vehicle_conf,
+                            allowed_classes=current_cfg.detector_allowed_classes,
+                            include_polygons=current_cfg.motion_include_polygons,
+                            exclude_polygons=current_cfg.motion_exclude_polygons,
+                        )
+
+                        image_output_dir = (
+                            current_cfg.shared_storage_root.strip()
+                            or "storage/ws_alert_images"
+                        )
+
+                        pipeline = PipelineRunner(
+                            evaluator=evaluator,
+                            sender=sender,
+                            image_output_dir=image_output_dir,
+                        )
+
+                        pipeline_task = asyncio.create_task(
+                            consume_extraction_results(worker, pipeline),
+                            name="pipeline-consumer",
+                        )
+
+                        tcp_trigger = (
+                            TcpMotionTrigger(current_cfg)
+                            if current_cfg.enable_tcp_motion
+                            else None
+                        )
+
+                        def on_motion(evt, accepted: bool) -> None:
+                            incidents.ingest(evt, accepted=accepted)
+                            if accepted:
+                                runtime_state.update(
+                                    last_motion_at=datetime.now(timezone.utc)
                                 )
-                                accepted = mgr.accept(evt)
-                                incidents.ingest(evt, accepted=accepted)
 
-                                if accepted:
-                                    logger.info(
-                                        "TCP MOTION(accepted): camera_id=%s policy=%s user=%s",
-                                        evt.camera_id,
-                                        evt.policy_name,
-                                        evt.user_string,
-                                    )
-                                else:
-                                    logger.debug(
-                                        "TCP MOTION(dropped): camera_id=%s",
-                                        evt.camera_id,
-                                    )
-                            except asyncio.TimeoutError:
-                                pass
+                        local_trigger = (
+                            LocalMotionTrigger(
+                                current_cfg, ring, mgr, on_motion=on_motion
+                            )
+                            if current_cfg.enable_local_motion
+                            else None
+                        )
+
+                        if local_trigger is not None:
+                            runtime_state.set_apply_settings_fn(
+                                local_trigger.apply_runtime_settings
+                            )
                         else:
-                            await asyncio.sleep(cfg.incident_tick_interval_sec)
+                            runtime_state.set_apply_settings_fn(None)
 
-                        now = datetime.now(timezone.utc)
-                        if (
-                            now - last_tick
-                        ).total_seconds() >= cfg.incident_tick_interval_sec:
-                            jobs = incidents.tick(now)
-                            for job in jobs:
-                                logger.info(
-                                    "INCIDENT_FINALIZE(enqueue): incident=%s camera=%s reason=%s span=%.1fs",
-                                    job.incident_id,
-                                    job.camera_id,
-                                    job.reason,
-                                    (job.window_end - job.window_start).total_seconds(),
-                                )
-                                await worker.enqueue(job)
-                            last_tick = now
+                        if not current_cfg.rtsp_url_low:
+                            logger.warning(
+                                "RTSP_URL_LOW is not set. Windows will likely be DROPPED (no frames)."
+                            )
 
-                        latest_item = ring.latest_item()
-                        ring_frames = ring.size()
+                        logger.info(
+                            "Unified run enabled: tcp_motion=%s local_motion=%s",
+                            current_cfg.enable_tcp_motion,
+                            current_cfg.enable_local_motion,
+                        )
 
                         runtime_state.update(
-                            stream_state=(
-                                "streaming" if ring_frames > 0 else "connecting"
-                            ),
-                            ring_buffer_frames=ring_frames,
-                            latest_frame_item=latest_item,
+                            pipeline_mode="starting",
+                            stream_state="connecting",
+                            ring_buffer_frames=0,
+                            latest_frame_item=None,
+                            sender_status=sender.get_status(),
+                            last_error=None,
+                        )
+
+                        await reader.start()
+                        await worker.start()
+
+                        if tcp_trigger is not None:
+                            await tcp_trigger.start()
+
+                        if local_trigger is not None:
+                            await local_trigger.start()
+
+                        sender.set_status("online")
+                        runtime_state.update(
+                            pipeline_mode="running",
                             sender_status=sender.get_status(),
                         )
 
+                        max_window_s = (
+                            current_cfg.window_pre_sec
+                            + current_cfg.incident_max_sec
+                            + current_cfg.window_post_sec
+                        )
+                        if max_window_s > current_cfg.ring_buffer_seconds:
+                            logger.warning(
+                                (
+                                    "Configured window span (%.1fs) > ring_buffer_seconds (%ds). "
+                                    "Expect PARTIAL windows unless ring buffer is increased."
+                                ),
+                                max_window_s,
+                                current_cfg.ring_buffer_seconds,
+                            )
+
+                        last_tick = datetime.now(timezone.utc)
+                        should_restart = False
+
+                        try:
+                            while True:
+                                if restart_event.is_set():
+                                    restart_event.clear()
+                                    sender.set_status("restarting")
+                                    runtime_state.update(
+                                        pipeline_mode="restarting",
+                                        sender_status=sender.get_status(),
+                                    )
+                                    logger.info("Restart requested from edge console")
+                                    should_restart = True
+                                    break
+
+                                if tcp_trigger is not None:
+                                    try:
+                                        evt = await asyncio.wait_for(
+                                            tcp_trigger.queue.get(),
+                                            timeout=current_cfg.incident_tick_interval_sec,
+                                        )
+                                        accepted = mgr.accept(evt)
+                                        incidents.ingest(evt, accepted=accepted)
+
+                                        if accepted:
+                                            logger.info(
+                                                "TCP MOTION(accepted): camera_id=%s policy=%s user=%s",
+                                                evt.camera_id,
+                                                evt.policy_name,
+                                                evt.user_string,
+                                            )
+                                            runtime_state.update(
+                                                last_motion_at=datetime.now(
+                                                    timezone.utc
+                                                )
+                                            )
+                                        else:
+                                            logger.debug(
+                                                "TCP MOTION(dropped): camera_id=%s",
+                                                evt.camera_id,
+                                            )
+                                    except asyncio.TimeoutError:
+                                        pass
+                                else:
+                                    await asyncio.sleep(
+                                        current_cfg.incident_tick_interval_sec
+                                    )
+
+                                now = datetime.now(timezone.utc)
+                                if (
+                                    now - last_tick
+                                ).total_seconds() >= current_cfg.incident_tick_interval_sec:
+                                    jobs = incidents.tick(now)
+                                    for job in jobs:
+                                        logger.info(
+                                            "INCIDENT_FINALIZE(enqueue): incident=%s camera=%s reason=%s span=%.1fs",
+                                            job.incident_id,
+                                            job.camera_id,
+                                            job.reason,
+                                            (
+                                                job.window_end - job.window_start
+                                            ).total_seconds(),
+                                        )
+                                        await worker.enqueue(job)
+                                    last_tick = now
+
+                                latest_item = ring.latest_item()
+                                ring_frames = ring.size()
+
+                                runtime_state.update(
+                                    stream_state=(
+                                        "streaming" if ring_frames > 0 else "connecting"
+                                    ),
+                                    ring_buffer_frames=ring_frames,
+                                    latest_frame_item=latest_item,
+                                    sender_status=sender.get_status(),
+                                )
+
+                        finally:
+                            runtime_state.set_apply_settings_fn(None)
+
+                            pipeline_task.cancel()
+                            with suppress(asyncio.CancelledError):
+                                await pipeline_task
+
+                            if local_trigger is not None:
+                                await local_trigger.stop()
+
+                            if tcp_trigger is not None:
+                                await tcp_trigger.stop()
+
+                            await worker.stop()
+                            await reader.stop()
+
+                        if should_restart:
+                            active_cfg = EdgeSettings()
+                            logger.info(
+                                "Reloaded edge settings from .env after restart request"
+                            )
+                            continue
+
+                        sender.set_status("shutting_down")
+                        runtime_state.update(
+                            pipeline_mode="idle",
+                            stream_state="stopped",
+                            ring_buffer_frames=0,
+                            sender_status=sender.get_status(),
+                            latest_frame_item=None,
+                        )
+                        break
+
                 finally:
-                    pipeline_task.cancel()
-                    with suppress(asyncio.CancelledError):
-                        await pipeline_task
+                    runtime_state.set_apply_settings_fn(None)
+                    runtime_state.set_restart_pipeline_fn(None)
 
-                    if local_trigger is not None:
-                        await local_trigger.stop()
-
-                    if tcp_trigger is not None:
-                        await tcp_trigger.stop()
-
-                    await worker.stop()
-                    await reader.stop()
-
-                    if server is not None:
-                        server.should_exit = True
-                    if server_thread is not None:
-                        join_interruptible_thread(server_thread)
-
-                    sender.set_status("shutting_down")
-                    runtime_state.update(
-                        pipeline_mode="idle",
-                        stream_state="stopped",
-                        ring_buffer_frames=0,
-                        sender_status=sender.get_status(),
-                        latest_frame_item=None,
-                    )
-
+            console_server = None
+            console_thread = None
             try:
+                console_server, console_thread = _start_console_server(
+                    cfg, sender, runtime_state
+                )
+                logger.info(
+                    "Edge console available at http://%s:%s",
+                    cfg.edge_http_host,
+                    cfg.edge_http_port,
+                )
                 asyncio.run(_run_main())
             except KeyboardInterrupt:
                 logger.info("--run stopped (Ctrl+C).")
-            return _shutdown(0)
+            finally:
+                _stop_console_server(console_server, console_thread)
 
+            return _shutdown(0)
         logger.info(
             "Nothing to do. Use --print-config, --http-serve, --sample-video, --tcp-listen, --run, --motion-test."
         )

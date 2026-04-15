@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+EDGE_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
 class EdgeSettings(BaseSettings):
@@ -12,7 +16,7 @@ class EdgeSettings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(EDGE_ENV_FILE),
         case_sensitive=False,
         extra="ignore",
     )

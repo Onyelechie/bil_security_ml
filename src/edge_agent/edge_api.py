@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from .config import EdgeSettings
 from .runtime_state import EdgeRuntimeState
 from .sender import ServerSender
+from .settings_store import save_edge_settings
 
 
 class HealthOut(BaseModel):
@@ -199,11 +200,14 @@ def create_app(
 
     @app.get("/api/settings")
     def settings():
-        return _settings_payload(cfg)
+        fresh_cfg = EdgeSettings()
+        return _settings_payload(fresh_cfg)
 
     @app.get("/api/preview")
     def preview():
         snap = runtime_state.get()
+        fresh_cfg = EdgeSettings()
+
         if snap.latest_frame_item is None:
             return JSONResponse(
                 {
@@ -222,8 +226,64 @@ def create_app(
             "available": True,
             "captured_at": snap.latest_frame_item.ts,
             "image_jpeg_b64": image_b64,
-            "include_polygons": cfg.motion_include_polygons,
-            "exclude_polygons": cfg.motion_exclude_polygons,
+            "include_polygons": fresh_cfg.motion_include_polygons,
+            "exclude_polygons": fresh_cfg.motion_exclude_polygons,
         }
+
+    @app.put("/api/settings")
+    def update_settings(payload: dict):
+        try:
+            result = save_edge_settings(payload)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        applied_keys = runtime_state.apply_settings(payload)
+        saved_keys = result.get("saved_keys", [])
+        restart_required_keys = [key for key in saved_keys if key not in applied_keys]
+
+        result["applied_keys"] = applied_keys
+        result["restart_required_keys"] = restart_required_keys
+        result["restart_required"] = bool(restart_required_keys)
+
+        if applied_keys and restart_required_keys:
+            result["message"] = (
+                "Some settings were applied immediately. "
+                "Some saved settings still require restart."
+            )
+        elif applied_keys:
+            result["message"] = "Settings applied immediately and saved to local .env."
+        else:
+            result["message"] = "Settings saved to local .env. Restart required."
+
+        return result
+
+    @app.put("/api/zones")
+    def update_zones(payload: dict):
+        updates = {
+            "motion_include_polygons": payload.get("motion_include_polygons", []),
+            "motion_exclude_polygons": payload.get("motion_exclude_polygons", []),
+        }
+
+        try:
+            result = save_edge_settings(updates)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        applied_keys = runtime_state.apply_settings(updates)
+        result["applied_keys"] = applied_keys
+        result["restart_required_keys"] = [
+            key for key in result.get("saved_keys", []) if key not in applied_keys
+        ]
+        result["restart_required"] = bool(result["restart_required_keys"])
+        result["message"] = (
+            "Zones applied immediately and saved to local .env."
+            if applied_keys
+            else "Zones saved to local .env. Restart required."
+        )
+        return result
+
+    @app.post("/api/runtime/restart")
+    def restart_runtime():
+        return runtime_state.request_restart()
 
     return app

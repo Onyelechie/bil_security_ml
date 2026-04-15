@@ -174,6 +174,72 @@ body {
   word-break: break-word;
 }
 
+.setting-field {
+  display: flex;
+  gap: 14px;
+  align-items: start;
+  justify-content: space-between;
+  padding-top: 12px;
+  border-top: 1px solid rgba(138, 163, 187, 0.08);
+}
+
+.setting-field-block {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.setting-copy {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.setting-label {
+  color: var(--ink);
+  line-height: 1.45;
+}
+
+.setting-key {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.settings-card-head {
+  margin-bottom: 12px;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.btn {
+  border: 1px solid var(--line);
+  background: rgba(12, 25, 40, 0.9);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+.btn.primary {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+  color: #04121c;
+  font-weight: 700;
+}
+
+.ok-text {
+  color: var(--ok);
+}
+
+.danger-text {
+  color: var(--danger);
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -196,6 +262,34 @@ body {
   color: var(--muted);
   background: rgba(138, 163, 187, 0.1);
   border-color: rgba(138, 163, 187, 0.18);
+}
+
+.action-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.btn {
+  border: 1px solid var(--line);
+  background: rgba(12, 25, 40, 0.9);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+.btn.primary {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+  color: #04121c;
+  font-weight: 700;
+}
+
+.btn.ghost {
+  background: rgba(11, 20, 33, 0.82);
 }
 
 @media (max-width: 1000px) {

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from threading import Lock
+from typing import Callable
 
 from .video.ring_buffer import FrameItem
 
@@ -23,6 +24,8 @@ class EdgeRuntimeState:
     def __init__(self) -> None:
         self._lock = Lock()
         self._snapshot = EdgeRuntimeSnapshot()
+        self._apply_settings_fn: Callable[[dict], list[str]] | None = None
+        self._restart_pipeline_fn: Callable[[], dict] | None = None
 
     def get(self) -> EdgeRuntimeSnapshot:
         with self._lock:
@@ -44,3 +47,34 @@ class EdgeRuntimeState:
             for key, value in kwargs.items():
                 if hasattr(self._snapshot, key):
                     setattr(self._snapshot, key, value)
+
+    def set_apply_settings_fn(
+        self,
+        fn: Callable[[dict], list[str]] | None,
+    ) -> None:
+        with self._lock:
+            self._apply_settings_fn = fn
+
+    def apply_settings(self, updates: dict) -> list[str]:
+        with self._lock:
+            fn = self._apply_settings_fn
+        if fn is None:
+            return []
+        return fn(updates)
+
+    def set_restart_pipeline_fn(
+        self,
+        fn: Callable[[], dict] | None,
+    ) -> None:
+        with self._lock:
+            self._restart_pipeline_fn = fn
+
+    def request_restart(self) -> dict:
+        with self._lock:
+            fn = self._restart_pipeline_fn
+        if fn is None:
+            return {
+                "accepted": False,
+                "message": "Pipeline restart is not available right now.",
+            }
+        return fn()

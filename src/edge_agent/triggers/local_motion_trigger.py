@@ -237,9 +237,9 @@ class LocalMotionTrigger:
         logger.info("Local motion trigger stopped")
 
     async def run(self) -> None:
-        period = 1.0 / max(self._cfg.motion_fps, 0.1)
-
         while not self._stop.is_set():
+            period = 1.0 / max(self._cfg.motion_fps, 0.1)
+
             curr = self._ring.latest()
             if curr is None:
                 await asyncio.sleep(0.2)
@@ -328,3 +328,68 @@ class LocalMotionTrigger:
 
             self._prev = curr_gray
             await asyncio.sleep(period)
+
+    def apply_runtime_settings(self, updates: dict) -> list[str]:
+        applied: list[str] = []
+
+        if "motion_fps" in updates:
+            self._cfg.motion_fps = float(updates["motion_fps"])
+            applied.append("motion_fps")
+
+        if "motion_pixel_delta" in updates:
+            self._cfg.motion_pixel_delta = int(updates["motion_pixel_delta"])
+            applied.append("motion_pixel_delta")
+
+        if "motion_threshold" in updates:
+            self._cfg.motion_threshold = float(updates["motion_threshold"])
+            applied.append("motion_threshold")
+
+        if "default_camera_id" in updates:
+            self._cfg.default_camera_id = str(updates["default_camera_id"])
+            applied.append("default_camera_id")
+
+        if "ptz_global_motion_threshold" in updates:
+            self._cfg.ptz_global_motion_threshold = float(
+                updates["ptz_global_motion_threshold"]
+            )
+            applied.append("ptz_global_motion_threshold")
+
+        if "ptz_consecutive_frames" in updates:
+            self._cfg.ptz_consecutive_frames = int(updates["ptz_consecutive_frames"])
+            applied.append("ptz_consecutive_frames")
+
+        if "ptz_suppress_sec" in updates:
+            self._cfg.ptz_suppress_sec = float(updates["ptz_suppress_sec"])
+            applied.append("ptz_suppress_sec")
+
+        zones_changed = False
+
+        if "motion_include_polygons" in updates:
+            self._cfg.motion_include_polygons = updates["motion_include_polygons"]
+            applied.append("motion_include_polygons")
+            zones_changed = True
+
+        if "motion_exclude_polygons" in updates:
+            self._cfg.motion_exclude_polygons = updates["motion_exclude_polygons"]
+            applied.append("motion_exclude_polygons")
+            zones_changed = True
+
+        if zones_changed:
+            self._score_mask = None
+            self._score_mask_shape = None
+
+        if any(
+            key in applied
+            for key in (
+                "ptz_global_motion_threshold",
+                "ptz_consecutive_frames",
+                "ptz_suppress_sec",
+            )
+        ):
+            self._ptz_hits = 0
+            self._ptz_suppress_until = None
+
+        if applied:
+            logger.info("Applied live motion settings: %s", ", ".join(applied))
+
+        return applied

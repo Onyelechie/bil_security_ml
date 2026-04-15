@@ -46,7 +46,8 @@ def test_benchmark_smoke(monkeypatch):
         monkeypatch.setattr("glob.glob", mock_glob)
         monkeypatch.setattr("benchmark.benchmark_suite.VIDEO_EXTENSIONS", ["*.mp4"])
         monkeypatch.setattr(
-            "src.edge_agent.models.YOLOWrapper", lambda *args, **kwargs: MockWrapper(args[0])
+            "src.edge_agent.models.YOLOWrapper",
+            lambda *args, **kwargs: MockWrapper(args[0]),
         )
         monkeypatch.setattr(
             "src.edge_agent.models.efficientdet.EfficientDetWrapper",

@@ -22,6 +22,7 @@ def _parse_iso_z(ts: str) -> datetime:
 def client():
     cfg = EdgeSettings(edge_pc_id="edge-001", site_name="Site A")
     sender = ServerSender(cfg)
+    sender.set_status("online")
     app = create_app(cfg, sender)
     return TestClient(app)
 

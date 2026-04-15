@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BIL Edge Console</title>
+  <link rel="stylesheet" href="/edge-console/assets/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div>
+        <p class="eyebrow">Local Edge PC</p>
+        <h1 class="top-title">BIL Edge Console</h1>
+      </div>
+      <span id="runtime-pill" class="status-pill neutral">Loading</span>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="panel hero">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Runtime</p>
+          <h2>Edge Status</h2>
+        </div>
+      </div>
+      <p class="muted">
+        This local console is for tuning the edge PC itself. Use it to understand what the edge is doing,
+        review the current configuration, and later adjust motion, windows, detection, and zones.
+      </p>
+
+      <div class="stats-grid">
+        <article class="stat-card">
+          <span class="stat-label">Pipeline</span>
+          <strong id="pipeline-mode">-</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">Stream</span>
+          <strong id="stream-state">-</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">Sender</span>
+          <strong id="sender-status">-</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">Ring Buffer</span>
+          <strong id="ring-count">-</strong>
+        </article>
+      </div>
+    </section>
+
+    <section class="grid">
+      <section class="panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Preview</p>
+            <h2>Latest Frame</h2>
+          </div>
+        </div>
+        <p class="muted">
+          This preview will be used for zoning so the operator can draw areas visually instead of typing coordinates.
+        </p>
+        <div id="preview-stage" class="preview-stage empty">
+          <p>No preview frame yet.</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Configuration</p>
+            <h2>Current Edge Settings</h2>
+          </div>
+        </div>
+        <p class="muted">
+          These are grouped by what they do, not by internal setting names.
+        </p>
+        <div id="settings-groups" class="settings-groups"></div>
+      </section>
+    </section>
+  </main>
+
+  <script src="/edge-console/assets/app.js"></script>
+</body>
+</html>

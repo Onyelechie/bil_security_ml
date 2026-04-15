@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+import base64
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 
-from fastapi import FastAPI
+import cv2
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .config import EdgeSettings
+from .runtime_state import EdgeRuntimeState
 from .sender import ServerSender
 
 
@@ -49,10 +55,89 @@ async def lifespan(app: FastAPI):
     yield
 
 
-def create_app(cfg: EdgeSettings, sender: ServerSender) -> FastAPI:
+def _ui_dir() -> Path:
+    return Path(__file__).resolve().parent / "ui"
+
+
+def _encode_preview_jpeg_b64(frame) -> str | None:
+    if frame is None:
+        return None
+    ok, encoded = cv2.imencode(".jpg", frame)
+    if not ok:
+        return None
+    return base64.b64encode(encoded.tobytes()).decode("ascii")
+
+
+def _settings_payload(cfg: EdgeSettings) -> dict:
+    return {
+        "identity": {
+            "site_id": cfg.site_id,
+            "site_name": cfg.site_name,
+            "edge_pc_id": cfg.edge_pc_id,
+            "device_id": cfg.device_id,
+            "server_base_url": cfg.server_base_url,
+            "default_camera_id": cfg.default_camera_id,
+        },
+        "stream": {
+            "rtsp_url_low": cfg.rtsp_url_low,
+            "ring_buffer_seconds": cfg.ring_buffer_seconds,
+            "analysis_fps": cfg.analysis_fps,
+            "frame_width": cfg.frame_width,
+            "frame_height": cfg.frame_height,
+        },
+        "motion": {
+            "enable_tcp_motion": cfg.enable_tcp_motion,
+            "enable_local_motion": cfg.enable_local_motion,
+            "motion_fps": cfg.motion_fps,
+            "motion_pixel_delta": cfg.motion_pixel_delta,
+            "motion_threshold": cfg.motion_threshold,
+            "trigger_cooldown_sec": cfg.trigger_cooldown_sec,
+            "trigger_merge_window_sec": cfg.trigger_merge_window_sec,
+        },
+        "incidents": {
+            "incident_quiet_sec": cfg.incident_quiet_sec,
+            "incident_max_sec": cfg.incident_max_sec,
+            "incident_tick_interval_sec": cfg.incident_tick_interval_sec,
+            "window_pre_sec": cfg.window_pre_sec,
+            "window_post_sec": cfg.window_post_sec,
+            "window_target_fps": cfg.window_target_fps,
+            "window_max_frames": cfg.window_max_frames,
+            "window_wait_grace_sec": cfg.window_wait_grace_sec,
+        },
+        "detection": {
+            "detector_model": cfg.detector_model,
+            "detector_weights": cfg.detector_weights,
+            "detector_person_conf": cfg.detector_person_conf,
+            "detector_vehicle_conf": cfg.detector_vehicle_conf,
+            "detector_allowed_classes": cfg.detector_allowed_classes,
+        },
+        "ptz": {
+            "ptz_global_motion_threshold": cfg.ptz_global_motion_threshold,
+            "ptz_consecutive_frames": cfg.ptz_consecutive_frames,
+            "ptz_suppress_sec": cfg.ptz_suppress_sec,
+        },
+        "zones": {
+            "motion_include_polygons": cfg.motion_include_polygons,
+            "motion_exclude_polygons": cfg.motion_exclude_polygons,
+        },
+        "timers": {
+            "heartbeat_interval_sec": cfg.heartbeat_interval_sec,
+            "update_interval_sec": cfg.update_interval_sec,
+            "retry_interval_sec": cfg.retry_interval_sec,
+        },
+    }
+
+
+def create_app(
+    cfg: EdgeSettings,
+    sender: ServerSender,
+    runtime_state: EdgeRuntimeState | None = None,
+) -> FastAPI:
     """
     Create the Edge Agent HTTP API app.
     """
+    runtime_state = runtime_state or EdgeRuntimeState()
+
     app = FastAPI(
         title="BIL Security ML - Edge Agent API",
         version="0.2.0",
@@ -62,37 +147,83 @@ def create_app(cfg: EdgeSettings, sender: ServerSender) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.sender = sender
+    app.state.runtime_state = runtime_state
+
+    ui_dir = _ui_dir()
+    assets_dir = ui_dir / "assets"
+    if assets_dir.exists():
+        app.mount(
+            "/edge-console/assets",
+            StaticFiles(directory=str(assets_dir)),
+            name="edge_console_assets",
+        )
+
+    started_monotonic = time.monotonic()
 
     @app.get("/")
     def root():
-        return {"status": "edge agent running"}
-
-    # Store start time for uptime calculation
-    started_monotonic = time.monotonic()
+        index_path = ui_dir / "index.html"
+        if index_path.exists():
+            return FileResponse(index_path)
+        return {"status": "edge console running"}
 
     @app.get("/health", response_model=HealthOut, tags=["health"])
     def health() -> HealthOut:
-        """Liveness check: returns OK if the edge agent process is running."""
-        ...
         return HealthOut(status="ok", time_utc=datetime.now(timezone.utc))
 
     @app.get("/heartbeat", response_model=HeartbeatOut, tags=["health"])
     def heartbeat() -> HeartbeatOut:
-        """Returns edge identity + basic status snapshot + uptime."""
-        ...
         uptime = int(time.monotonic() - started_monotonic)
-
-        # For now, status is always "online" because PR2 doesn't have motion logic yet.
-        # Later PRs can change this based on last motion time, stream status, etc.
         return HeartbeatOut(
             edge_pc_id=cfg.edge_pc_id,
             site_name=cfg.site_name,
-            # NOTE(PR2): status is hardcoded because PR2 only implements the Edge HTTP API.
-            # TODO(PR3/PR4): derive real status from health signals (TCP listener running,
-            # RTSP connectivity, last motion received, queue depth, etc.)
-            status="online",
+            status=sender.get_status(),
             time_utc=datetime.now(timezone.utc),
             uptime_seconds=uptime,
         )
+
+    @app.get("/api/runtime")
+    def runtime():
+        snap = runtime_state.get()
+        latest_ts = snap.latest_frame_item.ts if snap.latest_frame_item else None
+        return {
+            "pipeline_mode": snap.pipeline_mode,
+            "stream_state": snap.stream_state,
+            "sender_status": snap.sender_status,
+            "ring_buffer_frames": snap.ring_buffer_frames,
+            "latest_frame_time_utc": latest_ts,
+            "last_motion_at": snap.last_motion_at,
+            "last_alert_at": snap.last_alert_at,
+            "last_error": snap.last_error,
+        }
+
+    @app.get("/api/settings")
+    def settings():
+        return _settings_payload(cfg)
+
+    @app.get("/api/preview")
+    def preview():
+        snap = runtime_state.get()
+        if snap.latest_frame_item is None:
+            return JSONResponse(
+                {
+                    "available": False,
+                    "message": "No preview frame available yet.",
+                }
+            )
+
+        image_b64 = _encode_preview_jpeg_b64(snap.latest_frame_item.frame)
+        if not image_b64:
+            raise HTTPException(
+                status_code=500, detail="Failed to encode preview image"
+            )
+
+        return {
+            "available": True,
+            "captured_at": snap.latest_frame_item.ts,
+            "image_jpeg_b64": image_b64,
+            "include_polygons": cfg.motion_include_polygons,
+            "exclude_polygons": cfg.motion_exclude_polygons,
+        }
 
     return app

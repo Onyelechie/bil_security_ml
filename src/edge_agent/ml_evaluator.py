@@ -168,16 +168,14 @@ class MLEvaluator:
 
         if self.include_polygons:
             inside_include = any(
-                self._point_in_polygon(center, poly)
-                for poly in self.include_polygons
+                self._point_in_polygon(center, poly) for poly in self.include_polygons
             )
             if not inside_include:
                 return False
 
         if self.exclude_polygons:
             inside_exclude = any(
-                self._point_in_polygon(center, poly)
-                for poly in self.exclude_polygons
+                self._point_in_polygon(center, poly) for poly in self.exclude_polygons
             )
             if inside_exclude:
                 return False
@@ -294,7 +292,11 @@ class MLEvaluator:
             chosen["detection"]["label"],
             chosen["detection"]["confidence"],
             chosen["frame_index"],
-            f'{chosen.get("selection_score", 0.0):.3f}' if chosen["detection"]["label"].lower() == "person" else "n/a",
+            (
+                f'{chosen.get("selection_score", 0.0):.3f}'
+                if chosen["detection"]["label"].lower() == "person"
+                else "n/a"
+            ),
             best_person_any,
             best_vehicle_any,
             len(frames),

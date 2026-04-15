@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 from .config import EdgeSettings
 from .logging import configure_logging
+from .runtime_state import EdgeRuntimeState
 from .sender import ServerSender
 
 logger = logging.getLogger(__name__)
@@ -123,6 +124,52 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def start_edge_http_server(
+    cfg: EdgeSettings, sender: ServerSender, runtime_state: EdgeRuntimeState
+):
+    import uvicorn
+
+    from .edge_api import create_app
+
+    app = create_app(cfg, sender, runtime_state)
+
+    logger.info(
+        "Starting Edge HTTP API at http://%s:%s",
+        cfg.edge_http_host,
+        cfg.edge_http_port,
+    )
+
+    config = uvicorn.Config(
+        app,
+        host=cfg.edge_http_host,
+        port=cfg.edge_http_port,
+        log_level=cfg.log_level.lower(),
+    )
+    server = uvicorn.Server(config)
+
+    def _run_server() -> None:
+        server.run()
+
+    server_thread = threading.Thread(target=_run_server, daemon=True)
+    server_thread.start()
+
+    startup_deadline = time.monotonic() + 10.0
+    while not server.started and not server.should_exit:
+        if time.monotonic() >= startup_deadline:
+            logger.error("Edge HTTP API failed to start within 10s; exiting.")
+            server.should_exit = True
+            server_thread.join(timeout=1)
+            raise RuntimeError("Edge HTTP API failed to start")
+        time.sleep(0.05)
+
+    return server, server_thread
+
+
+def join_interruptible_thread(t: threading.Thread, poll: float = 0.2) -> None:
+    while t.is_alive():
+        t.join(timeout=poll)
+
+
 def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
     try:
         args = build_parser().parse_args(argv)
@@ -143,6 +190,8 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
             return 0
 
         sender = ServerSender(cfg)
+        runtime_state = EdgeRuntimeState()
+        runtime_state.update(sender_status=sender.get_status())
         stop_event = threading.Event()
 
         heartbeat_thread = threading.Thread(
@@ -166,61 +215,29 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
             return code
 
         if args.http_serve:
-            import uvicorn
-
-            from .edge_api import create_app
-
-            app = create_app(cfg, sender)
-            logger.info(
-                "Starting Edge HTTP API at http://%s:%s",
-                cfg.edge_http_host,
-                cfg.edge_http_port,
-            )
-            config = uvicorn.Config(
-                app,
-                host=cfg.edge_http_host,
-                port=cfg.edge_http_port,
-                log_level=cfg.log_level.lower(),
-            )
-            server = uvicorn.Server(config)
-
-            def _run_server() -> None:
-                server.run()
-
-            server_thread = threading.Thread(target=_run_server, daemon=True)
-            server_thread.start()
-
-            startup_deadline = time.monotonic() + 10.0
             try:
-                while not server.started and not server.should_exit:
-                    if time.monotonic() >= startup_deadline:
-                        logger.error(
-                            "Edge HTTP API failed to start within 10s; exiting."
-                        )
-                        server.should_exit = True
-                        server_thread.join(timeout=1)
-                        return _shutdown(1)
-                    time.sleep(0.05)
+                server, server_thread = start_edge_http_server(
+                    cfg, sender, runtime_state
+                )
             except KeyboardInterrupt:
-                server.should_exit = True
-                server_thread.join(timeout=1)
                 return _shutdown(0)
+            except Exception:
+                return _shutdown(1)
 
             if server.started:
                 sender.set_status("online")
-
-            def _join_interruptible(t: threading.Thread, poll: float = 0.2) -> None:
-                while t.is_alive():
-                    t.join(timeout=poll)
+                runtime_state.update(sender_status=sender.get_status())
 
             try:
-                _join_interruptible(server_thread)
+                join_interruptible_thread(server_thread)
             except KeyboardInterrupt:
                 server.should_exit = True
-                _join_interruptible(server_thread)
+                join_interruptible_thread(server_thread)
 
             if server.started:
                 sender.set_status("shutting_down")
+                runtime_state.update(sender_status=sender.get_status())
+
             return _shutdown(0)
 
         if args.tcp_listen:
@@ -236,6 +253,7 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 trigger = TcpMotionTrigger(cfg)
                 await trigger.start()
                 sender.set_status("online")
+                runtime_state.update(sender_status=sender.get_status())
                 try:
                     while True:
                         evt = await trigger.queue.get()
@@ -274,9 +292,19 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 reader = RtspReader(cfg, ring)
                 await reader.start()
                 sender.set_status("online")
+                runtime_state.update(sender_status=sender.get_status())
                 try:
                     while True:
                         logger.info("RingBuffer frames=%d", ring.size())
+                        runtime_state.update(
+                            pipeline_mode="rtsp_test",
+                            stream_state=(
+                                "streaming" if ring.size() > 0 else "connecting"
+                            ),
+                            ring_buffer_frames=ring.size(),
+                            latest_frame_item=ring.latest_item(),
+                            sender_status=sender.get_status(),
+                        )
                         await asyncio.sleep(2)
                 finally:
                     await reader.stop()
@@ -335,6 +363,7 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 await worker.start()
                 await motion.start()
                 sender.set_status("online")
+                runtime_state.update(sender_status=sender.get_status())
 
                 try:
                     last_tick = datetime.now(timezone.utc)
@@ -355,6 +384,15 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                             ring_frames,
                             incidents.active_incidents(),
                         )
+
+                        runtime_state.update(
+                            pipeline_mode="motion_test",
+                            stream_state=state,
+                            ring_buffer_frames=ring_frames,
+                            latest_frame_item=ring.latest_item(),
+                            sender_status=sender.get_status(),
+                        )
+
                         await asyncio.sleep(2.0)
 
                 finally:
@@ -383,7 +421,9 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 exclude_polygons=cfg.motion_exclude_polygons,
             )
 
-            image_output_dir = cfg.shared_storage_root.strip() or "storage/ws_alert_images"
+            image_output_dir = (
+                cfg.shared_storage_root.strip() or "storage/ws_alert_images"
+            )
 
             pipeline = PipelineRunner(
                 evaluator=evaluator,
@@ -392,6 +432,7 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
             )
 
             sender.set_status("online")
+            runtime_state.update(sender_status=sender.get_status())
 
             run_sample_video(
                 video_path=args.sample_video,
@@ -405,6 +446,7 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
             )
 
             sender.set_status("shutting_down")
+            runtime_state.update(sender_status=sender.get_status())
             return _shutdown(0)
 
         if args.run:
@@ -428,6 +470,8 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
 
                 ring = RingBuffer(seconds=cfg.ring_buffer_seconds)
                 reader = RtspReader(cfg, ring)
+                server = None
+                server_thread = None
 
                 mgr = TriggerManager(
                     cooldown_sec=cfg.trigger_cooldown_sec,
@@ -461,7 +505,18 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                     exclude_polygons=cfg.motion_exclude_polygons,
                 )
 
-                image_output_dir = cfg.shared_storage_root.strip() or "storage/ws_alert_images"
+                runtime_state.update(
+                    pipeline_mode="running",
+                    stream_state="connecting",
+                    ring_buffer_frames=0,
+                    sender_status=sender.get_status(),
+                    latest_frame_item=None,
+                    last_error=None,
+                )
+
+                image_output_dir = (
+                    cfg.shared_storage_root.strip() or "storage/ws_alert_images"
+                )
 
                 pipeline = PipelineRunner(
                     evaluator=evaluator,
@@ -499,30 +554,35 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 await reader.start()
                 await worker.start()
 
-                if tcp_trigger is not None:
-                    await tcp_trigger.start()
-
-                if local_trigger is not None:
-                    await local_trigger.start()
-
-                sender.set_status("online")
-
-                max_window_s = (
-                    cfg.window_pre_sec + cfg.incident_max_sec + cfg.window_post_sec
-                )
-                if max_window_s > cfg.ring_buffer_seconds:
-                    logger.warning(
-                        (
-                            "Configured window span (%.1fs) > ring_buffer_seconds (%ds). "
-                            "Expect PARTIAL windows unless ring buffer is increased."
-                        ),
-                        max_window_s,
-                        cfg.ring_buffer_seconds,
+                try:
+                    server, server_thread = start_edge_http_server(
+                        cfg, sender, runtime_state
                     )
 
-                last_tick = datetime.now(timezone.utc)
+                    if tcp_trigger is not None:
+                        await tcp_trigger.start()
 
-                try:
+                    if local_trigger is not None:
+                        await local_trigger.start()
+
+                    sender.set_status("online")
+                    runtime_state.update(sender_status=sender.get_status())
+
+                    max_window_s = (
+                        cfg.window_pre_sec + cfg.incident_max_sec + cfg.window_post_sec
+                    )
+                    if max_window_s > cfg.ring_buffer_seconds:
+                        logger.warning(
+                            (
+                                "Configured window span (%.1fs) > ring_buffer_seconds (%ds). "
+                                "Expect PARTIAL windows unless ring buffer is increased."
+                            ),
+                            max_window_s,
+                            cfg.ring_buffer_seconds,
+                        )
+
+                    last_tick = datetime.now(timezone.utc)
+
                     while True:
                         if tcp_trigger is not None:
                             try:
@@ -566,6 +626,18 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                                 await worker.enqueue(job)
                             last_tick = now
 
+                        latest_item = ring.latest_item()
+                        ring_frames = ring.size()
+
+                        runtime_state.update(
+                            stream_state=(
+                                "streaming" if ring_frames > 0 else "connecting"
+                            ),
+                            ring_buffer_frames=ring_frames,
+                            latest_frame_item=latest_item,
+                            sender_status=sender.get_status(),
+                        )
+
                 finally:
                     pipeline_task.cancel()
                     with suppress(asyncio.CancelledError):
@@ -574,12 +646,25 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                     if local_trigger is not None:
                         await local_trigger.stop()
 
-                    await worker.stop()
-
                     if tcp_trigger is not None:
                         await tcp_trigger.stop()
 
+                    await worker.stop()
                     await reader.stop()
+
+                    if server is not None:
+                        server.should_exit = True
+                    if server_thread is not None:
+                        join_interruptible_thread(server_thread)
+
+                    sender.set_status("shutting_down")
+                    runtime_state.update(
+                        pipeline_mode="idle",
+                        stream_state="stopped",
+                        ring_buffer_frames=0,
+                        sender_status=sender.get_status(),
+                        latest_frame_item=None,
+                    )
 
             try:
                 asyncio.run(_run_main())

@@ -92,12 +92,8 @@ def test_list_alerts_supports_sort_modes(monkeypatch):
     private_key_b64 = register_edge(client, edge_pc_id, site_name="Sort Test Site")
     received_times = iter(
         [
-            datetime(
-                2026, 1, 1, 12, 0, tzinfo=ZoneInfo("America/Winnipeg")
-            ),
-            datetime(
-                2026, 1, 1, 11, 0, tzinfo=ZoneInfo("America/Winnipeg")
-            ),
+            datetime(2026, 1, 1, 12, 0, tzinfo=ZoneInfo("America/Winnipeg")),
+            datetime(2026, 1, 1, 11, 0, tzinfo=ZoneInfo("America/Winnipeg")),
         ]
     )
     monkeypatch.setattr(

@@ -51,7 +51,10 @@ def test_run_http_serve_uses_uvicorn_config(monkeypatch):
 
     monkeypatch.setattr(uvicorn, "Server", FakeServer)
     monkeypatch.setattr("edge_agent.main.threading.Thread", DummyThread)
-    monkeypatch.setattr("edge_agent.edge_api.create_app", lambda cfg, sender: object())
+    monkeypatch.setattr(
+        "edge_agent.edge_api.create_app",
+        lambda cfg, sender, runtime_state=None: object(),
+    )
 
     cfg = EdgeSettings(
         edge_http_host="127.0.0.1", edge_http_port=9999, log_level="INFO"
@@ -85,10 +88,15 @@ def test_run_http_serve_does_not_set_status_before_startup(monkeypatch):
         def __init__(self, settings):
             self.settings = settings
             self.statuses = []
+            self._status = "starting"
             FakeSender.last_instance = self
 
         def set_status(self, status: str) -> None:
+            self._status = status
             self.statuses.append(status)
+
+        def get_status(self) -> str:
+            return self._status
 
         def send_heartbeat(self, *args, **kwargs):
             return True
@@ -108,7 +116,10 @@ def test_run_http_serve_does_not_set_status_before_startup(monkeypatch):
     monkeypatch.setattr(uvicorn, "Server", FakeServer)
     monkeypatch.setattr("edge_agent.main.threading.Thread", DummyThread)
     monkeypatch.setattr("edge_agent.main.ServerSender", FakeSender)
-    monkeypatch.setattr("edge_agent.edge_api.create_app", lambda cfg, sender: object())
+    monkeypatch.setattr(
+        "edge_agent.edge_api.create_app",
+        lambda cfg, sender, runtime_state=None: object(),
+    )
 
     cfg = EdgeSettings(
         edge_http_host="127.0.0.1", edge_http_port=9999, log_level="INFO"
@@ -150,7 +161,10 @@ def test_run_http_serve_times_out_when_not_started(monkeypatch):
 
     monkeypatch.setattr(uvicorn, "Server", FakeServer)
     monkeypatch.setattr("edge_agent.main.threading.Thread", DummyThread)
-    monkeypatch.setattr("edge_agent.edge_api.create_app", lambda cfg, sender: object())
+    monkeypatch.setattr(
+        "edge_agent.edge_api.create_app",
+        lambda cfg, sender, runtime_state=None: object(),
+    )
     monkeypatch.setattr("edge_agent.main.time.monotonic", fake_monotonic)
     monkeypatch.setattr("edge_agent.main.time.sleep", lambda _s: None)
 
@@ -464,6 +478,22 @@ def test_run_mode_builds_evaluator_pipeline_and_local_trigger(monkeypatch):
         def process_frames(self, camera_id, frames, *, frame_timestamps=None):
             return None
 
+    class FakeEdgeServer:
+        def __init__(self):
+            self.started = True
+            self.should_exit = False
+
+    class FakeEdgeServerThread:
+        def join(self, timeout=None):
+            return None
+
+        def is_alive(self):
+            return False
+
+    def fake_start_edge_http_server(cfg, sender, runtime_state):
+        created["edge_http_started"] = True
+        return FakeEdgeServer(), FakeEdgeServerThread()
+
     monkeypatch.setattr("edge_agent.main.threading.Thread", DummyThread)
     monkeypatch.setattr("edge_agent.video.rtsp_reader.RtspReader", FakeReader)
     monkeypatch.setattr(
@@ -484,6 +514,15 @@ def test_run_mode_builds_evaluator_pipeline_and_local_trigger(monkeypatch):
     )
     monkeypatch.setattr("edge_agent.ml_evaluator.MLEvaluator", FakeEvaluator)
     monkeypatch.setattr("edge_agent.pipeline_runner.PipelineRunner", FakePipeline)
+
+    monkeypatch.setattr(
+        "edge_agent.main.start_edge_http_server",
+        fake_start_edge_http_server,
+    )
+    monkeypatch.setattr(
+        "edge_agent.main.join_interruptible_thread",
+        lambda t, poll=0.2: None,
+    )
 
     cfg = EdgeSettings(
         detector_model="YOLOv8-Nano",

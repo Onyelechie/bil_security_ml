@@ -41,19 +41,25 @@ ENV_KEY_MAP: dict[str, str] = {
     "ptz_global_motion_threshold": "PTZ_GLOBAL_MOTION_THRESHOLD",
     "ptz_consecutive_frames": "PTZ_CONSECUTIVE_FRAMES",
     "ptz_suppress_sec": "PTZ_SUPPRESS_SEC",
-    "motion_include_polygons": "MOTION_INCLUDE_POLYGONS",
-    "motion_exclude_polygons": "MOTION_EXCLUDE_POLYGONS",
     "heartbeat_interval_sec": "HEARTBEAT_INTERVAL_SEC",
     "update_interval_sec": "UPDATE_INTERVAL_SEC",
     "retry_interval_sec": "RETRY_INTERVAL_SEC",
 }
 
+JSON_ONLY_KEYS = {
+    "motion_include_polygons",
+    "motion_exclude_polygons",
+}
 
-EDITABLE_KEYS = set(ENV_KEY_MAP.keys())
+EDITABLE_KEYS = set(ENV_KEY_MAP.keys()) | JSON_ONLY_KEYS
 
 
 def _env_path() -> Path:
     return Path(".env").resolve()
+
+
+def _json_state_path() -> Path:
+    return Path(".edge_console_state.json").resolve()
 
 
 def _serialize_env_value(value: Any) -> str:
@@ -61,8 +67,6 @@ def _serialize_env_value(value: Any) -> str:
         return "true" if value else "false"
     if isinstance(value, (int, float)):
         return str(value)
-    if isinstance(value, (list, dict)):
-        return json.dumps(value, separators=(",", ":"))
     if value is None:
         return ""
     return str(value)
@@ -106,24 +110,69 @@ def _apply_updates_to_lines(lines: list[str], updates: dict[str, Any]) -> list[s
     return out
 
 
+def _read_json_state() -> dict[str, Any]:
+    path = _json_state_path()
+    if not path.exists():
+        return {
+            "motion_include_polygons": [],
+            "motion_exclude_polygons": [],
+        }
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        data = {}
+
+    if not isinstance(data, dict):
+        data = {}
+
+    return {
+        "motion_include_polygons": data.get("motion_include_polygons", []),
+        "motion_exclude_polygons": data.get("motion_exclude_polygons", []),
+    }
+
+
+def _write_json_state(updates: dict[str, Any]) -> None:
+    path = _json_state_path()
+    current = _read_json_state()
+    current.update({k: v for k, v in updates.items() if k in JSON_ONLY_KEYS})
+    path.write_text(json.dumps(current, indent=2), encoding="utf-8")
+
+
+def load_effective_settings_dict() -> dict[str, Any]:
+    data = EdgeSettings().model_dump()
+    data.update(_read_json_state())
+    return data
+
+
+def load_effective_settings() -> EdgeSettings:
+    return EdgeSettings(**load_effective_settings_dict())
+
+
 def save_edge_settings(updates: dict[str, Any]) -> dict[str, Any]:
     safe_updates = {k: v for k, v in updates.items() if k in EDITABLE_KEYS}
     if not safe_updates:
         return {"saved_keys": [], "message": "No editable settings provided."}
 
-    # Validate by constructing settings object in memory
-    current = EdgeSettings().model_dump()
+    current = load_effective_settings_dict()
     merged = {**current, **safe_updates}
     EdgeSettings(**merged)
 
-    env_path = _env_path()
-    lines = _parse_current_env_lines(env_path)
-    new_lines = _apply_updates_to_lines(lines, safe_updates)
-    text = "\n".join(new_lines).rstrip() + "\n"
-    env_path.write_text(text, encoding="utf-8")
+    env_updates = {k: v for k, v in safe_updates.items() if k in ENV_KEY_MAP}
+    json_updates = {k: v for k, v in safe_updates.items() if k in JSON_ONLY_KEYS}
+
+    if env_updates:
+        env_path = _env_path()
+        lines = _parse_current_env_lines(env_path)
+        new_lines = _apply_updates_to_lines(lines, env_updates)
+        text = "\n".join(new_lines).rstrip() + "\n"
+        env_path.write_text(text, encoding="utf-8")
+
+    if json_updates:
+        _write_json_state(json_updates)
 
     return {
         "saved_keys": sorted(safe_updates.keys()),
         "restart_required": True,
-        "message": "Settings saved to local .env.",
+        "message": "Settings saved locally.",
     }

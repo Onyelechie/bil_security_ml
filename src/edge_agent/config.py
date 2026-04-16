@@ -1,24 +1,20 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 EDGE_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
 class EdgeSettings(BaseSettings):
-    """
-    Configuration for the Edge Agent.
-
-    If SHARED_STORAGE_ROOT is set, image_path values under that root are safe
-    to replay from the offline queue.
-    """
-
     model_config = SettingsConfigDict(
         env_file=str(EDGE_ENV_FILE),
         case_sensitive=False,
         extra="ignore",
+        env_ignore_empty=True,
     )
 
     # --- Identity ---
@@ -118,3 +114,12 @@ class EdgeSettings(BaseSettings):
     # [[[x1, y1], [x2, y2], [x3, y3], ...], ...]
     motion_include_polygons: list[list[list[float]]] = []
     motion_exclude_polygons: list[list[list[float]]] = []
+
+    @field_validator("motion_include_polygons", "motion_exclude_polygons", mode="before")
+    @classmethod
+    def parse_polygon_json(cls, value):
+        if value in (None, "", []):
+            return []
+        if isinstance(value, str):
+            return json.loads(value)
+        return value

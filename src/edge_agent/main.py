@@ -12,6 +12,7 @@ from .config import EdgeSettings
 from .logging import configure_logging
 from .runtime_state import EdgeRuntimeState
 from .sender import ServerSender
+from .settings_store import load_effective_settings
 
 logger = logging.getLogger(__name__)
 
@@ -212,7 +213,7 @@ def join_interruptible_thread(t: threading.Thread, poll: float = 0.2) -> None:
 def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
     try:
         args = build_parser().parse_args(argv)
-        cfg = cfg or EdgeSettings()
+        cfg = cfg or load_effective_settings()
         configure_logging(cfg.log_level)
 
         logger.info("Edge Agent starting")
@@ -755,9 +756,9 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                             await reader.stop()
 
                         if should_restart:
-                            active_cfg = EdgeSettings()
+                            active_cfg = load_effective_settings()
                             logger.info(
-                                "Reloaded edge settings from .env after restart request"
+                                "Reloaded edge settings from local saved state after restart request"
                             )
                             continue
 

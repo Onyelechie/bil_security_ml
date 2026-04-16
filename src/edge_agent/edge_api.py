@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from .config import EdgeSettings
 from .runtime_state import EdgeRuntimeState
 from .sender import ServerSender
-from .settings_store import save_edge_settings
+from .settings_store import load_effective_settings, save_edge_settings
 
 
 class HealthOut(BaseModel):
@@ -200,13 +200,13 @@ def create_app(
 
     @app.get("/api/settings")
     def settings():
-        fresh_cfg = EdgeSettings()
+        fresh_cfg = load_effective_settings()
         return _settings_payload(fresh_cfg)
 
     @app.get("/api/preview")
     def preview():
         snap = runtime_state.get()
-        fresh_cfg = EdgeSettings()
+        fresh_cfg = load_effective_settings()
 
         if snap.latest_frame_item is None:
             return JSONResponse(

@@ -48,16 +48,6 @@
     return points.map(([x, y]) => `${x * 1000},${y * 1000}`).join(" ");
   }
 
-  function syncZonesFromPreview(preview) {
-    if (zoneState.dirty) {
-      return;
-    }
-
-    zoneState.includePolygons = cloneJson(preview.include_polygons || []);
-    zoneState.excludePolygons = cloneJson(preview.exclude_polygons || []);
-    zoneState.draftPoints = [];
-  }
-
   function updateZoneModeButtons() {
     if (zoneModeIncludeBtn) {
       zoneModeIncludeBtn.classList.toggle("is-active", zoneState.mode === "include");
@@ -192,8 +182,8 @@
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        motion_include_polygons: zoneState.includePolygons,
-        motion_exclude_polygons: zoneState.excludePolygons,
+        motion_include_polygons: cloneJson(zoneState.includePolygons),
+        motion_exclude_polygons: cloneJson(zoneState.excludePolygons),
       }),
       cache: "no-store",
     });
@@ -211,7 +201,6 @@
 
     latestSettings = settings;
     zoneState.dirty = false;
-    syncZonesFromSettings(settings);
 
     renderPreview(preview);
     renderSettings(settings);
@@ -305,7 +294,6 @@
     }
 
     zoneState.latestPreviewImage = preview.image_jpeg_b64;
-    syncZonesFromPreview(preview);
 
     previewStage.classList.remove("empty");
     previewStage.innerHTML = `

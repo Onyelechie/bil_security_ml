@@ -63,7 +63,11 @@ def _ui_dir() -> Path:
 def _encode_preview_jpeg_b64(frame) -> str | None:
     if frame is None:
         return None
-    ok, encoded = cv2.imencode(".jpg", frame)
+    ok, encoded = cv2.imencode(
+        ".jpg",
+        frame,
+        [int(cv2.IMWRITE_JPEG_QUALITY), 70],
+    )
     if not ok:
         return None
     return base64.b64encode(encoded.tobytes()).decode("ascii")
@@ -83,6 +87,7 @@ def _settings_payload(cfg: EdgeSettings) -> dict:
             "rtsp_url_low": cfg.rtsp_url_low,
             "ring_buffer_seconds": cfg.ring_buffer_seconds,
             "analysis_fps": cfg.analysis_fps,
+            "preview_fps": cfg.preview_fps,
             "frame_width": cfg.frame_width,
             "frame_height": cfg.frame_height,
         },

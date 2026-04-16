@@ -70,6 +70,7 @@ def _start_console_server(cfg, sender, runtime_state):
         host=cfg.edge_http_host,
         port=cfg.edge_http_port,
         log_level=cfg.log_level.lower(),
+        access_log=False,
     )
     server = uvicorn.Server(config)
 
@@ -184,6 +185,7 @@ def start_edge_http_server(
         host=cfg.edge_http_host,
         port=cfg.edge_http_port,
         log_level=cfg.log_level.lower(),
+        access_log=False,
     )
     server = uvicorn.Server(config)
 
@@ -329,20 +331,29 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 from .video.rtsp_reader import RtspReader
 
                 ring = RingBuffer(seconds=cfg.ring_buffer_seconds)
-                reader = RtspReader(cfg, ring)
+
+                def on_preview_frame(item):
+                    runtime_state.update(
+                        latest_frame_item=item,
+                        stream_state="streaming",
+                    )
+
+                reader = RtspReader(cfg, ring, on_frame=on_preview_frame)
                 await reader.start()
                 sender.set_status("online")
                 runtime_state.update(sender_status=sender.get_status())
                 try:
                     while True:
                         logger.info("RingBuffer frames=%d", ring.size())
+                        latest_item = reader.latest_item() or ring.latest_item()
+
                         runtime_state.update(
                             pipeline_mode="rtsp_test",
                             stream_state=(
-                                "streaming" if ring.size() > 0 else "connecting"
+                                "streaming" if latest_item is not None else "connecting"
                             ),
                             ring_buffer_frames=ring.size(),
-                            latest_frame_item=ring.latest_item(),
+                            latest_frame_item=latest_item,
                             sender_status=sender.get_status(),
                         )
                         await asyncio.sleep(2)
@@ -371,7 +382,14 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                 from .video.rtsp_reader import RtspReader
 
                 ring = RingBuffer(seconds=cfg.ring_buffer_seconds)
-                reader = RtspReader(cfg, ring)
+
+                def on_preview_frame(item):
+                    runtime_state.update(
+                        latest_frame_item=item,
+                        stream_state="streaming",
+                    )
+
+                reader = RtspReader(cfg, ring, on_frame=on_preview_frame)
 
                 mgr = TriggerManager(
                     cooldown_sec=cfg.trigger_cooldown_sec,
@@ -425,11 +443,13 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                             incidents.active_incidents(),
                         )
 
+                        latest_item = reader.latest_item() or ring.latest_item()
+
                         runtime_state.update(
                             pipeline_mode="motion_test",
                             stream_state=state,
                             ring_buffer_frames=ring_frames,
-                            latest_frame_item=ring.latest_item(),
+                            latest_frame_item=latest_item,
                             sender_status=sender.get_status(),
                         )
 
@@ -532,7 +552,18 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                         sender.queue_dir = current_cfg.offline_queue_dir
 
                         ring = RingBuffer(seconds=current_cfg.ring_buffer_seconds)
-                        reader = RtspReader(current_cfg, ring)
+
+                        def on_preview_frame(item):
+                            runtime_state.update(
+                                latest_frame_item=item,
+                                stream_state="streaming",
+                            )
+
+                        reader = RtspReader(
+                            current_cfg,
+                            ring,
+                            on_frame=on_preview_frame,
+                        )
 
                         mgr = TriggerManager(
                             cooldown_sec=current_cfg.trigger_cooldown_sec,
@@ -727,7 +758,7 @@ def run(argv: list[str] | None = None, cfg: EdgeSettings | None = None) -> int:
                                         await worker.enqueue(job)
                                     last_tick = now
 
-                                latest_item = ring.latest_item()
+                                latest_item = reader.latest_item() or ring.latest_item()
                                 ring_frames = ring.size()
 
                                 runtime_state.update(

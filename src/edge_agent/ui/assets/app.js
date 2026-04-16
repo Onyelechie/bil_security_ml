@@ -17,6 +17,13 @@
 
   let latestSettings = null;
 
+  const RUNTIME_REFRESH_MS = 3000;
+  const PREVIEW_REFRESH_MS = 333;
+
+  let previewRequestInFlight = false;
+  let runtimeRequestInFlight = false;
+  let lastPreviewCapturedAt = null;
+
   const zoneState = {
     mode: "include",
     includePolygons: [],
@@ -223,6 +230,7 @@
       rtsp_url_low: "Low-resolution RTSP stream used for analysis.",
       ring_buffer_seconds: "How many seconds of recent video stay available in memory.",
       analysis_fps: "How many frames per second are sampled from the stream for analysis.",
+      preview_fps: "How many frames per second the console preview tries to show.",
       frame_width: "Target analysis width after resizing.",
       frame_height: "Target analysis height after resizing.",
 
@@ -275,6 +283,50 @@
     ];
   }
 
+    function ensurePreviewDom() {
+    let img = document.getElementById("preview-image");
+    let svg = document.getElementById("preview-overlay");
+    let countedBadge = document.getElementById("counted-zones-badge");
+    let ignoredBadge = document.getElementById("ignored-zones-badge");
+    let drawingBadge = document.getElementById("drawing-mode-badge");
+
+    if (!img || !svg || !countedBadge || !ignoredBadge || !drawingBadge) {
+      previewStage.classList.remove("empty");
+      previewStage.innerHTML = `
+        <div class="preview-stack">
+          <img
+            id="preview-image"
+            class="preview-image"
+            alt="Latest edge preview frame"
+          >
+          <svg
+            id="preview-overlay"
+            class="preview-overlay"
+            viewBox="0 0 1000 1000"
+            preserveAspectRatio="none"
+          ></svg>
+        </div>
+        <div class="zone-badge">
+          <span id="counted-zones-badge" class="status-pill ok"></span>
+          <span id="ignored-zones-badge" class="status-pill err"></span>
+          <span id="drawing-mode-badge" class="status-pill neutral"></span>
+        </div>
+      `;
+
+      img = document.getElementById("preview-image");
+      svg = document.getElementById("preview-overlay");
+      countedBadge = document.getElementById("counted-zones-badge");
+      ignoredBadge = document.getElementById("ignored-zones-badge");
+      drawingBadge = document.getElementById("drawing-mode-badge");
+
+      if (svg) {
+        svg.addEventListener("click", handleZoneClick);
+      }
+    }
+
+    return { img, svg, countedBadge, ignoredBadge, drawingBadge };
+  }
+
   function renderRuntime(runtime) {
     pipelineMode.textContent = runtime.pipeline_mode || "-";
     streamState.textContent = runtime.stream_state || "-";
@@ -290,42 +342,36 @@
     if (!preview.available) {
       previewStage.classList.add("empty");
       previewStage.innerHTML = `<p>${escapeHtml(preview.message || "No preview frame yet.")}</p>`;
+      lastPreviewCapturedAt = null;
       return;
     }
 
-    zoneState.latestPreviewImage = preview.image_jpeg_b64;
-
-    previewStage.classList.remove("empty");
-    previewStage.innerHTML = `
-      <div class="preview-stack">
-        <img
-          id="preview-image"
-          class="preview-image"
-          src="data:image/jpeg;base64,${preview.image_jpeg_b64}"
-          alt="Latest edge preview frame"
-        >
-        <svg
-          id="preview-overlay"
-          class="preview-overlay"
-          viewBox="0 0 1000 1000"
-          preserveAspectRatio="none"
-        ></svg>
-      </div>
-      <div class="zone-badge">
-        <span class="status-pill ok">Counted zones: ${zoneState.includePolygons.length}</span>
-        <span class="status-pill err">Ignored zones: ${zoneState.excludePolygons.length}</span>
-        <span class="status-pill neutral">Drawing: ${zoneState.mode === "include" ? "Count motion here" : "Ignore motion here"}</span>
-      </div>
-    `;
-
-    const svg = document.getElementById("preview-overlay");
-    if (svg) {
-      svg.addEventListener("click", handleZoneClick);
+    if (!zoneState.dirty) {
+      zoneState.includePolygons = cloneJson(preview.include_polygons || []);
+      zoneState.excludePolygons = cloneJson(preview.exclude_polygons || []);
     }
+
+    const {
+      img,
+      countedBadge,
+      ignoredBadge,
+      drawingBadge,
+    } = ensurePreviewDom();
+
+    if (preview.captured_at !== lastPreviewCapturedAt) {
+      img.src = `data:image/jpeg;base64,${preview.image_jpeg_b64}`;
+      zoneState.latestPreviewImage = preview.image_jpeg_b64;
+      lastPreviewCapturedAt = preview.captured_at;
+    }
+
+    countedBadge.textContent = `Counted zones: ${zoneState.includePolygons.length}`;
+    ignoredBadge.textContent = `Ignored zones: ${zoneState.excludePolygons.length}`;
+    drawingBadge.textContent =
+      `Drawing: ${zoneState.mode === "include" ? "Count motion here" : "Ignore motion here"}`;
 
     updateZoneModeButtons();
     renderZoneOverlay();
-  }
+}
 
   async function restartPipeline() {
     let msg = document.getElementById("save-settings-msg");
@@ -595,6 +641,43 @@ function syncZonesFromSettings(settings) {
   zoneState.draftPoints = [];
 }
 
+async function refreshRuntime() {
+  if (runtimeRequestInFlight) return;
+  runtimeRequestInFlight = true;
+
+  try {
+    const runtime = await fetch(`/api/runtime?ts=${Date.now()}`, {
+      cache: "no-store",
+    }).then((r) => r.json());
+
+    renderRuntime(runtime);
+  } catch (_err) {
+    runtimePill.textContent = "Offline";
+    runtimePill.className = "status-pill err";
+  } finally {
+    runtimeRequestInFlight = false;
+  }
+}
+
+async function refreshPreview() {
+  if (previewRequestInFlight) return;
+  previewRequestInFlight = true;
+
+  try {
+    const preview = await fetch(`/api/preview?ts=${Date.now()}`, {
+      cache: "no-store",
+    }).then((r) => r.json());
+
+    renderPreview(preview);
+  } catch (_err) {
+    previewStage.classList.add("empty");
+    previewStage.innerHTML = `<p>Preview unavailable.</p>`;
+    lastPreviewCapturedAt = null;
+  } finally {
+    previewRequestInFlight = false;
+  }
+}
+
 async function loadAll() {
   const [runtimeRes, previewRes, settingsRes] = await Promise.all([
     fetch(`/api/runtime?ts=${Date.now()}`, { cache: "no-store" }),
@@ -651,21 +734,7 @@ async function loadAll() {
   }
 
   await loadAll();
-setInterval(async () => {
-  try {
-    const runtime = await fetch(`/api/runtime?ts=${Date.now()}`, {
-      cache: "no-store",
-    }).then((r) => r.json());
 
-    const preview = await fetch(`/api/preview?ts=${Date.now()}`, {
-      cache: "no-store",
-    }).then((r) => r.json());
-
-    renderRuntime(runtime);
-    renderPreview(preview);
-  } catch (_err) {
-    runtimePill.textContent = "Offline";
-    runtimePill.className = "status-pill err";
-  }
-}, 3000);
+  setInterval(refreshRuntime, RUNTIME_REFRESH_MS);
+  setInterval(refreshPreview, PREVIEW_REFRESH_MS);
 })();

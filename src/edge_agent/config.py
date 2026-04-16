@@ -4,7 +4,11 @@ import json
 from pathlib import Path
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 EDGE_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
@@ -16,6 +20,22 @@ class EdgeSettings(BaseSettings):
         extra="ignore",
         env_ignore_empty=True,
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ):
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+        )
 
     # --- Identity ---
     site_id: str = "site_demo"
@@ -56,6 +76,8 @@ class EdgeSettings(BaseSettings):
     # --- RTSP ingest (low-res stream for analysis) ---
     rtsp_url_low: str = ""
     ring_buffer_seconds: int = 25
+
+    preview_fps: float = 8.0
 
     # Frame sampling / scaling for motion detection and window extraction
     analysis_fps: float = 5.0

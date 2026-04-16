@@ -44,6 +44,7 @@ ENV_KEY_MAP: dict[str, str] = {
     "heartbeat_interval_sec": "HEARTBEAT_INTERVAL_SEC",
     "update_interval_sec": "UPDATE_INTERVAL_SEC",
     "retry_interval_sec": "RETRY_INTERVAL_SEC",
+    "preview_fps": "PREVIEW_FPS",
 }
 
 JSON_ONLY_KEYS = {

@@ -4,24 +4,49 @@ import asyncio
 import logging
 import subprocess  # nosec B404
 from datetime import datetime, timezone
+from threading import Lock
+from time import monotonic
+from typing import Callable
 from urllib.parse import urlparse
 
 import imageio_ffmpeg
 import numpy as np
 
 from ..config import EdgeSettings
-from .ring_buffer import RingBuffer
+from .ring_buffer import FrameItem, RingBuffer
 
 logger = logging.getLogger(__name__)
 
 
 class RtspReader:
-    def __init__(self, cfg: EdgeSettings, ring: RingBuffer) -> None:
+    def __init__(
+        self,
+        cfg: EdgeSettings,
+        ring: RingBuffer,
+        on_frame: Callable[[FrameItem], None] | None = None,
+    ) -> None:
         self._cfg = cfg
         self._ring = ring
+        self._on_frame = on_frame
         self._proc: subprocess.Popen[bytes] | None = None
         self._task: asyncio.Task | None = None
         self._stop = asyncio.Event()
+        self._latest_lock = Lock()
+        self._latest_frame_item: FrameItem | None = None
+
+    def latest_item(self) -> FrameItem | None:
+        with self._latest_lock:
+            return self._latest_frame_item
+
+    def _set_latest_item(self, item: FrameItem) -> None:
+        with self._latest_lock:
+            self._latest_frame_item = item
+
+        if self._on_frame is not None:
+            try:
+                self._on_frame(item)
+            except Exception:
+                logger.exception("RTSP preview callback failed")
 
     async def start(self) -> None:
         if not self._cfg.rtsp_url_low:
@@ -30,8 +55,10 @@ class RtspReader:
         self._stop.clear()
         self._task = asyncio.create_task(self._run_loop(), name="rtsp-reader")
         logger.info(
-            "RTSP reader started (stream=%s)",
+            "RTSP reader started (stream=%s analysis_fps=%.2f preview_fps=%.2f)",
             self._stream_label(self._cfg.rtsp_url_low),
+            float(self._cfg.analysis_fps),
+            float(self._cfg.preview_fps),
         )
 
     async def stop(self) -> None:
@@ -48,13 +75,21 @@ class RtspReader:
                 pass
 
         self._kill_proc()
+
+        with self._latest_lock:
+            self._latest_frame_item = None
+
         logger.info("RTSP reader stopped")
 
     async def _run_loop(self) -> None:
         w = int(self._cfg.frame_width)
         h = int(self._cfg.frame_height)
-        fps = float(self._cfg.analysis_fps)
+        analysis_fps = max(float(self._cfg.analysis_fps), 0.1)
+        preview_fps = max(float(self._cfg.preview_fps), analysis_fps)
+        decode_fps = max(analysis_fps, preview_fps)
+
         frame_bytes = w * h * 3  # BGR24
+        analysis_period_s = 1.0 / analysis_fps
 
         stream = self._stream_label(self._cfg.rtsp_url_low)
 
@@ -64,9 +99,10 @@ class RtspReader:
         while not self._stop.is_set():
             attempt += 1
             first_frame = True
+            next_analysis_push = 0.0
 
             try:
-                self._start_ffmpeg(w=w, h=h, fps=fps)
+                self._start_ffmpeg(w=w, h=h, fps=decode_fps)
                 if self._proc is None or self._proc.stdout is None:
                     raise RuntimeError(
                         "ffmpeg process failed to start (stdout missing)"
@@ -95,7 +131,15 @@ class RtspReader:
                         raise RuntimeError("DISCONNECT: ffmpeg stream ended")
 
                     frame = np.frombuffer(buf, dtype=np.uint8).reshape((h, w, 3))
-                    self._ring.push(datetime.now(timezone.utc), frame)
+                    ts = datetime.now(timezone.utc)
+
+                    item = FrameItem(ts=ts, frame=frame)
+                    self._set_latest_item(item)
+
+                    now_mono = monotonic()
+                    if now_mono >= next_analysis_push:
+                        self._ring.push(ts, frame)
+                        next_analysis_push = now_mono + analysis_period_s
 
                     if first_frame:
                         logger.info(

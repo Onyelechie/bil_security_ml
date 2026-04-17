@@ -14,6 +14,8 @@
   const zoneResetBtn = document.getElementById("zone-reset-btn");
   const zoneSaveBtn = document.getElementById("zone-save-btn");
   const zonesMsg = document.getElementById("zones-msg");
+  const previewPanel = document.getElementById("preview-panel");
+  const zoneFullscreenBtn = document.getElementById("zone-fullscreen-btn");
 
   let latestSettings = null;
 
@@ -23,6 +25,7 @@
   let previewRequestInFlight = false;
   let runtimeRequestInFlight = false;
   let lastPreviewCapturedAt = null;
+  const openSettingsGroups = new Set(["identity", "stream", "motion"]);
 
   const zoneState = {
     mode: "include",
@@ -63,6 +66,38 @@
       zoneModeExcludeBtn.classList.toggle("is-active", zoneState.mode === "exclude");
     }
   }
+
+  async function togglePreviewFullscreen() {
+  if (!previewPanel) return;
+
+  try {
+    if (document.fullscreenElement === previewPanel) {
+      await document.exitFullscreen();
+    } else {
+      await previewPanel.requestFullscreen();
+    }
+  } catch (err) {
+    setZonesMessage(
+      err.message || "Fullscreen is not available right now.",
+      "danger-text"
+    );
+  }
+}
+
+function syncFullscreenUi() {
+  const isFullscreen = document.fullscreenElement === previewPanel;
+
+  if (previewPanel) {
+    previewPanel.classList.toggle("is-fullscreen", isFullscreen);
+  }
+
+  if (zoneFullscreenBtn) {
+    zoneFullscreenBtn.textContent = isFullscreen
+      ? "Exit fullscreen"
+      : "Fullscreen preview";
+    zoneFullscreenBtn.classList.toggle("is-active", isFullscreen);
+  }
+}
 
   function renderZoneOverlay() {
     const svg = document.getElementById("preview-overlay");
@@ -283,6 +318,20 @@
     ];
   }
 
+  function sectionDescriptions() {
+    return {
+      identity: "Who this edge PC is and where it reports.",
+      stream: "How video is read, resized, and shown locally.",
+      motion: "How local motion is scored and accepted.",
+      incidents: "How activity is grouped into evidence windows.",
+      detection: "Which detections can become alerts.",
+      ptz: "Protection against camera movement and sweeping scenes.",
+      zones: "Saved include and ignore regions for motion scoring.",
+      timers: "Background timing for heartbeat and retry behavior.",
+    };
+  }
+
+
     function ensurePreviewDom() {
     let img = document.getElementById("preview-image");
     let svg = document.getElementById("preview-overlay");
@@ -408,7 +457,7 @@
 
     if (type === "checkbox") {
       return `
-        <label class="setting-field">
+        <label class="setting-field setting-field-toggle">
           <div class="setting-copy">
             <span class="setting-label">${escapeHtml(meta)}</span>
             <span class="setting-key">${escapeHtml(key)}</span>
@@ -420,7 +469,7 @@
 
     if (type === "textarea") {
       return `
-        <label class="setting-field setting-field-block">
+        <label class="setting-field setting-field-block setting-field-wide">
           <div class="setting-copy">
             <span class="setting-label">${escapeHtml(meta)}</span>
             <span class="setting-key">${escapeHtml(key)}</span>
@@ -446,46 +495,85 @@
     `;
   }
 
+  function bindSettingsCardState() {
+    document.querySelectorAll("[data-settings-group]").forEach((card) => {
+      card.addEventListener("toggle", () => {
+        const key = card.getAttribute("data-settings-group");
+        if (!key) return;
+
+        if (card.open) {
+          openSettingsGroups.add(key);
+        } else {
+          openSettingsGroups.delete(key);
+        }
+      });
+    });
+  }
+
   function renderSettings(settings) {
     latestSettings = settings;
+    const descriptions = sectionDescriptions();
 
-    settingsGroups.innerHTML = sectionOrder().map(([title, groupKey]) => {
+    settingsGroups.innerHTML =
+      sectionOrder().map(([title, groupKey], index) => {
         const values = settings[groupKey] || {};
-        const rows = Object.entries(values).map(([key, value]) => renderField(key, value)).join("");
+        const entries = Object.entries(values);
+        const rows = entries.map(([key, value]) => renderField(key, value)).join("");
+        const isOpen = openSettingsGroups.has(groupKey) || (openSettingsGroups.size === 0 && index < 3);
 
         return `
-        <article class="settings-card">
-            <div class="settings-card-head">
-            <h3>${escapeHtml(title)}</h3>
+          <details
+            class="settings-card settings-card-accordion"
+            data-settings-group="${escapeHtml(groupKey)}"
+            ${isOpen ? "open" : ""}
+          >
+            <summary class="settings-card-summary">
+              <div class="settings-card-headline">
+                <h3>${escapeHtml(title)}</h3>
+                <p class="settings-card-subtitle">
+                  ${escapeHtml(descriptions[groupKey] || "Adjust how this part of the edge behaves.")}
+                </p>
+              </div>
+
+              <div class="settings-card-summary-meta">
+                <span class="settings-count">${entries.length} settings</span>
+                <span class="settings-chevron" aria-hidden="true"></span>
+              </div>
+            </summary>
+
+            <div class="settings-card-body">
+              <div class="setting-list">${rows}</div>
             </div>
-            <div class="setting-list">${rows}</div>
-        </article>
+          </details>
         `;
-    }).join("") + `
+      }).join("") + `
         <div class="settings-actions">
-        <button id="save-settings-btn" class="btn primary" type="button">Save Changes</button>
-        <button id="reset-settings-btn" class="btn ghost" type="button">Reset Unsaved Changes</button>
-        <button id="restart-pipeline-btn" class="btn ghost" type="button">Restart Edge Pipeline</button>
-        <span id="save-settings-msg" class="muted">Change fields and save them to the edge PC.</span>
+          <button id="save-settings-btn" class="btn primary" type="button">Save Changes</button>
+          <button id="reset-settings-btn" class="btn ghost" type="button">Reset Unsaved Changes</button>
+          <button id="restart-pipeline-btn" class="btn ghost" type="button">Restart Edge Pipeline</button>
+          <span id="save-settings-msg" class="muted">Change fields and save them to the edge PC.</span>
         </div>
-    `;
+      `;
+
+    bindSettingsCardState();
 
     const saveBtn = document.getElementById("save-settings-btn");
     const resetBtn = document.getElementById("reset-settings-btn");
     const restartBtn = document.getElementById("restart-pipeline-btn");
 
     if (saveBtn) {
-        saveBtn.addEventListener("click", saveSettings);
+      saveBtn.addEventListener("click", saveSettings);
     }
 
     if (resetBtn) {
-        resetBtn.addEventListener("click", resetSettings);
+      resetBtn.addEventListener("click", resetSettings);
     }
 
     if (restartBtn) {
-        restartBtn.addEventListener("click", restartPipeline);
+      restartBtn.addEventListener("click", restartPipeline);
     }
   }
+
 
   function collectSettingsFromForm() {
   const payload = {};
@@ -732,6 +820,13 @@ async function loadAll() {
   if (zoneSaveBtn) {
     zoneSaveBtn.addEventListener("click", saveZones);
   }
+
+  if (zoneFullscreenBtn) {
+    zoneFullscreenBtn.addEventListener("click", togglePreviewFullscreen);
+  }
+
+  document.addEventListener("fullscreenchange", syncFullscreenUi);
+  syncFullscreenUi();
 
   await loadAll();
 

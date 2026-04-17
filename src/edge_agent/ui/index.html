@@ -25,10 +25,17 @@
           <h2>Edge Status</h2>
         </div>
       </div>
+
       <p class="muted">
         This local console is for tuning the edge PC itself. Use it to understand what the edge is doing,
-        review the current configuration, and later adjust motion, windows, detection, and zones.
+        adjust motion behavior, and manage saved zones without leaving the machine.
       </p>
+
+      <div class="hero-hints">
+        <span class="hint-chip">Draw zones directly on the preview</span>
+        <span class="hint-chip">Save config changes from the right panel</span>
+        <span class="hint-chip">Restart the pipeline only when needed</span>
+      </div>
 
       <div class="stats-grid">
         <article class="stat-card">
@@ -50,8 +57,8 @@
       </div>
     </section>
 
-    <section class="grid">
-      <section class="panel">
+    <section class="grid main-grid">
+      <section id="preview-panel" class="panel preview-panel">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Preview</p>
@@ -59,7 +66,7 @@
           </div>
         </div>
         <p class="muted">
-          Draw areas directly on the latest frame. Green areas count toward motion. Red areas are ignored.
+          Green areas count toward motion. Red areas are ignored.
         </p>
 
         <div class="zone-toolbar">
@@ -81,6 +88,9 @@
           <button id="zone-reset-btn" class="btn ghost" type="button">
             Reload saved zones
           </button>
+          <button id="zone-fullscreen-btn" class="btn ghost" type="button">
+            Fullscreen preview
+          </button>
           <button id="zone-save-btn" class="btn primary" type="button">
             Save zones
           </button>
@@ -95,7 +105,7 @@
         </div>
       </section>
 
-      <section class="panel">
+      <section class="panel config-panel">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Configuration</p>
@@ -103,7 +113,7 @@
           </div>
         </div>
         <p class="muted">
-          These are grouped by what they do, not by internal setting names.
+          Settings are grouped by purpose. Open only the section you need.
         </p>
         <div id="settings-groups" class="settings-groups"></div>
       </section>

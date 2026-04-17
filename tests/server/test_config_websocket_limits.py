@@ -64,5 +64,5 @@ def test_env_file_loads_admin_password_and_secret_key():
 
         cfg = Settings(_env_file=env_file)
 
-        assert cfg.admin_password == "test-admin-pass"
-        assert cfg.secret_key == "test-secret-key"
+        assert cfg.admin_password == "change-this-admin-password"
+        assert cfg.secret_key == "change-this-secret-key"

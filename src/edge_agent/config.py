@@ -137,7 +137,9 @@ class EdgeSettings(BaseSettings):
     motion_include_polygons: list[list[list[float]]] = []
     motion_exclude_polygons: list[list[list[float]]] = []
 
-    @field_validator("motion_include_polygons", "motion_exclude_polygons", mode="before")
+    @field_validator(
+        "motion_include_polygons", "motion_exclude_polygons", mode="before"
+    )
     @classmethod
     def parse_polygon_json(cls, value):
         if value in (None, "", []):

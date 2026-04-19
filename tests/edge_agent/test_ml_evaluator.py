@@ -6,10 +6,9 @@ import cv2
 import numpy as np
 import pytest
 
-from src.edge_agent.ml_evaluator import MLEvaluator
-from src.edge_agent.models import YOLOWrapper
+from edge_agent.ml_evaluator import MLEvaluator
+from edge_agent.models import YOLOWrapper
 
-# We need a path to the weights
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 WEIGHTS_PATH = os.path.join(project_root, "production_model", "yolov8s.pt")
 WEIGHTS_EXIST = os.path.exists(WEIGHTS_PATH)
@@ -17,17 +16,16 @@ WEIGHTS_EXIST = os.path.exists(WEIGHTS_PATH)
 
 @pytest.fixture
 def mock_evaluator():
-    """Provides an MLEvaluator with a mocked model registry."""
-    with patch("src.edge_agent.ml_evaluator.ModelRegistry.get_model") as mock_get:
+    with patch("edge_agent.ml_evaluator.ModelRegistry.get_model") as mock_get:
         mock_model = MagicMock(spec=YOLOWrapper)
         mock_get.return_value = mock_model
         evaluator = MLEvaluator(weights_path="mock_path.pt")
-        evaluator.model_mock = mock_model  # Accessible for setting return values
+        evaluator.model_mock = mock_model
         yield evaluator
 
 
 def test_ml_evaluator_prefers_person_over_vehicle():
-    with patch("src.edge_agent.ml_evaluator.ModelRegistry.get_model") as mock_get:
+    with patch("edge_agent.ml_evaluator.ModelRegistry.get_model") as mock_get:
         mock_model = MagicMock(spec=YOLOWrapper)
         mock_model.predict.return_value = [
             (0, 0, 50, 50, 0.72, "car"),
@@ -50,7 +48,7 @@ def test_ml_evaluator_prefers_person_over_vehicle():
 
 
 def test_ml_evaluator_can_disable_vehicle_alerts():
-    with patch("src.edge_agent.ml_evaluator.ModelRegistry.get_model") as mock_get:
+    with patch("edge_agent.ml_evaluator.ModelRegistry.get_model") as mock_get:
         mock_model = MagicMock(spec=YOLOWrapper)
         mock_model.predict.return_value = [
             (0, 0, 50, 50, 0.95, "car"),
@@ -71,24 +69,20 @@ def test_ml_evaluator_can_disable_vehicle_alerts():
 
 
 def create_dummy_image(color=(255, 255, 255)):
-    """Creates a blank 640x640 image for testing."""
     return np.full((640, 640, 3), color, dtype=np.uint8)
 
 
 def test_ml_evaluator_initialization():
-    """Test that the evaluator initializes (mocked)."""
-    with patch("src.edge_agent.ml_evaluator.ModelRegistry.get_model") as mock_get:
+    with patch("edge_agent.ml_evaluator.ModelRegistry.get_model") as mock_get:
         evaluator = MLEvaluator(weights_path="mock_path.pt")
         assert evaluator.model is not None
         mock_get.assert_called_once()
 
 
 def test_ml_evaluator_model_switching():
-    """Test that MLEvaluator correctly handles model type and path switching."""
-    from src.edge_agent.ml_evaluator import DEFAULT_MODEL_CONFIGS
+    from edge_agent.ml_evaluator import DEFAULT_MODEL_CONFIGS
 
-    with patch("src.edge_agent.ml_evaluator.ModelRegistry.get_model") as mock_get:
-        # 1. Test Default (Small)
+    with patch("edge_agent.ml_evaluator.ModelRegistry.get_model") as mock_get:
         MLEvaluator()
         mock_get.assert_called_with(
             YOLOWrapper,
@@ -98,7 +92,6 @@ def test_ml_evaluator_model_switching():
             use_openvino=False,
         )
 
-        # 2. Test Nano explicitly
         mock_get.reset_mock()
         MLEvaluator(model_name="YOLOv8-Nano")
         mock_get.assert_called_with(
@@ -109,7 +102,6 @@ def test_ml_evaluator_model_switching():
             use_openvino=False,
         )
 
-        # 3. Test Custom Path (overrides default for given name)
         mock_get.reset_mock()
         custom_path = "/tmp/custom.pt"
         MLEvaluator(weights_path=custom_path)
@@ -121,47 +113,33 @@ def test_ml_evaluator_model_switching():
             use_openvino=False,
         )
 
-        # 4. Test Invalid Model Name
         with pytest.raises(ValueError, match="No default weights defined"):
             MLEvaluator(model_name="Invalid-Model")
 
 
 def test_ml_evaluator_caching():
-    """Test that multiple evaluators share the same model instance via registry."""
-    from src.edge_agent.models.registry import ModelRegistry
+    from edge_agent.models.registry import ModelRegistry
 
-    # Clear the registry to ensure a clean state
     ModelRegistry.clear()
 
-    # Instead of mocking get_model (which bypasses the registry logic),
-    # we mock the underlying model's load() method to count how many times
-    # the weights are actually fetched from disk.
-    with patch("src.edge_agent.models.YOLOWrapper.load") as mock_load:
-        # First evaluator should trigger load()
+    with patch("edge_agent.models.YOLOWrapper.load") as mock_load:
         eval1 = MLEvaluator(weights_path="mock_cache_test.pt")
-        # Second evaluator should get the cached instance
         eval2 = MLEvaluator(weights_path="mock_cache_test.pt")
 
-        # Prove they share the exact same object in memory
         assert eval1.model is eval2.model
-        # Prove the heavy 'load' operation only happened once
         assert mock_load.call_count == 1
 
 
 def test_ml_evaluator_empty_clip(mock_evaluator):
-    """Test evaluating an empty clip or clip with None frames."""
     assert mock_evaluator.evaluate_frames([]) is None
     assert mock_evaluator.evaluate_frames([None, None]) is None
 
 
 def test_ml_evaluator_mocked_detection(mock_evaluator):
-    """Test the evaluator's frame selection and bbox drawing logic using mocks."""
-    # Setup mock to 'detect' a person on the second frame
-    # Format: (x1, y1, x2, y2, conf, label)
     mock_evaluator.model_mock.predict.side_effect = [
-        [],  # Frame 1: nothing
-        [(10, 10, 100, 100, 0.9, "person")],  # Frame 2: person
-        [],  # Frame 3: nothing
+        [],
+        [(10, 10, 100, 100, 0.9, "person")],
+        [],
     ]
 
     clip = [create_dummy_image() for _ in range(3)]
@@ -171,13 +149,11 @@ def test_ml_evaluator_mocked_detection(mock_evaluator):
     assert result["detection"]["label"] == "person"
     assert result["detection"]["confidence"] == 0.9
     assert result["detection"]["bbox"] == [10, 10, 100, 100]
-    assert result["frame_index"] == 1  # Detected on second frame
-    # Check that it drew a box (annotated frame should be different from original)
+    assert result["frame_index"] == 1
     assert not np.array_equal(result["frame"], clip[1])
 
 
 def test_ml_evaluator_grayscale_mocked(mock_evaluator):
-    """Test that grayscale frames are converted and processed (mocked)."""
     frame_gray = np.zeros((100, 100), dtype=np.uint8)
     mock_evaluator.model_mock.predict.return_value = [(0, 0, 50, 50, 0.8, "car")]
 
@@ -186,14 +162,12 @@ def test_ml_evaluator_grayscale_mocked(mock_evaluator):
     assert result is not None
     assert result["detection"]["label"] == "car"
     assert result["frame_index"] == 0
-    # Ensure it converted to 3-channel for the mock's 'inference'
     call_args = mock_evaluator.model_mock.predict.call_args[0][0]
     assert len(call_args.shape) == 3
     assert call_args.shape[2] == 3
 
 
 def test_ml_evaluator_grayscale_3d_mocked(mock_evaluator):
-    """Test that (H, W, 1) grayscale frames are converted and processed (mocked)."""
     frame_gray = np.zeros((100, 100, 1), dtype=np.uint8)
     mock_evaluator.model_mock.predict.return_value = [(0, 0, 50, 50, 0.8, "car")]
 
@@ -210,7 +184,7 @@ def test_ml_evaluator_grayscale_3d_mocked(mock_evaluator):
 @pytest.mark.integration
 @pytest.mark.skipif(
     not WEIGHTS_EXIST,
-    reason="Weights not found at benchmark/yolov8n.pt. Run benchmark_suite.py to download.",
+    reason="Weights not found at production_model/yolov8s.pt.",
 )
 @pytest.mark.parametrize(
     "filename, expected_label, custom_person_conf, custom_vehicle_conf, expected_to_pass",
@@ -226,7 +200,6 @@ def test_ml_evaluator_grayscale_3d_mocked(mock_evaluator):
 def test_ml_evaluator_specific_frames_integration(
     filename, expected_label, custom_person_conf, custom_vehicle_conf, expected_to_pass
 ):
-    """Real inference test using actual weights. Only runs if --integration is specified or weights found."""
     specific_frame_path = os.path.join(
         project_root, "tests", "edge_agent", "test_data", filename
     )
@@ -235,10 +208,8 @@ def test_ml_evaluator_specific_frames_integration(
     if os.path.exists(specific_frame_path):
         frame = cv2.imread(specific_frame_path)
 
-    # Fallback: Try to extract from benchmark video if image is missing
     if frame is None:
         try:
-            # Expected format: "VideoName_frame_123.jpg"
             parts = filename.split("_frame_")
             if len(parts) == 2:
                 video_name = parts[0] + ".mp4"
@@ -274,7 +245,14 @@ def test_ml_evaluator_specific_frames_integration(
         assert result is not None, f"Expected a detection for {filename}, but got None."
         actual_label = result["detection"]["label"].lower()
         if filename == "C4HighRes - Human_frame_60.jpg":
-            assert actual_label in ["person", "car", "truck", "bus", "motorcycle", "vehicle"]
+            assert actual_label in [
+                "person",
+                "car",
+                "truck",
+                "bus",
+                "motorcycle",
+                "vehicle",
+            ]
         elif expected_label.lower() in ["car", "truck", "bus", "motorcycle", "vehicle"]:
             assert actual_label in ["car", "truck", "bus", "motorcycle", "vehicle"]
         else:
@@ -284,7 +262,6 @@ def test_ml_evaluator_specific_frames_integration(
 
 
 if __name__ == "__main__":
-    # If run directly as a script (stub test)
     if not os.path.exists(WEIGHTS_PATH):
         print(f"Error: Weights not found at {WEIGHTS_PATH}.")
         print("Please run the benchmark script once to ensure weights are downloaded.")

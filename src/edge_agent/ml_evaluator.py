@@ -41,10 +41,14 @@ class MLEvaluator:
         person_conf: float = 0.5,
         vehicle_conf: float = 0.6,
         allowed_classes: str | list[str] | set[str] | None = "person,vehicle",
+        include_polygons: list[list[list[float]]] | None = None,
+        exclude_polygons: list[list[list[float]]] | None = None,
     ):
         self.person_conf = float(person_conf)
         self.vehicle_conf = float(vehicle_conf)
         self.allowed_classes = self._normalize_allowed_classes(allowed_classes)
+        self.include_polygons = include_polygons or []
+        self.exclude_polygons = exclude_polygons or []
 
         if not weights_path:
             weights_path = DEFAULT_MODEL_CONFIGS.get(model_name)
@@ -61,11 +65,14 @@ class MLEvaluator:
             use_openvino=False,
         )
         logger.info(
-            "MLEvaluator initialized with model=%s allowed_classes=%s person_conf=%.2f vehicle_conf=%.2f",
+            "MLEvaluator initialized with model=%s allowed_classes=%s person_conf=%.2f "
+            "vehicle_conf=%.2f include_zones=%d exclude_zones=%d",
             weights_path,
             sorted(self.allowed_classes),
             self.person_conf,
             self.vehicle_conf,
+            len(self.include_polygons),
+            len(self.exclude_polygons),
         )
 
     @classmethod
@@ -118,6 +125,62 @@ class MLEvaluator:
         # Confidence is still dominant, but we bias toward
         # larger / more central person boxes.
         return float(conf) + (0.60 * area_ratio) - (0.25 * center_penalty)
+
+    @staticmethod
+    def _bbox_center_normalized(
+        bbox: list[float],
+        frame_shape: tuple[int, ...],
+    ) -> tuple[float, float]:
+        h, w = frame_shape[:2]
+        x1, y1, x2, y2 = [float(v) for v in bbox]
+
+        cx = ((x1 + x2) / 2.0) / max(float(w), 1.0)
+        cy = ((y1 + y2) / 2.0) / max(float(h), 1.0)
+
+        cx = max(0.0, min(1.0, cx))
+        cy = max(0.0, min(1.0, cy))
+        return cx, cy
+
+    @staticmethod
+    def _point_in_polygon(
+        point: tuple[float, float],
+        polygon: list[list[float]],
+    ) -> bool:
+        if len(polygon) < 3:
+            return False
+
+        pts = np.asarray(
+            [[float(x), float(y)] for x, y in polygon],
+            dtype=np.float32,
+        ).reshape((-1, 1, 2))
+
+        return cv2.pointPolygonTest(pts, point, False) >= 0
+
+    def _detection_allowed_by_zone(
+        self,
+        bbox: list[float],
+        frame_shape: tuple[int, ...],
+    ) -> bool:
+        if not self.include_polygons and not self.exclude_polygons:
+            return True
+
+        center = self._bbox_center_normalized(bbox, frame_shape)
+
+        if self.include_polygons:
+            inside_include = any(
+                self._point_in_polygon(center, poly) for poly in self.include_polygons
+            )
+            if not inside_include:
+                return False
+
+        if self.exclude_polygons:
+            inside_exclude = any(
+                self._point_in_polygon(center, poly) for poly in self.exclude_polygons
+            )
+            if inside_exclude:
+                return False
+
+        return True
 
     def evaluate_frames(self, frames: list[np.ndarray]) -> dict | None:
         """
@@ -172,6 +235,15 @@ class MLEvaluator:
 
                 bbox = [x1, y1, x2, y2]
 
+                if not self._detection_allowed_by_zone(bbox, frame_bgr.shape):
+                    logger.debug(
+                        "ZONE FILTER(dropped): class=%s conf=%.2f bbox=%s",
+                        label,
+                        conf,
+                        bbox,
+                    )
+                    continue
+
                 if is_person:
                     person_score = self._person_candidate_score(
                         bbox,
@@ -220,7 +292,11 @@ class MLEvaluator:
             chosen["detection"]["label"],
             chosen["detection"]["confidence"],
             chosen["frame_index"],
-            f'{chosen.get("selection_score", 0.0):.3f}' if chosen["detection"]["label"].lower() == "person" else "n/a",
+            (
+                f'{chosen.get("selection_score", 0.0):.3f}'
+                if chosen["detection"]["label"].lower() == "person"
+                else "n/a"
+            ),
             best_person_any,
             best_vehicle_any,
             len(frames),
@@ -268,6 +344,15 @@ class MLEvaluator:
                 label_lower = label.lower()
                 conf = float(conf)
                 bbox = [x1, y1, x2, y2]
+
+                if not self._detection_allowed_by_zone(bbox, frame_bgr.shape):
+                    logger.debug(
+                        "ZONE FILTER(dropped): class=%s conf=%.2f bbox=%s",
+                        label,
+                        conf,
+                        bbox,
+                    )
+                    continue
 
                 is_person = (
                     "person" in self.allowed_classes
@@ -396,6 +481,8 @@ class MLEvaluator:
         for det in raw_detections:
             x1, y1, x2, y2, conf, label = det
             label_lower = label.lower()
+            conf = float(conf)
+            bbox = [x1, y1, x2, y2]
 
             is_person = (
                 "person" in self.allowed_classes
@@ -412,11 +499,20 @@ class MLEvaluator:
             if not (is_person or is_vehicle):
                 continue
 
+            if not self._detection_allowed_by_zone(bbox, frame_bgr.shape):
+                logger.debug(
+                    "ZONE FILTER(dropped): class=%s conf=%.2f bbox=%s",
+                    label,
+                    conf,
+                    bbox,
+                )
+                continue
+
             valid_detections.append(
                 {
                     "label": label,
-                    "confidence": float(conf),
-                    "bbox": [x1, y1, x2, y2],
+                    "confidence": conf,
+                    "bbox": bbox,
                 }
             )
 

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BIL Edge Console</title>
+  <link rel="stylesheet" href="/edge-console/assets/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div>
+        <p class="eyebrow">Local Edge PC</p>
+        <h1 class="top-title">BIL Edge Console</h1>
+      </div>
+      <span id="runtime-pill" class="status-pill neutral">Loading</span>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="panel hero">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Runtime</p>
+          <h2>Edge Status</h2>
+        </div>
+      </div>
+
+      <p class="muted">
+        This local console is for tuning the edge PC itself. Use it to understand what the edge is doing,
+        adjust motion behavior, and manage saved zones without leaving the machine.
+      </p>
+
+      <div class="hero-hints">
+        <span class="hint-chip">Draw zones directly on the preview</span>
+        <span class="hint-chip">Save config changes from the right panel</span>
+        <span class="hint-chip">Restart the pipeline only when needed</span>
+      </div>
+
+      <div class="stats-grid">
+        <article class="stat-card">
+          <span class="stat-label">Pipeline</span>
+          <strong id="pipeline-mode">-</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">Stream</span>
+          <strong id="stream-state">-</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">Sender</span>
+          <strong id="sender-status">-</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">Ring Buffer</span>
+          <strong id="ring-count">-</strong>
+        </article>
+      </div>
+    </section>
+
+    <section class="grid main-grid">
+      <section id="preview-panel" class="panel preview-panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Preview</p>
+            <h2>Latest Frame</h2>
+          </div>
+        </div>
+        <p class="muted">
+          Green areas count toward motion. Red areas are ignored.
+        </p>
+
+        <div class="zone-toolbar">
+          <button id="zone-mode-include" class="btn ghost is-active" type="button">
+            Count motion here
+          </button>
+          <button id="zone-mode-exclude" class="btn ghost" type="button">
+            Ignore motion here
+          </button>
+          <button id="zone-finish-btn" class="btn ghost" type="button">
+            Finish shape
+          </button>
+          <button id="zone-undo-btn" class="btn ghost" type="button">
+            Undo point
+          </button>
+          <button id="zone-clear-mode-btn" class="btn ghost" type="button">
+            Clear current type
+          </button>
+          <button id="zone-reset-btn" class="btn ghost" type="button">
+            Reload saved zones
+          </button>
+          <button id="zone-fullscreen-btn" class="btn ghost" type="button">
+            Fullscreen preview
+          </button>
+          <button id="zone-save-btn" class="btn primary" type="button">
+            Save zones
+          </button>
+        </div>
+
+        <p id="zones-msg" class="muted">
+          Click on the image to place points. Use Finish shape after at least 3 points.
+        </p>
+
+        <div id="preview-stage" class="preview-stage empty">
+          <p>No preview frame yet.</p>
+        </div>
+      </section>
+
+      <section class="panel config-panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Configuration</p>
+            <h2>Current Edge Settings</h2>
+          </div>
+        </div>
+        <p class="muted">
+          Settings are grouped by purpose. Open only the section you need.
+        </p>
+        <div id="settings-groups" class="settings-groups"></div>
+      </section>
+    </section>
+  </main>
+
+  <script src="/edge-console/assets/app.js"></script>
+</body>
+</html>

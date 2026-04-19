@@ -4,6 +4,7 @@ from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 from .config import settings
+
 # Import model modules so they are registered on Base.metadata
 from .models import alert as _m_alert  # noqa: F401
 from .models import device as _m_device  # noqa: F401

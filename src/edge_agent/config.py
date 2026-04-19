@@ -1,21 +1,41 @@
 from __future__ import annotations
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+import json
+from pathlib import Path
+
+from pydantic import field_validator
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
+
+EDGE_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
 class EdgeSettings(BaseSettings):
-    """
-    Configuration for the Edge Agent.
-
-    If SHARED_STORAGE_ROOT is set, image_path values under that root are safe
-    to replay from the offline queue.
-    """
-
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(EDGE_ENV_FILE),
         case_sensitive=False,
         extra="ignore",
+        env_ignore_empty=True,
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ):
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+        )
 
     # --- Identity ---
     site_id: str = "site_demo"
@@ -57,6 +77,8 @@ class EdgeSettings(BaseSettings):
     rtsp_url_low: str = ""
     ring_buffer_seconds: int = 25
 
+    preview_fps: float = 8.0
+
     # Frame sampling / scaling for motion detection and window extraction
     analysis_fps: float = 5.0
     frame_width: int = 640
@@ -67,6 +89,13 @@ class EdgeSettings(BaseSettings):
     motion_pixel_delta: int = 15
     motion_threshold: float = 0.005
     default_camera_id: str = "1"
+
+    # --- PTZ / camera-motion suppression ---
+    # If a very large fraction of the full frame changes, it is likely
+    # camera movement rather than scene motion.
+    ptz_global_motion_threshold: float = 0.35
+    ptz_consecutive_frames: int = 2
+    ptz_suppress_sec: float = 3.0
 
     # --- Incident merging + window extraction ---
     incident_quiet_sec: float = 2.0
@@ -101,3 +130,20 @@ class EdgeSettings(BaseSettings):
     sample_stride_sec: float = 2.0
     sample_target_fps: float = 5.0
     sample_max_frames: int = 30
+
+    # --- Motion zones / masking ---
+    # Polygons use normalized coordinates in the range 0..1:
+    # [[[x1, y1], [x2, y2], [x3, y3], ...], ...]
+    motion_include_polygons: list[list[list[float]]] = []
+    motion_exclude_polygons: list[list[list[float]]] = []
+
+    @field_validator(
+        "motion_include_polygons", "motion_exclude_polygons", mode="before"
+    )
+    @classmethod
+    def parse_polygon_json(cls, value):
+        if value in (None, "", []):
+            return []
+        if isinstance(value, str):
+            return json.loads(value)
+        return value

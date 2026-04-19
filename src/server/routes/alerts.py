@@ -6,8 +6,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
-from fastapi import (APIRouter, Depends, File, Form, HTTPException, Query,
-                     Request, UploadFile, status)
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import FileResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -18,12 +27,10 @@ from ..config import settings
 from ..db import SessionLocal
 from ..models.alert import Alert
 from ..schemas import AlertCreate, AlertOut
-from ..services.alert_ingestion import (AlertIngestionService,
-                                        AlertPersistenceError)
+from ..services.alert_ingestion import AlertIngestionService, AlertPersistenceError
 from ..services.dashboard_events import publish_dashboard_event
 from ..services.device_auth import require_signed_device
-from ..services.edge_authorization import (is_authorized_edge_pc,
-                                           resolve_edge_pc_id)
+from ..services.edge_authorization import is_authorized_edge_pc, resolve_edge_pc_id
 
 # This router handles all endpoints related to alerts sent from edge PCs.
 # Prefix: /api/alerts
@@ -238,7 +245,9 @@ def list_alerts(
     try:
         # TODO: Implement alert listing with filters
         alerts = db.query(Alert).all()
-        alerts = sorted(alerts, key=lambda alert: _alert_sort_key(alert, sort_by), reverse=True)
+        alerts = sorted(
+            alerts, key=lambda alert: _alert_sort_key(alert, sort_by), reverse=True
+        )
         if limit is not None:
             alerts = alerts[:limit]
         return {"alerts": [AlertOut.model_validate(alert) for alert in alerts]}

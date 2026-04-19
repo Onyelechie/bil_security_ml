@@ -16,9 +16,9 @@ def _set_test_admin_password():
 def _new_keypair() -> tuple[str, str]:
     signing_key = Ed25519PrivateKey.generate()
     private_key_b64 = b64encode(signing_key.private_bytes_raw()).decode("ascii")
-    public_key_b64 = b64encode(
-        signing_key.public_key().public_bytes_raw()
-    ).decode("ascii")
+    public_key_b64 = b64encode(signing_key.public_key().public_bytes_raw()).decode(
+        "ascii"
+    )
     return private_key_b64, public_key_b64
 
 
@@ -59,7 +59,9 @@ def test_device_list_and_revoke_flow():
             assert enrolled["active"] is True
             assert enrolled["revoked_at"] is None
 
-            revoke_response = client.post(f"/api/devices/{device_id}/revoke", headers=headers)
+            revoke_response = client.post(
+                f"/api/devices/{device_id}/revoke", headers=headers
+            )
             assert revoke_response.status_code == 200
             revoked = revoke_response.json()
             assert revoked["device_id"] == device_id

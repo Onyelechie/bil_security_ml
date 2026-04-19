@@ -51,10 +51,15 @@ def test_run_http_serve_uses_uvicorn_config(monkeypatch):
 
     monkeypatch.setattr(uvicorn, "Server", FakeServer)
     monkeypatch.setattr("edge_agent.main.threading.Thread", DummyThread)
-    monkeypatch.setattr("edge_agent.edge_api.create_app", lambda cfg, sender: object())
+    monkeypatch.setattr(
+        "edge_agent.edge_api.create_app",
+        lambda cfg, sender, runtime_state=None: object(),
+    )
 
     cfg = EdgeSettings(
-        edge_http_host="127.0.0.1", edge_http_port=9999, log_level="INFO"
+        edge_http_host="127.0.0.1",
+        edge_http_port=9999,
+        log_level="INFO",
     )
     code = run(argv=["--http-serve"], cfg=cfg)
 
@@ -63,6 +68,7 @@ def test_run_http_serve_uses_uvicorn_config(monkeypatch):
     assert config.host == "127.0.0.1"
     assert config.port == 9999
     assert config.log_level == "info"
+    assert config.access_log is False
 
 
 def test_run_http_serve_does_not_set_status_before_startup(monkeypatch):
@@ -85,10 +91,15 @@ def test_run_http_serve_does_not_set_status_before_startup(monkeypatch):
         def __init__(self, settings):
             self.settings = settings
             self.statuses = []
+            self._status = "starting"
             FakeSender.last_instance = self
 
         def set_status(self, status: str) -> None:
+            self._status = status
             self.statuses.append(status)
+
+        def get_status(self) -> str:
+            return self._status
 
         def send_heartbeat(self, *args, **kwargs):
             return True
@@ -108,10 +119,15 @@ def test_run_http_serve_does_not_set_status_before_startup(monkeypatch):
     monkeypatch.setattr(uvicorn, "Server", FakeServer)
     monkeypatch.setattr("edge_agent.main.threading.Thread", DummyThread)
     monkeypatch.setattr("edge_agent.main.ServerSender", FakeSender)
-    monkeypatch.setattr("edge_agent.edge_api.create_app", lambda cfg, sender: object())
+    monkeypatch.setattr(
+        "edge_agent.edge_api.create_app",
+        lambda cfg, sender, runtime_state=None: object(),
+    )
 
     cfg = EdgeSettings(
-        edge_http_host="127.0.0.1", edge_http_port=9999, log_level="INFO"
+        edge_http_host="127.0.0.1",
+        edge_http_port=9999,
+        log_level="INFO",
     )
     code = run(argv=["--http-serve"], cfg=cfg)
 
@@ -150,12 +166,17 @@ def test_run_http_serve_times_out_when_not_started(monkeypatch):
 
     monkeypatch.setattr(uvicorn, "Server", FakeServer)
     monkeypatch.setattr("edge_agent.main.threading.Thread", DummyThread)
-    monkeypatch.setattr("edge_agent.edge_api.create_app", lambda cfg, sender: object())
+    monkeypatch.setattr(
+        "edge_agent.edge_api.create_app",
+        lambda cfg, sender, runtime_state=None: object(),
+    )
     monkeypatch.setattr("edge_agent.main.time.monotonic", fake_monotonic)
     monkeypatch.setattr("edge_agent.main.time.sleep", lambda _s: None)
 
     cfg = EdgeSettings(
-        edge_http_host="127.0.0.1", edge_http_port=9999, log_level="INFO"
+        edge_http_host="127.0.0.1",
+        edge_http_port=9999,
+        log_level="INFO",
     )
     code = run(argv=["--http-serve"], cfg=cfg)
 
@@ -363,18 +384,26 @@ def test_run_mode_builds_evaluator_pipeline_and_local_trigger(monkeypatch):
             return False
 
     class FakeReader:
-        def __init__(self, cfg, ring):
-            pass
+        def __init__(self, cfg, ring, on_frame=None):
+            self._latest = None
+            self._on_frame = on_frame
+
+        def latest_item(self):
+            return self._latest
 
         async def start(self):
-            return None
+            created["reader_started"] = True
+            ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
+            item = FrameItem(ts=ts, frame=np.zeros((10, 10, 3), dtype=np.uint8))
+            self._latest = item
+            if self._on_frame is not None:
+                self._on_frame(item)
 
         async def stop(self):
-            return None
+            created["reader_stopped"] = True
 
     class _Queue:
         async def get(self):
-            # Simulate an empty queue without bubbling KeyboardInterrupt into asyncio.
             await asyncio.sleep(10)
 
     class FakeTcpTrigger:
@@ -430,6 +459,10 @@ def test_run_mode_builds_evaluator_pipeline_and_local_trigger(monkeypatch):
         async def stop(self):
             created["local_stopped"] = True
 
+        def apply_runtime_settings(self, updates):
+            created["runtime_updates"] = updates
+            return list(updates.keys())
+
     class FakeEvaluator:
         def __init__(
             self,
@@ -438,12 +471,16 @@ def test_run_mode_builds_evaluator_pipeline_and_local_trigger(monkeypatch):
             person_conf=None,
             vehicle_conf=None,
             allowed_classes=None,
+            include_polygons=None,
+            exclude_polygons=None,
         ):
             created["model_name"] = model_name
             created["weights_path"] = weights_path
             created["person_conf"] = person_conf
             created["vehicle_conf"] = vehicle_conf
             created["allowed_classes"] = allowed_classes
+            created["include_polygons"] = include_polygons
+            created["exclude_polygons"] = exclude_polygons
 
     class FakePipeline:
         def __init__(
@@ -460,19 +497,42 @@ def test_run_mode_builds_evaluator_pipeline_and_local_trigger(monkeypatch):
         def process_frames(self, camera_id, frames, *, frame_timestamps=None):
             return None
 
+    class FakeConsoleServer:
+        def __init__(self):
+            self.started = True
+            self.should_exit = False
+
+    class FakeConsoleThread:
+        def join(self, timeout=None):
+            return None
+
+        def is_alive(self):
+            return False
+
+    def fake_start_console_server(cfg, sender, runtime_state):
+        created["edge_console_started"] = True
+        return FakeConsoleServer(), FakeConsoleThread()
+
+    def fake_stop_console_server(server, server_thread):
+        created["edge_console_stopped"] = True
+
     monkeypatch.setattr("edge_agent.main.threading.Thread", DummyThread)
     monkeypatch.setattr("edge_agent.video.rtsp_reader.RtspReader", FakeReader)
     monkeypatch.setattr(
-        "edge_agent.triggers.tcp_trigger.TcpMotionTrigger", FakeTcpTrigger
+        "edge_agent.triggers.tcp_trigger.TcpMotionTrigger",
+        FakeTcpTrigger,
     )
     monkeypatch.setattr(
-        "edge_agent.triggers.trigger_manager.TriggerManager", FakeTriggerManager
+        "edge_agent.triggers.trigger_manager.TriggerManager",
+        FakeTriggerManager,
     )
     monkeypatch.setattr(
-        "edge_agent.triggers.incident_manager.IncidentManager", FakeIncidentManager
+        "edge_agent.triggers.incident_manager.IncidentManager",
+        FakeIncidentManager,
     )
     monkeypatch.setattr(
-        "edge_agent.video.extraction_worker.ExtractionWorker", FakeWorker
+        "edge_agent.video.extraction_worker.ExtractionWorker",
+        FakeWorker,
     )
     monkeypatch.setattr(
         "edge_agent.triggers.local_motion_trigger.LocalMotionTrigger",
@@ -480,6 +540,14 @@ def test_run_mode_builds_evaluator_pipeline_and_local_trigger(monkeypatch):
     )
     monkeypatch.setattr("edge_agent.ml_evaluator.MLEvaluator", FakeEvaluator)
     monkeypatch.setattr("edge_agent.pipeline_runner.PipelineRunner", FakePipeline)
+    monkeypatch.setattr(
+        "edge_agent.main._start_console_server",
+        fake_start_console_server,
+    )
+    monkeypatch.setattr(
+        "edge_agent.main._stop_console_server",
+        fake_stop_console_server,
+    )
 
     cfg = EdgeSettings(
         detector_model="YOLOv8-Nano",
@@ -488,11 +556,14 @@ def test_run_mode_builds_evaluator_pipeline_and_local_trigger(monkeypatch):
         incident_tick_interval_sec=0.01,
         enable_tcp_motion=True,
         enable_local_motion=True,
+        motion_include_polygons=[[[0.0, 0.0], [0.5, 0.0], [0.5, 0.5], [0.0, 0.5]]],
+        motion_exclude_polygons=[[[0.8, 0.8], [1.0, 0.8], [1.0, 1.0], [0.8, 1.0]]],
     )
 
     code = run(argv=["--run"], cfg=cfg)
 
     assert code == 0
+    assert created["edge_console_started"] is True
     assert created["model_name"] == "YOLOv8-Nano"
     assert created["weights_path"] == "custom.pt"
     assert created["pipeline_created"] is True
@@ -501,3 +572,5 @@ def test_run_mode_builds_evaluator_pipeline_and_local_trigger(monkeypatch):
     assert created["person_conf"] == cfg.detector_person_conf
     assert created["vehicle_conf"] == cfg.detector_vehicle_conf
     assert created["allowed_classes"] == cfg.detector_allowed_classes
+    assert created["include_polygons"] == cfg.motion_include_polygons
+    assert created["exclude_polygons"] == cfg.motion_exclude_polygons

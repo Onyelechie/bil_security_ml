@@ -30,11 +30,10 @@ def run_sample_video(
     Run a CCTV sample video directly through the pipeline.
 
     Behavior:
-    - load the FULL video first
-    - split into sequential chunks by frame index
-    - analyze ALL frames in each chunk
-    - send up to two alerts per chunk:
-      one best person alert and one best vehicle alert
+    - load the full video into memory
+    - split it into sequential windows by frame index
+    - send each chunk through PipelineRunner
+    - retry queued alerts after each chunk
     """
     path = Path(video_path)
     if not path.exists():

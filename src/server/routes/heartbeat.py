@@ -6,8 +6,7 @@ from sqlalchemy.orm import Session
 
 from ..db import SessionLocal
 from ..models.edge_pc import EdgePC
-from ..schemas import (EdgePCStatusListOut, EdgePCStatusOut, HeartbeatIn,
-                       HeartbeatOut)
+from ..schemas import EdgePCStatusListOut, EdgePCStatusOut, HeartbeatIn, HeartbeatOut
 from ..services.dashboard_events import publish_dashboard_event
 from ..services.device_auth import require_signed_device
 

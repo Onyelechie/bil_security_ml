@@ -101,11 +101,15 @@ class AlertIngestionService:
                             # This keeps default relative-storage behavior unchanged, but also works
                             # when the storage root is an absolute path outside the repo.
                             try:
-                                rel_to_storage = dst.relative_to(storage_root).as_posix()
+                                rel_to_storage = dst.relative_to(
+                                    storage_root
+                                ).as_posix()
                                 if storage_root_setting.is_absolute():
                                     image_path_val = rel_to_storage
                                 else:
-                                    image_path_val = (storage_root_setting / rel_to_storage).as_posix()
+                                    image_path_val = (
+                                        storage_root_setting / rel_to_storage
+                                    ).as_posix()
                             except Exception:
                                 image_path_val = dst.as_posix()
                         else:

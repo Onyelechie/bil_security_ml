@@ -68,51 +68,56 @@ Current edge auth model:
 - Edge heartbeat and HTTP alerts must be signed by an enrolled device.
 - `DEVICE_ID` must match `EDGE_PC_ID`.
 - The edge PC receives the private key at provisioning time; the matching public key is enrolled on the server.
-- See [docs/AUTHENTICATION.md](/c:/Users/ebere/Documents/bil_security_ml/docs/AUTHENTICATION.md) for the exact workflow.
+- See [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) for the exact workflow.
 
 ### Edge Agent Configuration (.env)
 
-Copy `.env.example` and edit `.env`. **Do not commit credentials**.
+Copy `.env.example` and edit `.env`. Do not commit credentials.
 
-Edge Agent key variables (see `.env.example`):
+Core values:
 
-**Core**
-- `SITE_ID`, `EDGE_PC_ID`, `DEVICE_ID`, `SITE_NAME`
-- `TCP_HOST`, `TCP_PORT` (external motion events)
-- `SERVER_BASE_URL` (central server)
-- `DEVICE_PRIVATE_KEY_B64` (required for signed heartbeat/alerts)
+- `SITE_ID`
+- `SITE_NAME`
+- `EDGE_PC_ID`
+- `DEVICE_ID`
+- `DEVICE_PRIVATE_KEY_B64`
+- `SERVER_BASE_URL`
 
 Provisioning rule:
-- `DEVICE_ID` must equal `EDGE_PC_ID`, and the matching public key must be enrolled on the server before the edge agent starts.
 
-**Trigger source selection**
-- `ENABLE_TCP_MOTION` (`true`/`false`) - consume external TCP/VMS motion events
-- `ENABLE_LOCAL_MOTION` (`true`/`false`) - compute motion locally from RTSP frames
+- `DEVICE_ID` must match `EDGE_PC_ID`
+- the matching public key must be enrolled on the server before signed heartbeat and alert requests will work
 
-You may enable either source or both. Both feed the same downstream incident / extraction / inference / alert pipeline.
+Motion source selection:
 
-**Trigger control (rate limit / dedupe)**
-- `TRIGGER_COOLDOWN_SEC` (e.g., `10`)
-- `TRIGGER_MERGE_WINDOW_SEC` (e.g., `2.0`)
+- `ENABLE_TCP_MOTION`
+- `ENABLE_LOCAL_MOTION`
 
-**RTSP ingest (low-res stream for analysis/inference)**
-- `RTSP_URL_LOW` (low stream, e.g. `/Streaming/Channels/102`)
-- `RING_BUFFER_SECONDS` (recommended single-camera starting point: `25`)
-- `ANALYSIS_FPS` (recommended: `5`)
-- `FRAME_WIDTH`, `FRAME_HEIGHT` (recommended: `640x360`)
+Either source can be enabled by itself, or both can be enabled together. Both feed the same downstream incident, extraction, inference, and alert pipeline.
 
-**Frame handling**
-- The edge agent now keeps a **low-resolution color ring buffer** for extraction/inference.
-- Local motion detection still runs on **grayscale**, derived from the buffered color frames.
-- This keeps motion detection cheap while improving YOLO classification quality versus grayscale-only inference.
+RTSP and frame handling:
 
-**Local motion trigger**
-- `MOTION_FPS` (e.g., `1` to `2`)
-- `MOTION_PIXEL_DELTA` (e.g., `10` to `25`)
-- `MOTION_THRESHOLD` (e.g., `0.003` to `0.01`)
-- `DEFAULT_CAMERA_ID` (used for local motion labeling in single-camera mode)
+- `RTSP_URL_LOW`
+- `RING_BUFFER_SECONDS`
+- `ANALYSIS_FPS`
+- `PREVIEW_FPS`
+- `FRAME_WIDTH`
+- `FRAME_HEIGHT`
 
-**Incident + extraction tuning**
+The edge agent keeps a low-resolution **color** ring buffer for extraction and inference.  
+Local motion detection converts frames to **grayscale** only when needed for cheap motion scoring.
+
+Local motion tuning:
+
+- `MOTION_FPS`
+- `MOTION_PIXEL_DELTA`
+- `MOTION_THRESHOLD`
+- `DEFAULT_CAMERA_ID`
+
+Incident and extraction tuning:
+
+- `TRIGGER_COOLDOWN_SEC`
+- `TRIGGER_MERGE_WINDOW_SEC`
 - `INCIDENT_QUIET_SEC`
 - `INCIDENT_MAX_SEC`
 - `WINDOW_PRE_SEC`
@@ -121,38 +126,44 @@ You may enable either source or both. Both feed the same downstream incident / e
 - `WINDOW_MAX_FRAMES`
 - `WINDOW_WAIT_GRACE_SEC`
 
-Recommended indoor single-camera starting profile:
-- `RING_BUFFER_SECONDS=25`
-- `INCIDENT_MAX_SEC=12.0`
-- `WINDOW_PRE_SEC=1.5`
-- `WINDOW_POST_SEC=4.0`
-- `WINDOW_TARGET_FPS=5.0`
-- `WINDOW_MAX_FRAMES=40`
+Detector tuning:
 
-**Detector configuration**
-- `DETECTOR_MODEL` (e.g. `YOLOv8-Small`)
-- `DETECTOR_WEIGHTS` (optional explicit path)
-- `DETECTOR_PERSON_CONF` (recommended indoor starting point: `0.40`)
-- `DETECTOR_VEHICLE_CONF` (recommended indoor starting point: `0.90`)
-- `DETECTOR_ALLOWED_CLASSES` (comma-separated, e.g. `person` or `person,vehicle`)
+- `DETECTOR_MODEL`
+- `DETECTOR_WEIGHTS`
+- `DETECTOR_PERSON_CONF`
+- `DETECTOR_VEHICLE_CONF`
+- `DETECTOR_ALLOWED_CLASSES`
 
-Notes:
-- For cluttered indoor cameras, `DETECTOR_ALLOWED_CLASSES=person` is usually the best starting profile.
-- The evaluator prefers a valid **person** detection over a valid **vehicle** detection when both appear in the same extracted window.
+Recommended indoor starting profile:
 
-**Shared storage (optional)**
-- `SHARED_STORAGE_ROOT` (absolute path to a shared mount visible to both edge and server)
-- When set, alert snapshots saved under this root can be referenced by `image_path` and displayed by the server/dashboard.
-- Queued alerts keep `image_path` only if the file exists and resolves under this root.
-- Queued alerts that are invalid JSON or rejected with 4xx are quarantined under `OFFLINE_QUEUE_DIR/bad/`.
-- Quarantined payloads are deleted after `QUEUE_QUARANTINE_RETENTION_DAYS` (default `7`).
+- `DETECTOR_ALLOWED_CLASSES=person`
+- `DETECTOR_PERSON_CONF=0.40`
+- `DETECTOR_VEHICLE_CONF=0.90`
 
-FFmpeg note:
-- The edge agent uses `imageio-ffmpeg`, which provides an ffmpeg binary automatically (no separate system ffmpeg install required).
+The evaluator prefers a valid **person** detection over a valid **vehicle** detection when both are present.
 
-Matplotlib note (accuracy eval):
-- If `accuracy/eval_accuracy.py` hangs or errors with a Matplotlib cache permission issue on Windows,
-  set `MPLCONFIGDIR` to a writable folder, e.g. `$env:MPLCONFIGDIR="$env:TEMP\mpl-cache"`.
+Hard-scene filtering:
+
+- `PTZ_GLOBAL_MOTION_THRESHOLD`
+- `PTZ_CONSECUTIVE_FRAMES`
+- `PTZ_SUPPRESS_SEC`
+
+These settings help suppress local motion during likely camera movement or large full-frame scene changes.
+
+Configurable zoning and masking:
+
+- `motion_include_polygons`
+- `motion_exclude_polygons`
+
+These are edited through the local edge console and saved locally. Include zones count toward motion. Exclude zones are ignored.
+
+Shared storage and queue behavior:
+
+- `SHARED_STORAGE_ROOT`
+- `OFFLINE_QUEUE_DIR`
+- `QUEUE_QUARANTINE_RETENTION_DAYS`
+
+If shared storage is configured, alert snapshots can be referenced by `image_path` and displayed by the server/dashboard.
 
 ### Database Migrations
 
@@ -498,13 +509,14 @@ Summary of notable recent updates:
 
 The edge agent is the on-site Windows service that can:
 
-- listen for motion events over TCP (from BIL software / VMS rules)
-- pull frames via RTSP into an in-memory ring buffer
+- listen for motion events over TCP
+- pull frames through RTSP into an in-memory ring buffer
 - optionally compute lightweight local motion from RTSP frames
-- merge/dedupe noisy triggers into incidents
+- merge noisy triggers into incidents
 - extract bounded frame windows around incidents
 - run YOLO burst inference on selected frames
-- send signed alerts + heartbeats to the central server
+- send signed alerts and heartbeats to the central server
+- expose a local edge console for preview, zoning, tuning, and restart
 
 ### Current runtime model
 
@@ -513,113 +525,116 @@ The live edge pipeline is event-driven:
 `RTSP stream -> motion trigger(s) -> incident manager -> extraction worker -> ML evaluator -> pipeline runner -> server`
 
 Supported motion sources:
-- **TCP motion**: external XML motion events from BIL/VMS
-- **Local motion**: cheap frame-difference motion computed from RTSP frames on the edge
 
-Both motion sources can be enabled together and feed the same downstream pipeline.
+- **TCP motion**
+- **Local motion**
+
+Both can be enabled together and feed the same downstream pipeline.
 
 ### Frame strategy
 
-- The RTSP reader stores **low-resolution color** frames in memory.
-- Local motion detection converts buffered frames to **grayscale** only for motion scoring.
-- Extracted frames sent to YOLO remain **color**, which improves person detection quality versus grayscale-only inference.
+- The RTSP reader stores low-resolution **color** frames in memory
+- Local motion scoring converts buffered frames to **grayscale** only for motion detection
+- Extracted frames sent to YOLO remain **color**
+- The latest preview frame is also exposed to the local edge console
+
+### Zoning and masking
+
+The edge agent now supports configurable motion zones.
+
+- **Include zones** count toward motion
+- **Exclude zones** are ignored
+
+These zones are applied as a score mask during local motion detection and are useful for ignoring streets, irrelevant background regions, and other noisy areas.
+
+### Hard-scene filtering
+
+The local motion trigger now includes PTZ-style suppression logic for likely camera movement or very large full-frame motion.
+
+This helps reduce false triggers caused by:
+
+- camera movement
+- sweeping views
+- large scene-wide changes that do not represent a real subject event
 
 ### Running the Edge Agent
 
-> Important: this repo uses a `src/` layout. Set `PYTHONPATH` before running.
+Important: this repo uses a `src/` layout. Set `PYTHONPATH` before running.
 
 ```powershell
-# On Windows PowerShell:
-$env:PYTHONPATH = "$PWD\src"
-# On Unix/Mac:
-# export PYTHONPATH="$PWD/src"
+$env:PYTHONPATH="$PWD\src"
 ````
 
-#### Print config
+Print resolved config:
 
 ```powershell
 python -m edge_agent --print-config
 ```
 
-#### Run Edge HTTP API (install/debug)
+Run the edge HTTP API only:
 
 ```powershell
 python -m edge_agent --http-serve
 ```
 
-#### Endpoints
-
-* **GET** `http://localhost:8128/health`
-  Returns a simple "ok" response if the edge agent is running.
-* **GET** `http://localhost:8128/heartbeat`
-  Returns edge identity (`edge_pc_id`, `site_name`), a basic status snapshot, and uptime.
-
-> Note: This is the Edge-side heartbeat (server/office -> edge).
-> The Central Server heartbeat endpoint is separate (`POST /api/heartbeat`, edge -> server).
-
-#### Run TCP motion listener (prints parsed motion events)
+Run the TCP motion listener:
 
 ```powershell
 python -m edge_agent --tcp-listen
 ```
 
-#### Run RTSP ingest test
+Run RTSP ingest test:
 
 ```powershell
 python -m edge_agent --rtsp-test
 ```
 
-This validates:
-
-* RTSP connectivity
-* ffmpeg recovery/backoff
-* ring buffer fill behavior
-
-#### Run RTSP + local motion debug mode
+Run RTSP with local motion debug mode:
 
 ```powershell
 python -m edge_agent --motion-test
 ```
 
-This validates:
+Run a CCTV sample video directly through the detection and alert pipeline:
 
-* RTSP ingest
-* local motion scoring
-* incident creation
-* extraction worker behavior
+```powershell
+python -m edge_agent --sample-video .\path\to\video.mp4
+```
 
-#### Run the unified live pipeline
+Run the unified live runtime:
 
 ```powershell
 python -m edge_agent --run
 ```
 
-This is the main runtime entrypoint. Depending on `.env`, it can use:
+The unified `--run` path supports:
 
 * TCP motion only
 * local motion only
-* both TCP and local motion
+* both motion sources together
 
-The unified `--run` path handles:
+It handles:
 
 * trigger ingestion
 * incident merging
 * extraction
 * YOLO evaluation
-* alert sending to the server
+* alert sending
+* local edge console startup
 
-### Example: local-motion-only live run
+Example local-motion-only run:
 
 ```powershell
 $env:PYTHONPATH="$PWD\src"
 $env:RTSP_URL_LOW="rtsp://<camera>/Streaming/Channels/102"
 $env:ENABLE_TCP_MOTION="false"
 $env:ENABLE_LOCAL_MOTION="true"
+$env:DETECTOR_ALLOWED_CLASSES="person"
 $env:SHARED_STORAGE_ROOT=(Resolve-Path ".\storage\ws_alert_images").Path
 python -m edge_agent --run
 ```
 
-### Example: TCP-motion-only live run
+Example TCP-motion-only run:
 
 ```powershell
 $env:PYTHONPATH="$PWD\src"
@@ -628,7 +643,7 @@ $env:ENABLE_LOCAL_MOTION="false"
 python -m edge_agent --run
 ```
 
-### Example: both motion sources enabled
+Example run with both motion sources enabled:
 
 ```powershell
 $env:PYTHONPATH="$PWD\src"
@@ -651,18 +666,17 @@ Recommended indoor single-camera setup:
 * `DETECTOR_PERSON_CONF=0.40`
 * `DETECTOR_VEHICLE_CONF=0.90`
 
-This helps reduce false indoor “vehicle” detections in cluttered scenes.
+This helps reduce false indoor vehicle detections in cluttered scenes.
 
 ### Frame selection notes
 
-The extraction worker does **not** send an entire raw video file to YOLO.
-Instead it:
+The extraction worker does not send an entire raw video file to YOLO. Instead it:
 
 1. pulls all buffered frames inside the incident window
 2. selects a bounded set of representative frames
 3. sends only those selected frames into the ML evaluator
 
-Selection is deterministic and now biases more frames toward the more recent portion of the incident while still keeping early/full-window context.
+Selection is deterministic and now biases more frames toward the more recent portion of the incident while still keeping early and full-window context.
 
 ### Performance notes
 
@@ -680,7 +694,39 @@ This keeps the pipeline responsive while preserving enough information for event
 
 * Confirmed alerts can save an annotated snapshot to disk.
 * If `SHARED_STORAGE_ROOT` is configured and visible to both edge and server, the alert payload can include a usable `image_path`.
-* The server/dashboard can then display the alert image.
+* The server and dashboard can then display the alert image.
+
+### Edge Console
+
+When the edge runtime is running, a local edge console is available on the edge PC.
+
+Default local address:
+
+```text
+http://127.0.0.1:8128
+```
+
+The edge console is used to:
+
+* view runtime state
+* view the latest preview frame
+* draw include and exclude motion zones
+* review grouped settings
+* save settings locally
+* request a pipeline restart
+
+Main endpoints:
+
+* `GET /health`
+* `GET /heartbeat`
+* `GET /api/runtime`
+* `GET /api/settings`
+* `PUT /api/settings`
+* `GET /api/preview`
+* `PUT /api/zones`
+* `POST /api/runtime/restart`
+
+Some local motion settings can be applied live. Other settings are saved locally and require a restart.
 
 ## Running Tests
 

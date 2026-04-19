@@ -229,4 +229,8 @@ class PipelineRunner:
                     idx,
                 )
 
-        logger.info("process_all_frames complete: camera=%s alerts_sent=%d", camera_id, alerts_sent)
+        logger.info(
+            "process_all_frames complete: camera=%s alerts_sent=%d",
+            camera_id,
+            alerts_sent,
+        )
